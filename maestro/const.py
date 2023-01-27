@@ -1,0 +1,1 @@
+LOGIN_URL = "https://s.maestro.mcz.it/hlapi/v1.0/Authorization/Login"
