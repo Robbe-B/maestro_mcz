@@ -4,6 +4,7 @@ from datetime import timedelta
 import logging
 
 import async_timeout
+from .maestro import MaestroController, MaestroStove
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -27,37 +28,31 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Config entry example."""
-    # assuming API object stored here by __init__.py
-    my_api = hass.data[DOMAIN][entry.entry_id]
-    coordinator = MczCoordinator(hass, my_api)
 
-    # Fetch initial data so we have data when entities subscribe
-    #
-    # If the refresh fails, async_config_entry_first_refresh will
-    # raise ConfigEntryNotReady and setup will try again later
-    #
-    # If you do not want to retry setup on failure, use
-    # coordinator.async_refresh() instead
-    #
-    await coordinator.async_config_entry_first_refresh()
+    maestroapi:MaestroController = hass.data[DOMAIN][entry.entry_id]
 
-    async_add_entities(MczEntity(coordinator) for ent in enumerate(["MCZ"]))
+    stoveList = []
+    for stove in maestroapi.Stoves:
+        stove:MaestroStove = stove
+        coordinator = MczCoordinator(hass, stove)
+        await coordinator.async_config_entry_first_refresh()
+        stoveList.append(coordinator)
+
+    async_add_entities(MczEntity(stove) for stove in stoveList)
 
 
 class MczCoordinator(DataUpdateCoordinator):
     """My custom coordinator."""
 
-    def __init__(self, hass, my_api):
+    def __init__(self, hass, maestroapi):
         """Initialize my coordinator."""
         super().__init__(
             hass,
             _LOGGER,
-            # Name of the data. For logging purposes.
             name="MCZ Stove",
-            # Polling interval. Will only be polled if there are subscribers.
             update_interval=timedelta(seconds=30),
         )
-        self.my_api = my_api
+        self._maestroapi:MaestroStove = maestroapi
 
     async def _async_update_data(self):
         """Fetch data from API endpoint.
@@ -66,31 +61,31 @@ class MczCoordinator(DataUpdateCoordinator):
         so entities can quickly look up their data.
         """
         async with async_timeout.timeout(15):
-            await self.my_api.Refresh()
+            await self._maestroapi.Refresh()
             return True
-
 
 class MczEntity(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
+        self.coordinator:MczCoordinator = coordinator
         self._attr_name = "Temperature"
         self._attr_native_unit_of_measurement = TEMP_CELSIUS
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_unique_id = f"{self.coordinator.my_api.Status.sm_sn}_sensor"
+        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}_sensor"
         self._attr_icon = "mdi:thermometer"
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.my_api.Status.sm_sn)},
+            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
         )
 
     @property
     def native_value(self):
-        return self.coordinator.my_api.State.temp_amb_install
+        return self.coordinator._maestroapi.State.temp_amb_install
 
     @callback
     def _handle_coordinator_update(self) -> None:
