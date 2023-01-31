@@ -1,7 +1,10 @@
 {
     "domain": "maestro_mcz",
     "name": "Maestro MCZ",
+    "integration_type": "hub",
     "config_flow": true,
+    "documentation": "https://github.com/Crisicus/maestro_mcz",
+    "issue_tracker": "https://github.com/Crisicus/maestro_mcz/issues",
     "requirements": [],
     "dependencies": [],
     "codeowners": [
