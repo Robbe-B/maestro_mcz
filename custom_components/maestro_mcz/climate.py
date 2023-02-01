@@ -1,19 +1,13 @@
 """Platform for Climate integration."""
-
-from datetime import timedelta
 import logging
 
-import async_timeout
-from .maestro import MaestroController, MaestroStove
+from . import MczCoordinator
 
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.core import callback
 from homeassistant.const import UnitOfTemperature
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -23,60 +17,12 @@ from homeassistant.components.climate import (
 from .const import DOMAIN
 from .maestro.types.mode import ModeEnum
 
-_LOGGER = logging.getLogger(__name__)
-
-
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Config entry example."""
-
-    maestroapi:MaestroController = hass.data[DOMAIN][entry.entry_id]
-
-    stoveList = []
-    for stove in maestroapi.Stoves:
-        stove:MaestroStove = stove
-        coordinator = MczCoordinator(hass, stove)
-        await coordinator.async_config_entry_first_refresh()
-        stoveList.append(coordinator)
-
+    stoveList = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(MczEntity(stove) for stove in stoveList)
 
-
-class MczCoordinator(DataUpdateCoordinator):
-    """My custom coordinator."""
-
-    def __init__(self, hass, maestroapi):
-        """Initialize my coordinator."""
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="MCZ Stove",
-            update_interval=timedelta(seconds=30),
-        )
-        self._maestroapi:MaestroStove = maestroapi
-
-    async def _async_update_data(self):
-        """Fetch data from API endpoint.
-
-        This is the place to pre-process the data to lookup tables
-        so entities can quickly look up their data.
-        """
-        async with async_timeout.timeout(15):
-            await self._maestroapi.Refresh()
-            return True
-
-
 class MczEntity(CoordinatorEntity, ClimateEntity):
-    """An entity using CoordinatorEntity.
-
-    The CoordinatorEntity class provides:
-      should_poll
-      async_update
-      async_added_to_hass
-      available
-    """
-
     def __init__(self, coordinator:MczCoordinator):
-        """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
@@ -114,7 +60,6 @@ class MczEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return the device info."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
             name=self.coordinator._maestroapi.Name,
@@ -125,7 +70,6 @@ class MczEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def current_temperature(self):
-        """Return the current temperature."""
         return self.coordinator._maestroapi.State.temp_amb_install
 
     @property
@@ -137,33 +81,27 @@ class MczEntity(CoordinatorEntity, ClimateEntity):
         return self.coordinator._maestroapi.State.mode
 
     async def async_set_preset_mode(self, preset_mode):
-        """Set new target preset mode."""
         await self.coordinator._maestroapi.Mode(ModeEnum[preset_mode])
         await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode):
-        """Set new target hvac mode."""
         await self.coordinator._maestroapi.Power()
         await self.coordinator.async_request_refresh()
 
     async def async_set_fan_mode(self, fan_mode):
-        """Set new target fan mode."""
         await self.coordinator._maestroapi.Fan(int(fan_mode))
         await self.coordinator.async_request_refresh()
 
     async def async_set_swing_mode(self, swing_mode):
-        """Set new target swing operation."""
         await self.coordinator._maestroapi.Pot(int(swing_mode))
         await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs):
-        """Set new target temperature."""
         await self.coordinator._maestroapi.Temperature(float(kwargs["temperature"]))
         await self.coordinator.async_request_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
         self._attr_target_temperature = self.coordinator._maestroapi.State.set_amb1
         self._attr_fan_mode = str(self.coordinator._maestroapi.Status.set_vent_v1)
         self._attr_swing_mode = str(self.coordinator._maestroapi.Status.set_pot_man)

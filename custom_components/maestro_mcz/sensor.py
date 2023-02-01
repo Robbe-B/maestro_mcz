@@ -1,10 +1,5 @@
 """Platform for Sensor integration."""
-
-from datetime import timedelta
-import logging
-
-import async_timeout
-from .maestro import MaestroController, MaestroStove
+from . import MczCoordinator
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,61 +7,20 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.core import callback
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.const import UnitOfTemperature, TEMP_CELSIUS
+from homeassistant.const import TEMP_CELSIUS
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .maestro.types.mode import ModeEnum
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Config entry example."""
-
-    maestroapi:MaestroController = hass.data[DOMAIN][entry.entry_id]
-
-    stoveList = []
-    for stove in maestroapi.Stoves:
-        stove:MaestroStove = stove
-        coordinator = MczCoordinator(hass, stove)
-        await coordinator.async_config_entry_first_refresh()
-        stoveList.append(coordinator)
-
+    stoveList = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(MczEntity(stove) for stove in stoveList)
 
 
-class MczCoordinator(DataUpdateCoordinator):
-    """My custom coordinator."""
-
-    def __init__(self, hass, maestroapi):
-        """Initialize my coordinator."""
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="MCZ Stove",
-            update_interval=timedelta(seconds=30),
-        )
-        self._maestroapi:MaestroStove = maestroapi
-
-    async def _async_update_data(self):
-        """Fetch data from API endpoint.
-
-        This is the place to pre-process the data to lookup tables
-        so entities can quickly look up their data.
-        """
-        async with async_timeout.timeout(15):
-            await self._maestroapi.Refresh()
-            return True
-
 class MczEntity(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator):
-        """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = "Temperature"
@@ -78,7 +32,6 @@ class MczEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return the device info."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
         )
@@ -89,5 +42,4 @@ class MczEntity(CoordinatorEntity, SensorEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
         self.async_write_ha_state()
