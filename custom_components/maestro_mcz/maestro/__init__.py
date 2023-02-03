@@ -1,6 +1,7 @@
 import json
 import aiohttp
 import asyncio
+import async_timeout
 
 from .responses.status import Status
 from .responses.state import State
@@ -39,31 +40,32 @@ class MaestroController:
         return self._stoves
 
     async def MakeRequest(self, method, url, headers={}, body=None):
-        headers["auth-token"] = self._token
+        async with async_timeout.timeout(15):
+            headers["auth-token"] = self._token
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                if method == "GET":
-                    async with session.get(url, headers=headers) as resp:
-                        response = await resp.json()
-                elif method == "POST":
-                    headers["content-type"] = "application/json"
-                    jbody = json.dumps(body, ensure_ascii=False)
-                    async with session.post(url, headers=headers, data=jbody) as resp:
-                        response = await resp.json()
-                if resp.status == 200:
-                    return response
-                else:
-                    await self.Login()
-                    return await self.MakeRequest(
-                        method=method, url=url, headers=headers, body=body
-                    )
-        except:
-            print("Error making request. Attempting to relogin")
-            await self.Login()
-            return await self.MakeRequest(
-                method=method, url=url, headers=headers, body=body
-            )
+            try:
+                async with aiohttp.ClientSession() as session:
+                    if method == "GET":
+                        async with session.get(url, headers=headers) as resp:
+                            response = await resp.json()
+                    elif method == "POST":
+                        headers["content-type"] = "application/json"
+                        jbody = json.dumps(body, ensure_ascii=False)
+                        async with session.post(url, headers=headers, data=jbody) as resp:
+                            response = await resp.json()
+                    if resp.status == 200:
+                        return response
+                    else:
+                        await self.Login()
+                        return await self.MakeRequest(
+                            method=method, url=url, headers=headers, body=body
+                        )
+            except:
+                print("Error making request. Attempting to relogin")
+                await self.Login()
+                return await self.MakeRequest(
+                    method=method, url=url, headers=headers, body=body
+                )
 
     async def Login(self):
         LOGIN_BODY = {"username": self.Username, "password": self.Password}

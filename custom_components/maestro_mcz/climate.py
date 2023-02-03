@@ -22,6 +22,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(MczEntity(stove) for stove in stoveList)
 
 class MczEntity(CoordinatorEntity, ClimateEntity):
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator:MczCoordinator):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
@@ -31,9 +33,9 @@ class MczEntity(CoordinatorEntity, ClimateEntity):
         self._attr_preset_modes = ["manual", "auto", "overnight", "comfort", "turbo"]
         self._attr_min_temp = 5
         self._attr_max_temp = 40
-        self._attr_name = self.coordinator._maestroapi.Name
+        self._attr_name = None
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}_climate"
+        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}"
         self._attr_icon = "mdi:stove"
 
     _attr_supported_features = (
