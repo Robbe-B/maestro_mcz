@@ -13,8 +13,8 @@ GENERIC_SENSORS = {
     "temp_fumi": ["Exhaust Temperature", TEMP_CELSIUS, "mdi:thermometer", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True, EntityCategory.DIAGNOSTIC],
     "temp_scheda": ["Board Temperature", TEMP_CELSIUS, "mdi:thermometer", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True, EntityCategory.DIAGNOSTIC],
     "mode": ["Current Mode", None, "mdi:calendar-multiselect", None, None, True, EntityCategory.DIAGNOSTIC],
-    "vel_real_ventola_fumi": ["Exhaust Fan RPM", "rpm", "mdi:fan-chevron-up", None, SensorStateClass.MEASUREMENT, True, EntityCategory.DIAGNOSTIC],
-    "vel_real_coclea": ["Transport Screw RPM", "rpm", "mdi:screw-lag", None, None, SensorStateClass.MEASUREMENT, EntityCategory.DIAGNOSTIC],
+    "vel_real_ventola_fumi": ["Exhaust Fan Speed", "rpm", "mdi:fan-chevron-up", None, SensorStateClass.MEASUREMENT, True, EntityCategory.DIAGNOSTIC],
+    "vel_real_coclea": ["Transport Screw Speed", "rpm", "mdi:screw-lag", None, None, SensorStateClass.MEASUREMENT, EntityCategory.DIAGNOSTIC],
 }
 
 GENERIC_FANS = {
