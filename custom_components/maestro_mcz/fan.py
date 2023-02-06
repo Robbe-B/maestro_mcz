@@ -68,7 +68,7 @@ class MczEntity(CoordinatorEntity, FanEntity):
 
     @property
     def preset_mode(self) -> str:
-        return str(getattr(self.coordinator._maestroapi.Status, "set_vent_v1"))
+        return str(getattr(self.coordinator._maestroapi.Status, self._prop))
 
     @property
     def entity_registry_enabled_default(self) -> bool:
