@@ -91,7 +91,7 @@ class MczEntity(CoordinatorEntity, ClimateEntity):
         await self.coordinator.async_request_refresh()
 
     async def async_set_fan_mode(self, fan_mode):
-        await self.coordinator._maestroapi.Fan(int(fan_mode))
+        await self.coordinator._maestroapi.Fan(1,int(fan_mode))
         await self.coordinator.async_request_refresh()
 
     async def async_set_swing_mode(self, swing_mode):
