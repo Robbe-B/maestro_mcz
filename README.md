@@ -1,5 +1,5 @@
 # Maestro MCZ
-![Logo](https://github.com/Crisicus/maestro_mcz/blob/main/docs/appicon.png)
+![Logo](https://github.com/Crisicus/maestro_mcz/blob/main/docs/app_icon.png)
 A Home Assistant Custom Component for Maestro MCZ (cloud)
 
 ## Functionality
