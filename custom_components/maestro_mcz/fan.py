@@ -38,12 +38,13 @@ class MczEntity(CoordinatorEntity, FanEntity):
 
     def __init__(self, coordinator, prop, attrs):
         super().__init__(coordinator)
-        [name, icon, presets, fannum, function, enabled_by_default, category] = attrs
+        [name, icon, presets, fan_number, function, enabled_by_default, category] = attrs
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = name
         self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{prop}"
         self._attr_icon = icon
         self._prop = prop
+        self._fan_number = fan_number
         self._enabled_default = enabled_by_default
         self._category = category
         self._presets = sorted(list(presets))
@@ -81,7 +82,7 @@ class MczEntity(CoordinatorEntity, FanEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode of the fan."""
-        await self.coordinator._maestroapi.Fan(int(preset_mode))
+        await self.coordinator._maestroapi.Fan(self._fan_number, int(preset_mode))
 
     @callback
     def _handle_coordinator_update(self) -> None:
