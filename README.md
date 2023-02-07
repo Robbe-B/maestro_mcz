@@ -1,4 +1,5 @@
 # Maestro MCZ
+
 A Home Assistant Custom Component for Maestro MCZ (cloud)
 
 <img src="https://github.com/Crisicus/maestro_mcz/blob/main/docs/app_icon.png" width="128" height="128">
