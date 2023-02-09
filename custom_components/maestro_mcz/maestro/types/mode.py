@@ -6,3 +6,9 @@ class ModeEnum(Enum):
     overnight = 2,
     comfort = 3,
     turbo = 4
+
+class TypeEnum(Enum):
+    BOOLEAN = "boolean"
+    DOUBLE = "double"
+    INT = "int"
+    STRING = "string"

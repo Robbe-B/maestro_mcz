@@ -3,8 +3,10 @@ import aiohttp
 import asyncio
 import async_timeout
 
+from .responses.model import Model
 from .responses.status import Status
 from .responses.state import State
+
 from .types.mode import ModeEnum
 from .http.request import RequestBuilder
 from .const import LOGIN_URL
@@ -132,9 +134,20 @@ class MaestroStove:
     def Status(self) -> Status:
         return self._status
 
+    @property
+    def Model(self) -> Model:
+        return self._model
+
     async def Ping(self):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/Ping/{self.Id}"
         await self._controller.MakeRequest("POST", url=url)
+
+    async def StoveModel(self) -> Model:
+        return Model(
+            await self._controller.MakeRequest(
+                "GET", f"https://s.maestro.mcz.it/hlapi/v1.0/Model/{self.ModelId}"
+            )
+        )
 
     async def StoveStatus(self) -> Status:
         return Status(
@@ -155,6 +168,7 @@ class MaestroStove:
         await asyncio.sleep(5)
         self._state = await self.StoveState()
         self._status = await self.StoveStatus()
+        self._model = await self.StoveModel()
 
     async def Mode(self, Mode: ModeEnum):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"

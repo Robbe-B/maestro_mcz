@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+
+@dataclass
 class State:
     vel_imp_ventola_fumi: int
     vel_real_ventola_fumi: int
