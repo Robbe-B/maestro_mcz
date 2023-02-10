@@ -94,10 +94,10 @@ class MaestroController:
         )
 
         for stove in res:
-            self._stoves.append(MaestroStove(self, stove))
+            self._stoves.append(await MaestroStove(self, stove))
 
 class MaestroStove:
-    def __init__(self, controller: MaestroController, stove):
+    async def __init__(self, controller: MaestroController, stove):
         self._stove = stove
         self._controller: MaestroController = controller
         self._id = stove["Node"]["Id"]
@@ -105,6 +105,7 @@ class MaestroStove:
         self._modelid = stove["Node"]["ModelId"]
         self._sensorsettypeid = stove["Node"]["SensorSetTypeId"]
         self._uniquecode = stove["Node"]["UniqueCode"]
+        self._model = await self.StoveModel()
 
     @property
     def Id(self) -> str:
@@ -168,7 +169,6 @@ class MaestroStove:
         await asyncio.sleep(5)
         self._state = await self.StoveState()
         self._status = await self.StoveStatus()
-        self._model = await self.StoveModel()
 
     async def Mode(self, Mode: ModeEnum):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
