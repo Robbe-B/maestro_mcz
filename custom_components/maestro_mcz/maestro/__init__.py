@@ -3,8 +3,10 @@ import aiohttp
 import asyncio
 import async_timeout
 
+from .responses.model import Model
 from .responses.status import Status
 from .responses.state import State
+
 from .types.mode import ModeEnum
 from .http.request import RequestBuilder
 from .const import LOGIN_URL
@@ -92,10 +94,10 @@ class MaestroController:
         )
 
         for stove in res:
-            self._stoves.append(MaestroStove(self, stove))
+            self._stoves.append(await MaestroStove(self, stove))
 
 class MaestroStove:
-    def __init__(self, controller: MaestroController, stove):
+    async def __init__(self, controller: MaestroController, stove):
         self._stove = stove
         self._controller: MaestroController = controller
         self._id = stove["Node"]["Id"]
@@ -103,6 +105,7 @@ class MaestroStove:
         self._modelid = stove["Node"]["ModelId"]
         self._sensorsettypeid = stove["Node"]["SensorSetTypeId"]
         self._uniquecode = stove["Node"]["UniqueCode"]
+        self._model = await self.StoveModel()
 
     @property
     def Id(self) -> str:
@@ -132,9 +135,20 @@ class MaestroStove:
     def Status(self) -> Status:
         return self._status
 
+    @property
+    def Model(self) -> Model:
+        return self._model
+
     async def Ping(self):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/Ping/{self.Id}"
         await self._controller.MakeRequest("POST", url=url)
+
+    async def StoveModel(self) -> Model:
+        return Model(
+            await self._controller.MakeRequest(
+                "GET", f"https://s.maestro.mcz.it/hlapi/v1.0/Model/{self.ModelId}"
+            )
+        )
 
     async def StoveStatus(self) -> Status:
         return Status(
