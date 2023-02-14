@@ -48,4 +48,16 @@ models = {
             }
         }
     },
+    "ST.SUITE": {
+        "sensor": {
+            **GENERIC_SENSORS,
+            **{
+            }
+        },
+        "fan": {
+            **GENERIC_FANS,
+            **{
+            }
+        }
+    },
 }
