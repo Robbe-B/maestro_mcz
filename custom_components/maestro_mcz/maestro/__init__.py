@@ -94,9 +94,9 @@ class MaestroController:
         )
 
         for stove in res:
-            maestoStove = MaestroStove(self, stove)
-            await maestoStove.AsyncInit()
-            self._stoves.append(maestoStove)
+            maesto_stove = MaestroStove(self, stove)
+            await maesto_stove.AsyncInit()
+            self._stoves.append(maesto_stove)
 
 
 class MaestroStove:
