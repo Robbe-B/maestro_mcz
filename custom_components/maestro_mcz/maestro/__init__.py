@@ -94,7 +94,10 @@ class MaestroController:
         )
 
         for stove in res:
-            self._stoves.append(MaestroStove(self, stove))
+            maestoStove = MaestroStove(self, stove)
+            await maestoStove.AsyncInit()
+            self._stoves.append(maestoStove)
+
 
 class MaestroStove:
     def __init__(self, controller: MaestroController, stove):
@@ -105,7 +108,9 @@ class MaestroStove:
         self._modelid = stove["Node"]["ModelId"]
         self._sensorsettypeid = stove["Node"]["SensorSetTypeId"]
         self._uniquecode = stove["Node"]["UniqueCode"]
-        #self._model = await self.StoveModel()
+
+    async def AsyncInit(self):
+        self._model = await self.StoveModel()
 
     @property
     def Id(self) -> str:
