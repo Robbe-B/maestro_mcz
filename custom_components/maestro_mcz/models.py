@@ -60,4 +60,17 @@ models = {
             }
         }
     },
+
+    "LO08": {
+        "sensor": {
+            **GENERIC_SENSORS,
+            **{
+            }
+        },
+        "fan": {
+            **GENERIC_FANS,
+            **{
+            }
+        }
+    }
 }
