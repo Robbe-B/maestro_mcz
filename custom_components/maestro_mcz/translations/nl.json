@@ -21,7 +21,7 @@
         "step": {
             "init": {
                 "data": {
-                    "scan_interval": "Polling Interval (seconden)"
+                    "polling_interval": "Polling Interval (seconden)"
                 }
             }
         }

@@ -102,7 +102,7 @@ class OptionsFlowHandler(OptionsFlow):
 
         base_schema = {
             vol.Optional(CONF_POLLING_INTERVAL, default=polling_interval): vol.All(
-                vol.Coerce(int), vol.Range(min=DEFAULT_POLLING_INTERVAL, max=300)
+                vol.Coerce(int), vol.Clamp(min=DEFAULT_POLLING_INTERVAL, max=300)
             )
         }
 
