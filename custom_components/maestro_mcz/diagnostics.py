@@ -19,10 +19,11 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     coordinators: list = hass.data[DOMAIN][config_entry.entry_id]
-
+    
     diagnostics_data = {
         "config_entry_data": async_redact_data(dict(config_entry.data), TO_REDACT),
         "devices": {},
+        "options": async_redact_data(config_entry.options, TO_REDACT)
     }
 
     for coordinator in coordinators:

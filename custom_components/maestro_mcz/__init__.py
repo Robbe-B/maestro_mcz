@@ -3,14 +3,19 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 import async_timeout
+from custom_components.maestro_mcz.config_flow import CONF_POLLING_INTERVAL
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.const import (
+    CONF_USERNAME,
+    CONF_PASSWORD,
+)
 
-from .const import DOMAIN
+from .const import DOMAIN, DEFAULT_POLLING_INTERVAL
 from .maestro import MaestroController, MaestroStove
 
 PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.FAN]
@@ -21,18 +26,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up maestro_mcz from a config entry."""
 
     hass.data.setdefault(DOMAIN, {})
-    maestroapi = MaestroController(entry.data["username"], entry.data["password"])
+
+    pollling_interval = entry.options.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
+
+    maestroapi = MaestroController(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])
     await maestroapi.Login()
 
     stoveList = []
     for stove in maestroapi.Stoves:
         stove:MaestroStove = stove
-        coordinator = MczCoordinator(hass, stove)
+        coordinator = MczCoordinator(hass, stove, pollling_interval)
         await coordinator.async_config_entry_first_refresh()
         stoveList.append(coordinator)
 
     hass.data[DOMAIN][entry.entry_id] = stoveList
 
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -44,16 +54,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return unload_ok
 
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
 class MczCoordinator(DataUpdateCoordinator):
     """MCZ Coordinator."""
 
-    def __init__(self, hass, maestroapi):
+    def __init__(self, hass, maestroapi, polling_interval):
         """Initialize my coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name="MCZ Stove",
-            update_interval=timedelta(seconds=30),
+            update_interval=timedelta(seconds=polling_interval),
         )
         self._maestroapi:MaestroStove = maestroapi
 
