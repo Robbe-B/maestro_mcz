@@ -6,6 +6,9 @@ from homeassistant.components.sensor import (
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.const import TEMP_CELSIUS
 
+#FAN [name, icon, presets, fan_number, function, enabled_by_default, category]
+#SENSOR [name, unit, icon, device_class, state_class, enabled_by_default, category]
+
 GENERIC_SENSORS = {
     "state": ["Current State", None, "mdi:power", None, None, True, EntityCategory.DIAGNOSTIC],
     "temp_amb_install": ["Temperature", TEMP_CELSIUS, "mdi:thermometer", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True, None],
