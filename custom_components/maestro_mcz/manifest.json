@@ -12,5 +12,5 @@
       "@Robbe-B"  
     ],
     "iot_class": "cloud_polling",
-    "version": "0.2.6-beta"
+    "version": "0.2.8-beta"
 }
