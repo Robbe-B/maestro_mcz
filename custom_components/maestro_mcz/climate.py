@@ -47,10 +47,13 @@ class MczEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def hvac_mode(self) -> HVACMode:
-        if self.coordinator._maestroapi.State.state == "on":
+        if(self.coordinator._maestroapi.Status.fase_op.lower() == "on" or 
+        self.coordinator._maestroapi.Status.fase_op.lower() =="turning-on"):
             return HVACMode.HEAT
-        else:
+        else: # turning-off | off | cooling-down
             return HVACMode.OFF
+                        
+            
 
     @property
     def fan_mode(self) -> str:
