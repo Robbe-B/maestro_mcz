@@ -53,11 +53,7 @@ class MczEntity(CoordinatorEntity, FanEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
-            name=self.coordinator._maestroapi.Name,
-            manufacturer="MCZ",
-            model=self.coordinator._maestroapi.Status.nome_banca_dati_sel,
-            sw_version=self.coordinator._maestroapi.Status.mc_vs_app,
+            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)}
         )
 
     @property

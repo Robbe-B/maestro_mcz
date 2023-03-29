@@ -45,7 +45,7 @@ class MczEntity(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
+            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)}
         )
 
     @property
