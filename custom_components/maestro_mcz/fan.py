@@ -10,7 +10,6 @@ from homeassistant.components.fan import (
 from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util.percentage import ordered_list_item_to_percentage, percentage_to_ordered_list_item
 
 
 from .const import DOMAIN
@@ -24,12 +23,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
         stove:MczCoordinator = stove
         model = stove.maestroapi.State.nome_banca_dati_sel
         for (prop, attrs) in models.models[model][ENTITY].items():
-            entities.append(MczEntity(stove, prop, attrs))
+            entities.append(MczFanEntity(stove, prop, attrs))
 
     async_add_entities(entities)
 
 
-class MczEntity(CoordinatorEntity, FanEntity):
+class MczFanEntity(CoordinatorEntity, FanEntity):
     _attr_has_entity_name = True
 
     _attr_supported_features = (
@@ -62,10 +61,7 @@ class MczEntity(CoordinatorEntity, FanEntity):
 
     @property
     def is_on(self) -> bool:
-        if (self.coordinator._maestroapi.State.state == "on"):
-            return True
-        else:
-            return False
+        return self.preset_mode != "0"
 
     @property
     def preset_mode(self) -> str:
@@ -83,6 +79,14 @@ class MczEntity(CoordinatorEntity, FanEntity):
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode of the fan."""
         await self.coordinator._maestroapi.Fan(self._fan_number, int(preset_mode))
+
+    async def async_turn_on(self) -> None:
+        """Turn on the fan."""
+        await self.coordinator._maestroapi.Fan(self._fan_number, 6)
+
+    async def async_turn_off(self) -> None:
+        """Turn the fan off."""
+        await self.coordinator._maestroapi.Fan(self._fan_number, 0)
 
     @callback
     def _handle_coordinator_update(self) -> None:
