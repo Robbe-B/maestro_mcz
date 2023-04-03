@@ -1,29 +1,29 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
-from ..types.mode import TypeEnum
+from ..types.enums import TypeEnum
 
 @dataclass
 class Configuration:
     sensor_name: str
     type: TypeEnum
     visible: bool
-    variants: list[str] 
-    sensor_id: str
+    variants: list[str]
+    sensor_id: UUID
     enabled: bool
-    min: object
-    max: object
+    min: str
+    max: str
     mappings: dict[str, int]
 
     def __init__(self, json) -> None:
-        self.sensor_name = json["SensorName"]
-        self.type = json["Type"]
-        self.visible = json["Visible"]
-        self.variants = json["Variants"]
-        self.sensor_id = json["SensorId"]
-        self.enabled = json["Enabled"]
-        self.min = json["Min"]
-        self.max = json["Max"]
-        self.mappings = json["Mappings"]
+        self.sensor_name = str(json["SensorName"])
+        self.type = TypeEnum(json["Type"])
+        self.visible = bool(json["Visible"])
+        self.variants = [str(variant) for variant in json["Variants"]]
+        self.sensor_id = UUID(json["SensorId"])
+        self.enabled = bool(json["Enabled"])
+        self.min = str(json["Min"])
+        self.max = str(json["Max"])
+        self.mappings = dict[str, int](json["Mappings"])
 
 @dataclass
 class ModelConfiguration:
@@ -34,11 +34,11 @@ class ModelConfiguration:
     limitations: str
 
     def __init__(self, json) -> None:
-        self.timed = json["Timed"]
-        self.configuration_name = json["ConfigurationName"]
-        self.configurations = json["Configurations"]
-        self.configuration_id = json["ConfigurationId"]
-        self.limitations = json["Limitations"]
+        self.timed = bool(json["Timed"])
+        self.configuration_name = str(json["ConfigurationName"])
+        self.configurations = [Configuration(configuration) for configuration in json["Configurations"]]
+        self.configuration_id = UUID(json["ConfigurationId"])
+        self.limitations = str(json["Limitations"])
 
 @dataclass
 class Model:
@@ -50,9 +50,18 @@ class Model:
     properties: list[str]
 
     def __init__(self, json) -> None:
-        self.model_configurations = json["ModelConfigurations"]
-        self.model_name = json["ModelName"]
-        self.model_id = json["ModelId"]
-        self.sensor_set_type_id = json["SensorSetTypeId"]
-        self.sensor_ids = json["SensorIds"]
-        self.properties = json["Properties"]
+        self.model_configurations = [ModelConfiguration(model_configuration) for model_configuration in json["ModelConfigurations"]]
+        self.model_name = str(json["ModelName"])
+        self.model_id = str(json["ModelId"])
+        self.sensor_set_type_id = str(json["SensorSetTypeId"])
+        self.sensor_ids = [UUID(sensor_id) for sensor_id in json["SensorIds"]]
+        self.properties = [str(property) for property in json["Properties"]]
+
+@dataclass
+class SensorConfiguration:
+    configuration: Configuration
+    configuration_id: str
+
+    def __init__(self, configuration: Configuration, configuration_id: str) -> None:
+        self.configuration = configuration
+        self.configuration_id = configuration_id

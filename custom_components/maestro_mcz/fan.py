@@ -1,6 +1,10 @@
-"""Platform for Sensor integration."""
+"""Platform for Fan integration."""
 import logging
 from typing import Optional
+from uuid import UUID
+
+from custom_components.maestro_mcz.maestro.responses.model import SensorConfiguration
+from custom_components.maestro_mcz.maestro.types.enums import TypeEnum
 from . import MczCoordinator, models
 
 from homeassistant.components.fan import (
@@ -13,17 +17,19 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 
 from .const import DOMAIN
-ENTITY = "fan"
+
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    stoveList = hass.data[DOMAIN][entry.entry_id]
+    stove_list = hass.data[DOMAIN][entry.entry_id]
     entities = []
-    for stove in stoveList:
+    for stove in stove_list:
         stove:MczCoordinator = stove
-        model = stove.maestroapi.State.nome_banca_dati_sel
-        for (prop, attrs) in models.models[model][ENTITY].items():
-            entities.append(MczFanEntity(stove, prop, attrs))
+        supported_fans = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(models.supported_fans)
+        if(supported_fans is not None):
+            for supported_fan in supported_fans:
+                if(supported_fan[0] is not None and supported_fan[1] is not None):
+                    entities.append(MczFanEntity(stove, supported_fan[0], supported_fan[1]))
 
     async_add_entities(entities)
 
@@ -31,23 +37,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class MczFanEntity(CoordinatorEntity, FanEntity):
     _attr_has_entity_name = True
 
-    _attr_supported_features = (
-        FanEntityFeature.PRESET_MODE
-    )
-
-    def __init__(self, coordinator, prop, attrs):
+    def __init__(self, coordinator, supported_fan: models.FanMczConfigItem, matching_fan_configuration: SensorConfiguration):
         super().__init__(coordinator)
-        [name, icon, presets, fan_number, function, enabled_by_default, category] = attrs
         self.coordinator:MczCoordinator = coordinator
-        self._attr_name = name
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{prop}"
-        self._attr_icon = icon
-        self._prop = prop
-        self._fan_number = fan_number
-        self._enabled_default = enabled_by_default
-        self._category = category
-        self._presets = sorted(list(presets))
-        self._attr_preset_modes = sorted(list(presets))
+        self._attr_name = supported_fan.user_friendly_name
+        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_fan.sensor_get_name}"
+        self._attr_icon = supported_fan.icon
+        self._prop = supported_fan.sensor_get_name
+        self._enabled_default = supported_fan.enabled_by_default
+        self._category = supported_fan.category
+        self.fan_configuration = matching_fan_configuration
+        if(matching_fan_configuration.configuration.type == TypeEnum.INT):
+            self._presets = self._attr_preset_modes = list(map(str,range(int(matching_fan_configuration.configuration.min), int(matching_fan_configuration.configuration.max) + 1 , 1)))
+            self._attr_supported_features = (FanEntityFeature.PRESET_MODE)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -63,7 +65,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     @property
     def is_on(self) -> bool:
-        return self.preset_mode != "0"
+        return self.preset_mode != self._presets[0]
 
     @property
     def preset_mode(self) -> str:
@@ -80,15 +82,18 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode of the fan."""
-        await self.coordinator._maestroapi.Fan(self._fan_number, int(preset_mode))
+        await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(preset_mode))
+        await self.coordinator.async_request_refresh()
 
     async def async_turn_on(self) -> None:
         """Turn on the fan."""
-        await self.coordinator._maestroapi.Fan(self._fan_number, 6)
+        await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[-1])
+        await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn the fan off."""
-        await self.coordinator._maestroapi.Fan(self._fan_number, 0)
+        await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[0])
+        await self.coordinator.async_request_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:
