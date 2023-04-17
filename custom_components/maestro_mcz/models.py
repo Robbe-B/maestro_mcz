@@ -39,6 +39,18 @@ models = {
             }
         }
     },
+    "SC10": {
+        "sensor": {
+            **GENERIC_SENSORS,
+        },
+        "fan": {
+            **GENERIC_FANS,
+            **{
+                "set_vent_v2": ["Fan 2", "mdi:fan", {"0", "1", "2", "3", "4", "5", "6"}, 2, "Fan", True, None],
+                "set_vent_v3": ["Fan 3", "mdi:fan", {"0", "1", "2", "3", "4", "5", "6"}, 3, "Fan", True, None]
+            }
+        }
+    },
     "SC12": {
         "sensor": {
             **GENERIC_SENSORS,
