@@ -8,7 +8,6 @@ from homeassistant.components.sensor import (
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.const import TEMP_CELSIUS
 
-
 @dataclass
 class MczConfigItem:
 
