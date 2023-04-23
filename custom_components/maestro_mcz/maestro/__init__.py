@@ -180,9 +180,3 @@ class MaestroStove:
         command = [{"SensorId": str(sensor_id), "Value": value}]
         body = RequestBuilder(self, ConfigurationId=str(configuration_id), Commands=command)
         await self._controller.MakeRequest("POST", url=url, body=body)
-
-    async def Fan(self, sensor_id: UUID, configuration_id: UUID, fan_value: int):
-        url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        command = [{"SensorId": str(sensor_id), "Value": fan_value}]
-        body = RequestBuilder(self, ConfigurationId=str(configuration_id), Commands=command)
-        await self._controller.MakeRequest("POST", url=url, body=body)
