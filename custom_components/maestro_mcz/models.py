@@ -1,5 +1,4 @@
-from dataclasses import dataclass, field
-from uuid import UUID
+from dataclasses import dataclass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
@@ -11,12 +10,12 @@ from homeassistant.const import TEMP_CELSIUS
 @dataclass
 class MczConfigItem:
 
-    sensor_get_name: str = field(default_factory=str) #name used for getting data out of the state and status reponses
-    sensor_set_name: str = field(default_factory=str) #name used for setting data trough the API (resolved in configs first)
-    sensor_set_config_name: str = field(default_factory=str)
+    sensor_get_name: str | None = None #name used for getting data out of the state and status reponses
+    sensor_set_name: str | None = None #name used for setting data trough the API (resolved in configs first)
+    sensor_set_config_name: str | None = None
 
-    user_friendly_name: str = field(default_factory=str)
-    icon: str = field(default_factory=str)
+    user_friendly_name: str | None = None
+    icon: str | None = None
     enabled_by_default: bool = True
     category: EntityCategory | None = None
 
@@ -36,7 +35,7 @@ class PowerSettingMczConfigItem(MczConfigItem):
 
 @dataclass
 class ClimateFunctionModeMczConfigItem(MczConfigItem):
-    mappings: dict[str,str] = field(default_factory=list)
+    mappings: dict[str,str] | None = None
 
     def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool, mappings: dict[str,str]):
         super().__init__(user_friendly_name, sensor_get_name)
@@ -85,8 +84,6 @@ class SensorMczConfigItem(MczConfigItem):
 @dataclass
 class FanMczConfigItem(MczConfigItem):
     
-    presets: list[str] = field(default_factory=list)
-
     def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool):
         super().__init__(user_friendly_name, sensor_get_name)
         self.icon = "mdi:fan"

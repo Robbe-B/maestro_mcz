@@ -116,12 +116,12 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     def set_power_configuration(self, matching_power_configuration: SensorConfiguration):
         self.power_configuration = matching_power_configuration
-        if(matching_power_configuration.configuration.type == TypeEnum.BOOLEAN):
+        if(matching_power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
             self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
 
     def set_thermostat_configuration(self, matching_thermostat_configuration: SensorConfiguration):
         self.thermostat_configuration = matching_thermostat_configuration
-        if(matching_thermostat_configuration.configuration.type == TypeEnum.DOUBLE):
+        if(matching_thermostat_configuration.configuration.type == TypeEnum.DOUBLE.value):
             self._attr_min_temp = float(matching_thermostat_configuration.configuration.min)
             self._attr_max_temp = float(matching_thermostat_configuration.configuration.max)
             self._attr_temperature_unit = UnitOfTemperature.CELSIUS
@@ -129,7 +129,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     
     def set_climate_function_mode_configuration(self, matching_climate_function_mode_configuration: SensorConfiguration):
         self.climate_function_mode_configuration = matching_climate_function_mode_configuration
-        if(matching_climate_function_mode_configuration.configuration.type == TypeEnum.INT):
+        if(matching_climate_function_mode_configuration.configuration.type == TypeEnum.INT.value):
             self._attr_preset_modes = []
             self._attr_preset_modes_mappings = matching_climate_function_mode_configuration.configuration.mappings
             for key in matching_climate_function_mode_configuration.configuration.variants:
@@ -144,13 +144,13 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     def set_pot_configuration(self, matching_pot_configuration: SensorConfiguration):
         self.pot_configuration = matching_pot_configuration
-        if(matching_pot_configuration.configuration.type == TypeEnum.INT):
+        if(matching_pot_configuration.configuration.type == TypeEnum.INT.value):
             self._attr_swing_modes = list(map(str,range(int(matching_pot_configuration.configuration.min), int(matching_pot_configuration.configuration.max) + 1 , 1)))
             self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
 
     def set_fan_configuration(self, matching_fan_configuration: SensorConfiguration):
         self.fan_configuration = matching_fan_configuration
-        if(matching_fan_configuration.configuration.type == TypeEnum.INT):
+        if(matching_fan_configuration.configuration.type == TypeEnum.INT.value):
             self._attr_fan_modes = list(map(str,range(int(matching_fan_configuration.configuration.min), int(matching_fan_configuration.configuration.max) + 1 , 1)))
             self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
 

@@ -47,7 +47,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         self._enabled_default = supported_fan.enabled_by_default
         self._category = supported_fan.category
         self.fan_configuration = matching_fan_configuration
-        if(matching_fan_configuration.configuration.type == TypeEnum.INT):
+        if(matching_fan_configuration.configuration.type == TypeEnum.INT.value):
             self._presets = self._attr_preset_modes = list(map(str,range(int(matching_fan_configuration.configuration.min), int(matching_fan_configuration.configuration.max) + 1 , 1)))
             self._attr_supported_features = (FanEntityFeature.PRESET_MODE)
 

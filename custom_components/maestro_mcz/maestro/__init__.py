@@ -175,8 +175,8 @@ class MaestroStove:
         self._state = await self.StoveState()
         self._status = await self.StoveStatus()
 
-    async def ActivateProgram(self, sensor_id: UUID, configuration_id: UUID, value: object):
+    async def ActivateProgram(self, sensor_id: str, configuration_id: str, value: object):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        command = [{"SensorId": str(sensor_id), "Value": value}]
-        body = RequestBuilder(self, ConfigurationId=str(configuration_id), Commands=command)
+        command = [{"SensorId": sensor_id, "Value": value}]
+        body = RequestBuilder(self, ConfigurationId=configuration_id, Commands=command)
         await self._controller.MakeRequest("POST", url=url, body=body)
