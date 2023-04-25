@@ -1,6 +1,5 @@
 """Platform for Climate integration."""
 import logging
-from uuid import UUID
 
 from custom_components.maestro_mcz import models
 from custom_components.maestro_mcz.maestro.responses.model import Configuration, SensorConfiguration
