@@ -20,7 +20,7 @@ from homeassistant.const import (
 from .const import DOMAIN, DEFAULT_POLLING_INTERVAL
 from .maestro import MaestroController, MaestroStove
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.FAN]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.FAN, Platform.BUTTON]
 _LOGGER = logging.getLogger(__name__)
 
 

@@ -1,5 +1,4 @@
 """Platform for Sensor integration."""
-from uuid import UUID
 from . import MczCoordinator, models
 
 from homeassistant.components.sensor import (
