@@ -1,11 +1,12 @@
 from dataclasses import dataclass
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
 
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.const import TEMP_CELSIUS
+from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfTemperature
 
 @dataclass
 class MczConfigItem:
@@ -91,6 +92,19 @@ class ButtonMczConfigItem(MczConfigItem):
         self.enabled_by_default = enabled_by_default
 
 @dataclass
+class BinarySensorMczConfigItem(MczConfigItem):
+    
+    device_class: BinarySensorDeviceClass | None = None
+
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, icon:str, category: EntityCategory | None, device_class: BinarySensorDeviceClass | None, enabled_by_default: bool):
+        super().__init__(user_friendly_name)
+        self.sensor_get_name = sensor_get_name
+        self.icon = icon
+        self.category = category
+        self.device_class = device_class
+        self.enabled_by_default = enabled_by_default
+
+@dataclass
 class SensorMczConfigItem(MczConfigItem):
     
     unit: str | None = None
@@ -129,16 +143,20 @@ supported_fans = [
     FanMczConfigItem("Fan 3", "set_vent_v3", "set_vent_v3", "set_v3", True),
 ]
 
+supported_binary_sensors = [
+    BinarySensorMczConfigItem("Alarm","is_in_error","mdi:alert", EntityCategory.DIAGNOSTIC, BinarySensorDeviceClass.PROBLEM, True),
+]
+
 supported_buttons = [
-    ButtonMczConfigItem("Reset Alarm","com_reset_allarm","Reset Allarme","mdi:auto-fix", None, True),
+    ButtonMczConfigItem("Alarm Reset","com_reset_allarm","Reset Allarme","mdi:auto-fix", EntityCategory.DIAGNOSTIC, True),
 ]
 
 supported_sensors = [
     SensorMczConfigItem("Current State","state","mdi:power", None, EntityCategory.DIAGNOSTIC, None, None, True),
-    SensorMczConfigItem("Temperature","temp_amb_install","mdi:thermometer", TEMP_CELSIUS, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Temperature","temp_amb_install","mdi:thermometer", UnitOfTemperature.CELSIUS, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
     SensorMczConfigItem("Current Mode","mode","mdi:calendar-multiselect", None, EntityCategory.DIAGNOSTIC, None, None, True),
-    SensorMczConfigItem("Exhaust Temperature","temp_fumi","mdi:thermometer", TEMP_CELSIUS, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
-    SensorMczConfigItem("Board Temperature","temp_scheda","mdi:thermometer", TEMP_CELSIUS, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
-    SensorMczConfigItem("Exhaust Fan Speed","vel_real_ventola_fumi","mdi:fan-chevron-up", "rpm", EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
-    SensorMczConfigItem("Transport Screw Speed","vel_real_coclea","mdi:screw-lag", "rpm", EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Exhaust Temperature","temp_fumi","mdi:thermometer", UnitOfTemperature.CELSIUS, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Board Temperature","temp_scheda","mdi:thermometer", UnitOfTemperature.CELSIUS, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Exhaust Fan Speed","vel_real_ventola_fumi","mdi:fan-chevron-up", REVOLUTIONS_PER_MINUTE, EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Transport Screw Speed","vel_real_coclea","mdi:screw-lag", REVOLUTIONS_PER_MINUTE, EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
 ]
