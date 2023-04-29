@@ -1,4 +1,5 @@
 """Platform for Sensor integration."""
+from uuid import UUID
 from . import MczCoordinator, models
 
 from homeassistant.components.sensor import (
@@ -9,7 +10,6 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-ENTITY = "sensor"
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -17,30 +17,31 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = []
     for stove in stoveList:
         stove:MczCoordinator = stove
-        model = stove.maestroapi.State.nome_banca_dati_sel
-        for (prop, attrs) in models.models[model][ENTITY].items():
-            entities.append(MczEntity(stove, prop, attrs))
+        supported_sensors = filter(lambda supported_sensor:any(supported_sensor.sensor_get_name == sensor_name for sensor_name in dir(stove.maestroapi.State)),iter(models.supported_sensors))
+        if(supported_sensors is not None):
+            for supported_sensor in supported_sensors:
+                if(supported_sensor is not None):
+                    entities.append(MczSensorEntity(stove, supported_sensor))
 
     async_add_entities(entities)
 
 
-class MczEntity(CoordinatorEntity, SensorEntity):
+class MczSensorEntity(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, prop, attrs):
+    def __init__(self, coordinator, supported_sensor:models.SensorMczConfigItem):
         super().__init__(coordinator)
-        [name, unit, icon, device_class, state_class, enabled_by_default, category] = attrs
         self.coordinator:MczCoordinator = coordinator
-        self._attr_name = name
-        self._attr_native_unit_of_measurement = unit
-        self._attr_device_class = device_class
-        self._attr_state_class = state_class
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{prop}"
-        self._attr_icon = icon
-        self._prop = prop
-        self._enabled_default = enabled_by_default
-        self._category = category
+        self._attr_name = supported_sensor.user_friendly_name
+        self._attr_native_unit_of_measurement = supported_sensor.unit
+        self._attr_device_class = supported_sensor.device_class
+        self._attr_state_class = supported_sensor.state_class
+        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_sensor.sensor_get_name}"
+        self._attr_icon = supported_sensor.icon
+        self._prop = supported_sensor.sensor_get_name
+        self._enabled_default = supported_sensor.enabled_by_default
+        self._category = supported_sensor.category
 
     @property
     def device_info(self) -> DeviceInfo:

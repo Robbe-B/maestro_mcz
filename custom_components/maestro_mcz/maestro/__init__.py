@@ -1,4 +1,5 @@
 import json
+from uuid import UUID
 import aiohttp
 import asyncio
 import async_timeout
@@ -7,7 +8,6 @@ from .responses.model import Model
 from .responses.status import Status
 from .responses.state import State
 
-from .types.mode import ModeEnum
 from .http.request import RequestBuilder
 from .const import LOGIN_URL
 
@@ -175,50 +175,8 @@ class MaestroStove:
         self._state = await self.StoveState()
         self._status = await self.StoveStatus()
 
-    async def Mode(self, Mode: ModeEnum):
+    async def ActivateProgram(self, sensor_id: str, configuration_id: str, value: object):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        configurationid = "d85b93a4-4cae-4745-925d-ef53547c661e"
-        command = [
-            {
-                "SensorId": "bd064ae8-9091-4696-b137-5a4e243ebb91",
-                "Value": int(Mode.value[0]),
-            }
-        ]
-        body = RequestBuilder(self, ConfigurationId=configurationid, Commands=command)
-        await self._controller.MakeRequest("POST", url=url, body=body)
-
-    async def Power(self):
-        url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        configurationid = "e373bb67-fe69-4d49-b2f2-4b636fa68e37"
-        command = [{"SensorId": "9c7f0959-47a2-44ea-906d-f5d22218d00e", "Value": True}]
-        body = RequestBuilder(self, ConfigurationId=configurationid, Commands=command)
-        await self._controller.MakeRequest("POST", url=url, body=body)
-
-    async def Temperature(self, temp: float):
-        url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        configurationid = "875fb696-4af1-42da-bb78-ebe57c90fe5c"
-        command = [{"SensorId": "b866d2a9-d0ab-4558-8367-910c52261be1", "Value": temp}]
-        body = RequestBuilder(self, ConfigurationId=configurationid, Commands=command)
-        await self._controller.MakeRequest("POST", url=url, body=body)
-
-    async def Fan(self, fan_number: int, fan_value: int):
-        url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        match fan_number :
-            case 1: 
-                configurationid = "bcb11620-e1f0-419f-ba03-db4651c34017"
-                command = [{"SensorId": "72aac073-1815-4d52-bb2e-2ed7d1c78e1f", "Value": fan_value}]
-            case 2: 
-                configurationid = "edc8c0b7-ce59-4433-870d-f011c5e4fd0f"
-                command = [{"SensorId": "1a0b9674-8418-4dbe-a3a8-cefd12998186", "Value": fan_value}]
-            case 3: 
-                configurationid = "25fc45eb-be51-4f23-a8ce-31215f75a2ec"
-                command = [{"SensorId": "63e65772-af9e-4545-b9c2-e4ca082b827f", "Value": fan_value}]
-        body = RequestBuilder(self, ConfigurationId=configurationid, Commands=command)
-        await self._controller.MakeRequest("POST", url=url, body=body)
-
-    async def Pot(self, pot: int):
-        url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        configurationid = "fa2e1c9e-83e3-4435-825b-cdfb50da92a7"
-        command = [{"SensorId": "f7750f3e-9ff2-4351-b53a-6d1a9d1f6bc6", "Value": pot}]
-        body = RequestBuilder(self, ConfigurationId=configurationid, Commands=command)
+        command = [{"SensorId": sensor_id, "Value": value}]
+        body = RequestBuilder(self, ConfigurationId=configuration_id, Commands=command)
         await self._controller.MakeRequest("POST", url=url, body=body)
