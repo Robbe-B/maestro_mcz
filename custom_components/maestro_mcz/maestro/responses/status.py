@@ -91,6 +91,46 @@ class Status:
     blocking_event_id: str | None = None
     pren_acc: bool | None = None
 
+    #hydro stove fields
+    IsPumpActive: bool | None = None
+    power_caller: object | None = None
+    ing_term_amb2: bool | None = None
+    ing_term_amb3: bool | None = None
+    est_inv: int | None = None
+    pompa: int | None = None
+    conf_imp: int | None = None
+    temp_caldaia: float | None = None
+    ingr_ntc2: int | None = None
+    ingr_ntc3: int | None = None
+    conf_rele_aux: int | None = None
+    temp_NTC1: float | None = None
+    temp_NTC2: float | None = None
+    temp_NTC3: float | None = None
+    temp_puffer: float | None = None
+    term_puff: bool | None = None
+    temp_bollitore: float | None = None
+    term_boll: bool | None = None
+    temp_sonda_est: float | None = None
+    temp_sonda_acc: float | None = None
+    temp_termocoppia1: float | None = None
+    stato_valv: bool | None = None
+    stato_exit_pomp_ext: bool | None = None
+    temp_max_mand: float | None = None
+    temp_min_circ_on: float | None = None
+    set_puffer: float | None = None
+    ist_neg_puffer: float | None = None
+    ist_pos_puffer: float | None = None
+    set_boiler: float | None = None
+    ist_neg_boiler: float | None = None
+    ist_pos_boiler: float | None = None
+    set_cald: float | None = None
+    ist_neg_cald: float | None = None
+    ist_pos_cald: float | None = None
+    set_san: float | None = None
+    soglia_temp_cons_cald: float | None = None
+    com_inv_pos_bruciatore: bool | None = None
+    tempo_sleep: int | None = None
+
     unknown_fields: dict | None = None
 
     def __init__(self, json) -> None:
@@ -182,6 +222,44 @@ class Status:
                     case "SiteTimeZone": self.site_time_zone = json[key]
                     case "BlockingEventId": self.blocking_event_id = json[key]
                     case "pren_acc" : self.pren_acc = json[key]
+                    case "IsPumpActive": self.IsPumpActive = json[key]
+                    case "power_caller": self.power_caller = json[key]
+                    case "ing_term_amb2": self.ing_term_amb2 = json[key]
+                    case "ing_term_amb3": self.ing_term_amb3 = json[key]
+                    case "est_inv": self.est_inv = json[key]
+                    case "pompa": self.pompa = json[key]
+                    case "conf_imp": self.conf_imp = json[key]
+                    case "temp_caldaia": self.temp_caldaia = json[key]
+                    case "ingr_ntc2": self.ingr_ntc2 = json[key]
+                    case "ingr_ntc3": self.ingr_ntc3 = json[key]
+                    case "conf_rele_aux": self.conf_rele_aux = json[key]
+                    case "temp_NTC1": self.temp_NTC1 = json[key]
+                    case "temp_NTC2": self.temp_NTC2 = json[key]
+                    case "temp_NTC3": self.temp_NTC3 = json[key]
+                    case "temp_puffer": self.temp_puffer = json[key]
+                    case "term_puff": self.term_puff = json[key]
+                    case "temp_bollitore": self.temp_bollitore = json[key]
+                    case "term_boll": self.term_boll = json[key]
+                    case "temp_sonda_est": self.temp_sonda_est = json[key]
+                    case "temp_sonda_acc": self.temp_sonda_acc = json[key]
+                    case "temp_termocoppia1": self.temp_termocoppia1 = json[key]
+                    case "stato_valv": self.stato_valv = json[key]
+                    case "stato_exit_pomp_ext": self.stato_exit_pomp_ext = json[key]
+                    case "temp_max_mand": self.temp_max_mand = json[key]
+                    case "temp_min_circ_on": self.temp_min_circ_on = json[key]
+                    case "set_puffer": self.set_puffer = json[key]
+                    case "ist_neg_puffer": self.ist_neg_puffer = json[key]
+                    case "ist_pos_puffer": self.ist_pos_puffer = json[key]
+                    case "set_boiler": self.set_boiler = json[key]
+                    case "ist_neg_boiler": self.ist_neg_boiler = json[key]
+                    case "ist_pos_boiler": self.ist_pos_boiler = json[key]
+                    case "set_cald": self.set_cald = json[key]
+                    case "ist_neg_cald": self.ist_neg_cald = json[key]
+                    case "ist_pos_cald": self.ist_pos_cald = json[key]
+                    case "set_san": self.set_san = json[key]
+                    case "soglia_temp_cons_cald": self.soglia_temp_cons_cald = json[key]
+                    case "com_inv_pos_bruciatore": self.com_inv_pos_bruciatore = json[key]
+                    case "tempo_sleep": self.tempo_sleep = json[key]
                     case _ :
                         temp_unknown_fields[key] = json[key]
                         _LOGGER.warning(f"Unknown status property '{key}' received from API endpoint. If this happens, please make an issue on the github repository")
