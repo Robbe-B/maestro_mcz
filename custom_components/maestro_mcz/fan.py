@@ -65,7 +65,10 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     @property
     def is_on(self) -> bool:
-        return self.preset_mode != self._presets[0]
+        if(self.fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
+            return self.preset_mode != self._presets[0]
+        else:
+            return False
 
     @property
     def preset_mode(self) -> str:
@@ -82,18 +85,21 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode of the fan."""
-        await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(preset_mode))
-        await self.coordinator.async_request_refresh()
+        if(self.fan_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(preset_mode))
+            await self.coordinator.async_request_refresh()
 
     async def async_turn_on(self) -> None:
         """Turn on the fan."""
-        await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[-1])
-        await self.coordinator.async_request_refresh()
+        if(self.fan_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[-1])
+            await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn the fan off."""
-        await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[0])
-        await self.coordinator.async_request_refresh()
+        if(self.fan_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[0])
+            await self.coordinator.async_request_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:

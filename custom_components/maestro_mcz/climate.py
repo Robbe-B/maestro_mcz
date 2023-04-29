@@ -85,21 +85,30 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         )
     
     @property
-    def hvac_mode(self) -> HVACMode:
-        fase_op = getattr(self.coordinator._maestroapi.Status, self.supported_power_sensor.sensor_get_name)
-        if(fase_op is not None):
-            if(str(fase_op).lower() == "on" or str(fase_op).lower() == "turning-on"):
-                return HVACMode.HEAT
-            else: # turning-off | off | cooling-down
-                return HVACMode.OFF
+    def hvac_mode(self):
+        if(self.supported_power_sensor is not None): 
+            fase_op = getattr(self.coordinator._maestroapi.Status, self.supported_power_sensor.sensor_get_name)
+            if(fase_op is not None):
+                if(str(fase_op).lower() == "on" or str(fase_op).lower() == "turning-on"):
+                    return HVACMode.HEAT
+                else: # turning-off | off | cooling-down
+                    return HVACMode.OFF
+        else:
+            return None
         
     @property
-    def fan_mode(self) -> str:
-        return str(getattr(self.coordinator._maestroapi.Status, self.supported_fan.sensor_get_name))
+    def fan_mode(self):
+        if(self.supported_fan is not None): 
+            return str(getattr(self.coordinator._maestroapi.Status, self.supported_fan.sensor_get_name))
+        else :
+            return None
 
     @property
-    def swing_mode(self) -> str:
-        return str(getattr(self.coordinator._maestroapi.Status, self.supported_pot.sensor_get_name))
+    def swing_mode(self):
+        if(self.supported_pot is not None): 
+            return str(getattr(self.coordinator._maestroapi.Status, self.supported_pot.sensor_get_name))
+        else : 
+            return None
 
     @property
     def current_temperature(self): #ToDo in case there can be different => needs more investigation in the future
@@ -107,11 +116,17 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def target_temperature(self):
-        return getattr(self.coordinator._maestroapi.State, self.supported_thermostat.sensor_get_name)
+        if(self.supported_thermostat is not None): 
+            return getattr(self.coordinator._maestroapi.State, self.supported_thermostat.sensor_get_name)
+        else:
+            return None
 
     @property
     def preset_mode(self):
-        return str(getattr(self.coordinator._maestroapi.State, self.supported_climate_function_mode.sensor_get_name))
+        if(self.supported_climate_function_mode is not None): 
+            return str(getattr(self.coordinator._maestroapi.State, self.supported_climate_function_mode.sensor_get_name))
+        else:
+            return None
 
 
     def set_power_configuration(self, matching_power_configuration: SensorConfiguration):
@@ -155,33 +170,43 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
 
     async def async_set_preset_mode(self, preset_mode):
-        if preset_mode in self._attr_preset_modes_mappings.keys():
-            converted_preset_mode = self._attr_preset_modes_mappings[preset_mode]
-        else:
-            return #should never happen
-        await self.coordinator._maestroapi.ActivateProgram(self.climate_function_mode_configuration.configuration.sensor_id, self.climate_function_mode_configuration.configuration_id, converted_preset_mode)
-        await self.coordinator.async_request_refresh()
+        if(self.climate_function_mode_configuration is not None):
+            if (preset_mode in self._attr_preset_modes_mappings.keys()):
+                converted_preset_mode = self._attr_preset_modes_mappings[preset_mode]
+                await self.coordinator._maestroapi.ActivateProgram(self.climate_function_mode_configuration.configuration.sensor_id, self.climate_function_mode_configuration.configuration_id, converted_preset_mode)
+                await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode):
-        await self.coordinator._maestroapi.ActivateProgram(self.power_configuration.configuration.sensor_id, self.power_configuration.configuration_id, True)
-        await self.coordinator.async_request_refresh()
+        if(self.power_configuration is not None):
+            if(hvac_mode == HVACMode.OFF or hvac_mode == HVACMode.HEAT):
+                converted_hvac_mode = (hvac_mode == HVACMode.HEAT)
+                await self.coordinator._maestroapi.ActivateProgram(self.power_configuration.configuration.sensor_id, self.power_configuration.configuration_id, converted_hvac_mode)
+                await self.coordinator.async_request_refresh()
 
     async def async_set_fan_mode(self, fan_mode):
-        await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(fan_mode))
-        await self.coordinator.async_request_refresh()
+        if(self.fan_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(fan_mode))
+            await self.coordinator.async_request_refresh()
 
     async def async_set_swing_mode(self, swing_mode):
-        await self.coordinator._maestroapi.ActivateProgram(self.pot_configuration.configuration.sensor_id, self.pot_configuration.configuration_id,int(swing_mode))
-        await self.coordinator.async_request_refresh()
+        if(self.pot_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self.pot_configuration.configuration.sensor_id, self.pot_configuration.configuration_id,int(swing_mode))
+            await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs):
-        await self.coordinator._maestroapi.ActivateProgram(self.thermostat_configuration.configuration.sensor_id, self.thermostat_configuration.configuration_id, float(kwargs["temperature"]))
-        await self.coordinator.async_request_refresh()
+        if(self.thermostat_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self.thermostat_configuration.configuration.sensor_id, self.thermostat_configuration.configuration_id, float(kwargs["temperature"]))
+            await self.coordinator.async_request_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        self._attr_target_temperature = getattr(self.coordinator._maestroapi.State, self.supported_thermostat.sensor_get_name)
-        self._attr_fan_mode = str(getattr(self.coordinator._maestroapi.Status, self.supported_fan.sensor_get_name))
-        self._attr_swing_mode = str(getattr(self.coordinator._maestroapi.Status, self.supported_pot.sensor_get_name))   
-        self._attr_preset_mode = str(getattr(self.coordinator._maestroapi.State, self.supported_climate_function_mode.sensor_get_name))
+        if(self.supported_thermostat is not None): 
+            self._attr_target_temperature = getattr(self.coordinator._maestroapi.State, self.supported_thermostat.sensor_get_name)
+        if(self.supported_fan is not None): 
+            self._attr_fan_mode = str(getattr(self.coordinator._maestroapi.Status, self.supported_fan.sensor_get_name))
+        if(self.supported_pot is not None): 
+            self._attr_swing_mode = str(getattr(self.coordinator._maestroapi.Status, self.supported_pot.sensor_get_name))   
+        if(self.supported_climate_function_mode is not None): 
+            self._attr_preset_mode = str(getattr(self.coordinator._maestroapi.State, self.supported_climate_function_mode.sensor_get_name))
+        
         self.async_write_ha_state()
