@@ -178,9 +178,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         if(self.power_configuration is not None):
-            if(hvac_mode == HVACMode.OFF or hvac_mode == HVACMode.HEAT):
-                converted_hvac_mode = (hvac_mode == HVACMode.HEAT)
-                await self.coordinator._maestroapi.ActivateProgram(self.power_configuration.configuration.sensor_id, self.power_configuration.configuration_id, converted_hvac_mode)
+                await self.coordinator._maestroapi.ActivateProgram(self.power_configuration.configuration.sensor_id, self.power_configuration.configuration_id, True)
                 await self.coordinator.async_request_refresh()
 
     async def async_set_fan_mode(self, fan_mode):
