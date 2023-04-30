@@ -44,7 +44,7 @@ class State:
     is_in_error: bool | None = None
     
     #hydro stove fields
-    power_caller: object | None = None
+    power_caller: str | None = None
     pompa: int | None = None
     est_inv: int | None = None
     conf_imp: int | None = None

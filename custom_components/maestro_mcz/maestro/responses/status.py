@@ -93,7 +93,7 @@ class Status:
 
     #hydro stove fields
     IsPumpActive: bool | None = None
-    power_caller: object | None = None
+    power_caller: str | None = None
     ing_term_amb2: bool | None = None
     ing_term_amb3: bool | None = None
     est_inv: int | None = None
