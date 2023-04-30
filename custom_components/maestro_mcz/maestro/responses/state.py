@@ -42,6 +42,35 @@ class State:
     description: str | None = None
     is_connected: bool | None = None
     is_in_error: bool | None = None
+    
+    #hydro stove fields
+    power_caller: object | None = None
+    pompa: int | None = None
+    est_inv: int | None = None
+    conf_imp: int | None = None
+    stato_valv: bool | None = None
+    temp_caldaia: float | None = None
+    set_cald: float | None = None
+    ist_neg_cald: float | None = None
+    ist_pos_cald: float | None = None
+    temp_bollitore: float | None = None
+    set_boiler: float | None = None
+    ist_neg_boiler: float | None = None
+    ist_pos_boiler: float | None = None
+    temp_puffer: float | None = None
+    set_puffer: float | None = None
+    ist_neg_puffer: float | None = None
+    ist_pos_puffer: float | None = None
+    set_san: float | None = None
+    temp_NTC1: float | None = None
+    temp_NTC2: float | None = None
+    temp_NTC3: float | None = None
+    ing_term_amb1: bool | None = None
+    ing_term_amb2: bool | None = None
+    ing_term_amb3: bool | None = None
+    ingr_ntc2: int | None = None
+    ingr_ntc3: int | None = None
+    
 
     unknown_fields: dict | None = None
 
@@ -85,6 +114,32 @@ class State:
                     case "Description": self.description = json[key]
                     case "IsConnected": self.is_connected = json[key]
                     case "IsInError": self.is_in_error = json[key]
+                    case "power_caller": self.power_caller = json[key]
+                    case "pompa": self.pompa = json[key]
+                    case "est_inv": self.est_inv = json[key]
+                    case "conf_imp": self.conf_imp = json[key]
+                    case "stato_valv": self.stato_valv = json[key]
+                    case "temp_caldaia": self.temp_caldaia = json[key]
+                    case "set_cald": self.set_cald = json[key]
+                    case "ist_neg_cald": self.ist_neg_cald = json[key]
+                    case "ist_pos_cald": self.ist_pos_cald = json[key]
+                    case "temp_bollitore": self.temp_bollitore = json[key]
+                    case "set_boiler": self.set_boiler = json[key]
+                    case "ist_neg_boiler": self.ist_neg_boiler = json[key]
+                    case "ist_pos_boiler": self.ist_pos_boiler = json[key]
+                    case "temp_puffer": self.temp_puffer = json[key]
+                    case "set_puffer": self.set_puffer = json[key]
+                    case "ist_neg_puffer": self.ist_neg_puffer = json[key]
+                    case "ist_pos_puffer": self.ist_pos_puffer = json[key]
+                    case "set_san": self.set_san = json[key]
+                    case "temp_NTC1": self.temp_NTC1 = json[key]
+                    case "temp_NTC2": self.temp_NTC2 = json[key]
+                    case "temp_NTC3": self.temp_NTC3 = json[key]
+                    case "ing_term_amb1": self.ing_term_amb1 = json[key]
+                    case "ing_term_amb2": self.ing_term_amb2 = json[key]
+                    case "ing_term_amb3": self.ing_term_amb3 = json[key]
+                    case "ingr_ntc2": self.ingr_ntc2 = json[key]
+                    case "ingr_ntc3": self.ingr_ntc3 = json[key]
                     case _ :
                         temp_unknown_fields[key] = json[key]
                         _LOGGER.warning(f"Unknown state property '{key}' received from API endpoint. If this happens, please make an issue on the github repository")
