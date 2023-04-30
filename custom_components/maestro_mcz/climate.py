@@ -34,10 +34,23 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_has_entity_name = True
 
+    supported_power_sensor: models.MczConfigItem | None = None
+    supported_thermostat: models.MczConfigItem | None = None
+    supported_climate_function_mode: models.MczConfigItem | None = None
+    supported_pot: models.MczConfigItem | None = None
+    supported_fan: models.MczConfigItem | None = None
+    #
+    climate_function_mode_configuration: SensorConfiguration | None = None
+    power_configuration: SensorConfiguration | None = None
+    fan_configuration: SensorConfiguration | None = None
+    pot_configuration: SensorConfiguration | None = None
+    thermostat_configuration: SensorConfiguration | None = None
+
+    
     def __init__(self, coordinator:MczCoordinator, supported_power_sensor: models.PowerSettingMczConfigItem, matching_power_configuration: SensorConfiguration):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
-        
+
         #general 
         self._attr_name = None
         self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}"

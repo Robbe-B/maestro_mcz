@@ -35,6 +35,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class MczFanEntity(CoordinatorEntity, FanEntity):
     _attr_has_entity_name = True
 
+    #
+    fan_configuration: SensorConfiguration | None = None
+
     def __init__(self, coordinator, supported_fan: models.FanMczConfigItem, matching_fan_configuration: SensorConfiguration):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
