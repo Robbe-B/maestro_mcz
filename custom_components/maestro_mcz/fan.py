@@ -1,7 +1,5 @@
 """Platform for Fan integration."""
 import logging
-from typing import Optional
-from uuid import UUID
 
 from custom_components.maestro_mcz.maestro.responses.model import SensorConfiguration
 from custom_components.maestro_mcz.maestro.types.enums import TypeEnum

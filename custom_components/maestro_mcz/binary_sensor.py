@@ -1,8 +1,8 @@
-"""Platform for Sensor integration."""
+"""Platform for Binary Sensor integration."""
 from . import MczCoordinator, models
 
-from homeassistant.components.sensor import (
-    SensorEntity,
+from homeassistant.components.binary_sensor import (
+    BinarySensorEntity,
 )
 from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -11,36 +11,35 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
     stoveList = hass.data[DOMAIN][entry.entry_id]
     entities = []
     for stove in stoveList:
         stove:MczCoordinator = stove
-        supported_sensors = filter(lambda supported_sensor:any(supported_sensor.sensor_get_name == sensor_name for sensor_name in dir(stove.maestroapi.State)),iter(models.supported_sensors))
-        if(supported_sensors is not None):
-            for supported_sensor in supported_sensors:
-                if(supported_sensor is not None):
-                    entities.append(MczSensorEntity(stove, supported_sensor))
+        supported_binary_sensors = filter(lambda supported_binary_sensor:any(supported_binary_sensor.sensor_get_name == binary_sensor_name for binary_sensor_name in dir(stove.maestroapi.State)),iter(models.supported_binary_sensors))
+        if(supported_binary_sensors is not None):
+            for supported_binary_sensor in supported_binary_sensors:
+                if(supported_binary_sensor is not None):
+                    entities.append(MczBinarySensorEntity(stove, supported_binary_sensor))
 
     async_add_entities(entities)
 
 
-class MczSensorEntity(CoordinatorEntity, SensorEntity):
+class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, supported_sensor:models.SensorMczConfigItem):
+    def __init__(self, coordinator, supported_binary_sensor: models.BinarySensorMczConfigItem):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
-        self._attr_name = supported_sensor.user_friendly_name
-        self._attr_native_unit_of_measurement = supported_sensor.unit
-        self._attr_device_class = supported_sensor.device_class
-        self._attr_state_class = supported_sensor.state_class
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_sensor.sensor_get_name}"
-        self._attr_icon = supported_sensor.icon
-        self._prop = supported_sensor.sensor_get_name
-        self._enabled_default = supported_sensor.enabled_by_default
-        self._category = supported_sensor.category
+        self._attr_name = supported_binary_sensor.user_friendly_name
+        self._attr_device_class = supported_binary_sensor.device_class
+        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_binary_sensor.sensor_get_name}"
+        self._attr_icon = supported_binary_sensor.icon
+        self._prop = supported_binary_sensor.sensor_get_name
+        self._enabled_default = supported_binary_sensor.enabled_by_default
+        self._category = supported_binary_sensor.category
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -55,17 +54,17 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         )
 
     @property
-    def native_value(self):
+    def is_on(self):
         return getattr(self.coordinator._maestroapi.State, self._prop)
 
     @property
     def entity_registry_enabled_default(self) -> bool:
-        """Return if the entity should be enabled when first added to the entity registry."""
         return self._enabled_default
 
     @property
     def entity_category(self):
         return self._category
+
     @callback
     def _handle_coordinator_update(self) -> None:
         self.async_write_ha_state()
