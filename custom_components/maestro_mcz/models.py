@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.components.number import NumberDeviceClass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
 
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfTemperature
+from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfTemperature, UnitOfTime
 
 @dataclass
 class MczConfigItem:
@@ -104,6 +105,24 @@ class SwitchMczConfigItem(MczConfigItem):
         self.enabled_by_default = enabled_by_default
 
 @dataclass
+class NumberMczConfigItem(MczConfigItem):
+
+    device_class: NumberDeviceClass | None = None
+    mode: str = "auto" # 'box' or 'slider'
+
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, mode:str, icon:str, unit:str|None, category: EntityCategory | None, device_class: NumberDeviceClass | None, enabled_by_default: bool):
+        super().__init__(user_friendly_name)
+        self.sensor_get_name = sensor_get_name
+        self.mode = mode
+        self.icon = icon
+        self.unit = unit
+        self.sensor_set_name = sensor_set_name
+        self.sensor_set_config_name = sensor_set_config_name
+        self.category = category
+        self.device_class = device_class
+        self.enabled_by_default = enabled_by_default
+
+@dataclass
 class BinarySensorMczConfigItem(MczConfigItem):
     
     device_class: BinarySensorDeviceClass | None = None
@@ -159,6 +178,14 @@ supported_switches = [
     SwitchMczConfigItem("Start / Stop", "att_eco", "att_eco", "Start&Stop", "mdi:leaf", None, True),
     SwitchMczConfigItem("Timer", "crono_enabled", "att", "Crono", "mdi:timer", None, True),
 ]
+
+supported_numbers = [
+    NumberMczConfigItem("Start / Stop - Delay in Ignition", "rit_usc_standby", "rit_usc_standby", "Start&Stop", "auto", "mdi:fire", UnitOfTime.SECONDS ,EntityCategory.CONFIG, None, True),
+    NumberMczConfigItem("Start / Stop - Delay in Shutdown", "rit_ing_standby", "rit_ing_standby", "Start&Stop", "auto", "mdi:fire-off", UnitOfTime.SECONDS ,EntityCategory.CONFIG, None, True),
+    NumberMczConfigItem("Start / Stop - Negative Hysteresis", "ist_eco_neg_amb", "ist_eco_neg_amb", "Start&Stop", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
+    NumberMczConfigItem("Start / Stop - Positive Hysteresis", "ist_eco_pos_amb", "ist_eco_pos_amb", "Start&Stop", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
+]
+
 
 supported_binary_sensors = [
     BinarySensorMczConfigItem("Alarm","is_in_error","mdi:alert", EntityCategory.DIAGNOSTIC, BinarySensorDeviceClass.PROBLEM, True),
