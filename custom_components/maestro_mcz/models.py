@@ -157,6 +157,7 @@ supported_fans = [
 
 supported_switches = [
     SwitchMczConfigItem("Start / Stop", "att_eco", "att_eco", "Start&Stop", "mdi:leaf", None, True),
+    SwitchMczConfigItem("Timer", "crono_enabled", "att", "Crono", "mdi:timer", None, True),
 ]
 
 supported_binary_sensors = [
