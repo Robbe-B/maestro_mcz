@@ -92,14 +92,14 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     async def async_turn_on(self) -> None:
         """Turn on the fan."""
-        if(self.fan_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[-1])
+        if(self.fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
+            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(self._presets[-1]))
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
-        """Turn the fan off."""
-        if(self.fan_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[0])
+        """Turn off the fan."""
+        if(self.fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
+            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(self._presets[0]))
             await self.coordinator.async_request_refresh()
 
     @callback
