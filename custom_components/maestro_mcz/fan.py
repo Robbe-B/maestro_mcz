@@ -36,7 +36,8 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
     _attr_has_entity_name = True
 
     #
-    fan_configuration: SensorConfiguration | None = None
+    _fan_configuration: SensorConfiguration | None = None
+    _presets: list | None = None
 
     def __init__(self, coordinator, supported_fan: models.FanMczConfigItem, matching_fan_configuration: SensorConfiguration):
         super().__init__(coordinator)
@@ -47,7 +48,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         self._prop = supported_fan.sensor_get_name
         self._enabled_default = supported_fan.enabled_by_default
         self._category = supported_fan.category
-        self.fan_configuration = matching_fan_configuration
+        self._fan_configuration = matching_fan_configuration
         if(matching_fan_configuration.configuration.type == TypeEnum.INT.value):
             self._presets = self._attr_preset_modes = list(map(str,range(int(matching_fan_configuration.configuration.min), int(matching_fan_configuration.configuration.max) + 1 , 1)))
             self._attr_supported_features = (FanEntityFeature.PRESET_MODE)
@@ -66,7 +67,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     @property
     def is_on(self) -> bool:
-        if(self.fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
+        if(self._fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
             return self.preset_mode != self._presets[0]
         else:
             return False
@@ -86,20 +87,20 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode of the fan."""
-        if(self.fan_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, int(preset_mode))
+        if(self._fan_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self._fan_configuration.configuration.sensor_id, self._fan_configuration.configuration_id, int(preset_mode))
             await self.coordinator.async_request_refresh()
 
     async def async_turn_on(self) -> None:
         """Turn on the fan."""
-        if(self.fan_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[-1])
+        if(self._fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
+            await self.coordinator._maestroapi.ActivateProgram(self._fan_configuration.configuration.sensor_id, self._fan_configuration.configuration_id, int(self._presets[-1]))
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
-        """Turn the fan off."""
-        if(self.fan_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self.fan_configuration.configuration.sensor_id, self.fan_configuration.configuration_id, self._presets[0])
+        """Turn off the fan."""
+        if(self._fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
+            await self.coordinator._maestroapi.ActivateProgram(self._fan_configuration.configuration.sensor_id, self._fan_configuration.configuration_id, int(self._presets[0]))
             await self.coordinator.async_request_refresh()
 
     @callback

@@ -32,6 +32,9 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
 
     _attr_has_entity_name = True
 
+    #
+    _button_configuration: SensorConfiguration | None = None
+
     def __init__(self, coordinator, supported_button: models.ButtonMczConfigItem, matching_button_configuration: SensorConfiguration):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
@@ -41,7 +44,7 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         self._prop = supported_button.sensor_set_name
         self._enabled_default = supported_button.enabled_by_default
         self._category = supported_button.category
-        self.button_configuration = matching_button_configuration
+        self._button_configuration = matching_button_configuration
         #if(matching_button_configuration.configuration.type == TypeEnum.BOOLEAN.value):
 
     @property
@@ -58,8 +61,9 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Button pressed action execute."""
-        await self.coordinator._maestroapi.ActivateProgram(self.button_configuration.configuration.sensor_id, self.button_configuration.configuration_id, True)
-        await self.coordinator.async_request_refresh()
+        if(self._button_configuration is not None):
+            await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, True)
+            await self.coordinator.async_request_refresh()
 
     @property
     def entity_registry_enabled_default(self) -> bool:
