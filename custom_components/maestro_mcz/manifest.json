@@ -1,16 +1,16 @@
 {
     "domain": "maestro_mcz",
     "name": "Maestro MCZ",
-    "integration_type": "hub",
-    "config_flow": true,
-    "documentation": "https://github.com/Crisicus/maestro_mcz",
-    "issue_tracker": "https://github.com/Crisicus/maestro_mcz/issues",
-    "requirements": [],
-    "dependencies": [],
     "codeowners": [
       "@crisicus",
       "@Robbe-B"  
     ],
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/Crisicus/maestro_mcz",
+    "integration_type": "hub",
     "iot_class": "cloud_polling",
-    "version": "0.3.2-beta"
+    "issue_tracker": "https://github.com/Crisicus/maestro_mcz/issues",
+    "requirements": [],
+    "version": "0.3.3-beta"
 }
