@@ -139,14 +139,16 @@ class BinarySensorMczConfigItem(MczConfigItem):
 class SensorMczConfigItem(MczConfigItem):
     
     unit: str | None = None
+    display_precision: int | None = None
     device_class: SensorDeviceClass | None = None
     state_class: SensorStateClass | None = None
 
-    def __init__(self, user_friendly_name:str, sensor_get_name:str, icon:str, unit:str|None, category: EntityCategory | None, device_class: SensorDeviceClass | None, state_class: SensorStateClass | None, enabled_by_default: bool):
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, icon:str, unit:str|None, display_precision:int|None ,category: EntityCategory | None, device_class: SensorDeviceClass | None, state_class: SensorStateClass | None, enabled_by_default: bool):
         super().__init__(user_friendly_name)
         self.sensor_get_name = sensor_get_name
         self.icon = icon
         self.unit = unit
+        self.display_precision = display_precision
         self.category = category
         self.device_class = device_class
         self.state_class = state_class
@@ -198,11 +200,12 @@ supported_buttons = [
 ]
 
 supported_sensors = [
-    SensorMczConfigItem("Current State","state","mdi:power", None, EntityCategory.DIAGNOSTIC, None, None, True),
-    SensorMczConfigItem("Temperature","temp_amb_install","mdi:thermometer", UnitOfTemperature.CELSIUS, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
-    SensorMczConfigItem("Current Mode","mode","mdi:calendar-multiselect", None, EntityCategory.DIAGNOSTIC, None, None, True),
-    SensorMczConfigItem("Exhaust Temperature","temp_fumi","mdi:thermometer", UnitOfTemperature.CELSIUS, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
-    SensorMczConfigItem("Board Temperature","temp_scheda","mdi:thermometer", UnitOfTemperature.CELSIUS, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
-    SensorMczConfigItem("Exhaust Fan Speed","vel_real_ventola_fumi","mdi:fan-chevron-up", REVOLUTIONS_PER_MINUTE, EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
-    SensorMczConfigItem("Transport Screw Speed","vel_real_coclea","mdi:screw-lag", REVOLUTIONS_PER_MINUTE, EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Current State","state","mdi:power", None, None, EntityCategory.DIAGNOSTIC, None, None, True),
+    SensorMczConfigItem("Temperature","temp_amb_install","mdi:thermometer", UnitOfTemperature.CELSIUS, None, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Current Mode","mode","mdi:calendar-multiselect", None, None, EntityCategory.DIAGNOSTIC, None, None, True),
+    SensorMczConfigItem("Exhaust Temperature","temp_fumi","mdi:thermometer", UnitOfTemperature.CELSIUS, None, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Board Temperature","temp_scheda","mdi:thermometer", UnitOfTemperature.CELSIUS, None, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Exhaust Fan Speed","vel_real_ventola_fumi","mdi:fan-chevron-up", REVOLUTIONS_PER_MINUTE, None, EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Transport Screw Speed","vel_real_coclea","mdi:screw-lag", REVOLUTIONS_PER_MINUTE, None, EntityCategory.DIAGNOSTIC, None, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Next Maintenance","ore_prox_manut","mdi:wrench-clock", UnitOfTime.HOURS, 0, EntityCategory.DIAGNOSTIC, None , SensorStateClass.MEASUREMENT, True),  #SensorDeviceClass.DURATION
 ]

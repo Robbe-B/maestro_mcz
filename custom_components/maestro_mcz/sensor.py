@@ -16,7 +16,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = []
     for stove in stoveList:
         stove:MczCoordinator = stove
-        supported_sensors = filter(lambda supported_sensor:any(supported_sensor.sensor_get_name == sensor_name for sensor_name in dir(stove.maestroapi.State)),iter(models.supported_sensors))
+        supported_sensors = filter(lambda supported_sensor:(any(supported_sensor.sensor_get_name == sensor_name_state for sensor_name_state in dir(stove.maestroapi.State)) or any(supported_sensor.sensor_get_name == sensor_name_status for sensor_name_status in dir(stove.maestroapi.Status))),iter(models.supported_sensors))
         if(supported_sensors is not None):
             for supported_sensor in supported_sensors:
                 if(supported_sensor is not None):
@@ -34,6 +34,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_sensor.user_friendly_name
         self._attr_native_unit_of_measurement = supported_sensor.unit
+        self._attr_suggested_display_precision = supported_sensor.display_precision
         self._attr_device_class = supported_sensor.device_class
         self._attr_state_class = supported_sensor.state_class
         self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_sensor.sensor_get_name}"
@@ -56,7 +57,12 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return getattr(self.coordinator._maestroapi.State, self._prop)
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            return getattr(self.coordinator._maestroapi.State, self._prop)
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            return getattr(self.coordinator._maestroapi.Status, self._prop)
+        else:
+            return None
 
     @property
     def entity_registry_enabled_default(self) -> bool:
