@@ -12,5 +12,5 @@
     "iot_class": "cloud_polling",
     "issue_tracker": "https://github.com/Crisicus/maestro_mcz/issues",
     "requirements": [],
-    "version": "0.3.3-beta"
+    "version": "0.3.4-beta"
 }
