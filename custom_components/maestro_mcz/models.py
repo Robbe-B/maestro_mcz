@@ -161,7 +161,9 @@ supported_climate_function_modes = [
 ]
 
 supported_thermostats = [
-    ThermostatMczConfigItem("Temperature", "set_amb1", "set_amb1", "Set_amb_temp", True),
+    ThermostatMczConfigItem("Ambient Temperature", "set_amb1", "set_amb1", "Set_amb_temp", True),
+    ThermostatMczConfigItem("Ambient Temperature 2", "set_amb2", "set_amb2", "Set_amb_temp", True),
+    ThermostatMczConfigItem("Ambient Temperature 3", "set_amb3", "set_amb3", "Set_amb_temp", True),
 ]
 
 supported_pots = [
