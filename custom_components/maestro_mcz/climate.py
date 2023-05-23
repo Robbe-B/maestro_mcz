@@ -140,7 +140,6 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         else:
             return None
 
-
     def set_power_configuration(self, matching_power_configuration: SensorConfiguration):
         self._power_configuration = matching_power_configuration
         if(matching_power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
@@ -160,11 +159,11 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             self._attr_preset_modes = []
             self._attr_preset_modes_mappings = matching_climate_function_mode_configuration.configuration.mappings
             for key in matching_climate_function_mode_configuration.configuration.variants:
-                if key in self._supported_climate_function_mode.mappings.keys():
-                    self._attr_preset_modes.append(self._supported_climate_function_mode.mappings[key])
+                if key in self._supported_climate_function_mode.api_mappings_key_rename.keys():
+                    self._attr_preset_modes.append(self._supported_climate_function_mode.api_mappings_key_rename[key])
                     #Add the internal mapped key (from the config) in the public mappings (api mappings), with same value but mapped key
                     if(key in self._attr_preset_modes_mappings):
-                        self._attr_preset_modes_mappings[self._supported_climate_function_mode.mappings[key]] = self._attr_preset_modes_mappings[key]
+                        self._attr_preset_modes_mappings[self._supported_climate_function_mode.api_mappings_key_rename[key]] = self._attr_preset_modes_mappings[key]
                 else:
                     self._attr_preset_modes.append(key)
             self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE

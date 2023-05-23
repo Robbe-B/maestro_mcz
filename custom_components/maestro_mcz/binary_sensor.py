@@ -55,7 +55,12 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self):
-        return getattr(self.coordinator._maestroapi.State, self._prop)
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            return getattr(self.coordinator._maestroapi.State, self._prop)
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            return getattr(self.coordinator._maestroapi.Status, self._prop)
+        else:
+            return None
 
     @property
     def entity_registry_enabled_default(self) -> bool:

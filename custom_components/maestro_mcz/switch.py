@@ -60,7 +60,12 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_on(self):
-        return getattr(self.coordinator._maestroapi.State, self._prop)
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            return getattr(self.coordinator._maestroapi.State, self._prop)
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            return getattr(self.coordinator._maestroapi.Status, self._prop)
+        else:
+            return None
 
     async def async_turn_on(self, **kwargs):
         """Set the switch on."""

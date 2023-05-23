@@ -37,16 +37,16 @@ class PowerSettingMczConfigItem(MczConfigItem):
 
 @dataclass
 class ClimateFunctionModeMczConfigItem(MczConfigItem):
-    mappings: dict[str,str] | None = None
+    api_mappings_key_rename: dict[str,str] | None = None
 
-    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool, mappings: dict[str,str]):
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool, api_mappings_key_rename: dict[str,str] | None):
         super().__init__(user_friendly_name)
         self.sensor_get_name = sensor_get_name
         self.icon = "mdi:thermostat-cog"
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.enabled_by_default = enabled_by_default
-        self.mappings = mappings
+        self.api_mappings_key_rename = api_mappings_key_rename
 
 @dataclass
 class ThermostatMczConfigItem(MczConfigItem):
@@ -123,6 +123,21 @@ class NumberMczConfigItem(MczConfigItem):
         self.enabled_by_default = enabled_by_default
 
 @dataclass
+class SelectMczConfigItem(MczConfigItem):
+    value_mappings: dict[str,str] | None = None
+    map_back_before_sending_to_api: bool | None = None #Still needs implementation when needed
+
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, icon:str, category: EntityCategory | None, enabled_by_default: bool, value_mappings: dict[str,str] | None):
+        super().__init__(user_friendly_name)
+        self.sensor_get_name = sensor_get_name
+        self.icon = icon
+        self.category = category
+        self.sensor_set_name = sensor_set_name
+        self.sensor_set_config_name = sensor_set_config_name
+        self.enabled_by_default = enabled_by_default
+        self.value_mappings = value_mappings
+
+@dataclass
 class BinarySensorMczConfigItem(MczConfigItem):
     
     device_class: BinarySensorDeviceClass | None = None
@@ -190,6 +205,9 @@ supported_numbers = [
     NumberMczConfigItem("Start / Stop - Positive Hysteresis", "ist_eco_pos_amb", "ist_eco_pos_amb", "Start&Stop", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
 ]
 
+supported_selectors = [
+    SelectMczConfigItem("Tones", "toni_buzz", "toni_buzz", "Toni", "mdi:volume-high", EntityCategory.DIAGNOSTIC, True, {"0":"Silent", "1":"Normal", "2":"High"})
+]
 
 supported_binary_sensors = [
     BinarySensorMczConfigItem("Alarm","is_in_error","mdi:alert", EntityCategory.DIAGNOSTIC, BinarySensorDeviceClass.PROBLEM, True),

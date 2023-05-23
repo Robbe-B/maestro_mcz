@@ -74,7 +74,12 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     @property
     def preset_mode(self) -> str:
-        return str(getattr(self.coordinator._maestroapi.Status, self._prop))
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            return str(getattr(self.coordinator._maestroapi.State, self._prop))
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            return str(getattr(self.coordinator._maestroapi.Status, self._prop))
+        else:
+            return None
 
     @property
     def entity_registry_enabled_default(self) -> bool:
