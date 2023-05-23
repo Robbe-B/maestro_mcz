@@ -90,7 +90,7 @@ class MaestroController:
         if self.Connected == False:
             await self.Login()
         res = await self.MakeRequest(
-            "GET", "https://s.maestro.mcz.it/hlapi/v1.0/Nav/Auth/FirstVisibleObjects"
+            "POST", "https://s.maestro.mcz.it/hlapi/v1.0/Nav/FirstVisibleObjectsPaginated", {}, {}
         )
 
         for stove in res:
@@ -104,7 +104,7 @@ class MaestroStove:
         self._stove = stove
         self._controller: MaestroController = controller
         self._id = stove["Node"]["Id"]
-        self._name = stove["Node"]["SensorSetName"]
+        self._name = stove["Node"]["Name"]
         self._modelid = stove["Node"]["ModelId"]
         self._sensorsettypeid = stove["Node"]["SensorSetTypeId"]
         self._uniquecode = stove["Node"]["UniqueCode"]
