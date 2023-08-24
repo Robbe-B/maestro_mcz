@@ -206,7 +206,7 @@ supported_numbers = [
 ]
 
 supported_selectors = [
-    SelectMczConfigItem("Tones", "toni_buzz", "toni_buzz", "Toni", "mdi:volume-high", EntityCategory.DIAGNOSTIC, True, {"0":"Silent", "1":"Normal", "2":"High"})
+    SelectMczConfigItem("Tones", "toni_buzz", "toni_buzz", "Toni", "mdi:volume-high", EntityCategory.CONFIG, True, {"0":"Silent", "1":"Normal", "2":"High"})
 ]
 
 supported_binary_sensors = [
