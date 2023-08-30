@@ -199,10 +199,14 @@ supported_switches = [
 ]
 
 supported_numbers = [
+    #start/stop
     NumberMczConfigItem("Start / Stop - Delay in Ignition", "rit_usc_standby", "rit_usc_standby", "Start&Stop", "auto", "mdi:fire", UnitOfTime.SECONDS ,EntityCategory.CONFIG, None, True),
     NumberMczConfigItem("Start / Stop - Delay in Shutdown", "rit_ing_standby", "rit_ing_standby", "Start&Stop", "auto", "mdi:fire-off", UnitOfTime.SECONDS ,EntityCategory.CONFIG, None, True),
     NumberMczConfigItem("Start / Stop - Negative Hysteresis", "ist_eco_neg_amb", "ist_eco_neg_amb", "Start&Stop", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
     NumberMczConfigItem("Start / Stop - Positive Hysteresis", "ist_eco_pos_amb", "ist_eco_pos_amb", "Start&Stop", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
+    #ambient
+    NumberMczConfigItem("Ambient - Negative Hysteresis", "ist_neg_amb", "ist_neg_amb", "Ambiente", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
+    NumberMczConfigItem("Ambient - Positive Hysteresis", "ist_pos_amb", "ist_pos_amb", "Ambiente", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
 ]
 
 supported_selectors = [
@@ -216,6 +220,7 @@ supported_binary_sensors = [
 supported_buttons = [
     ButtonMczConfigItem("Alarm Reset","com_reset_allarm","Reset Allarme","mdi:auto-fix", EntityCategory.DIAGNOSTIC, True),
 ]
+
 
 supported_sensors = [
     SensorMczConfigItem("Current State","state","mdi:power", None, None, EntityCategory.DIAGNOSTIC, None, None, True),
