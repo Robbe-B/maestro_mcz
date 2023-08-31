@@ -84,14 +84,14 @@ class MczCoordinator(DataUpdateCoordinator):
         return self._maestroapi
     
     def get_model_configuration_by_model_configuration_name(self, model_configuration_name:str) -> ModelConfiguration | None:
-        return next((x for x in self._maestroapi.Model.model_configurations if x.configuration_name == model_configuration_name), None)
+        return next((x for x in self._maestroapi.Model.model_configurations if x.configuration_name.lower() == model_configuration_name.lower()), None)
     
     def get_sensor_configuration_by_model_configuration_name_and_sensor_name(self, model_configuration_name:str, sensor_name:str) -> SensorConfiguration | None:
         model_configuration = self.get_model_configuration_by_model_configuration_name(model_configuration_name)
         if(model_configuration is None):
             return None
         else:
-            sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_name == sensor_name), None)
+            sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_name.lower() == sensor_name.lower()), None)
             if(sensor_configuration is not None):
                 return SensorConfiguration(sensor_configuration, model_configuration.configuration_id)
             
