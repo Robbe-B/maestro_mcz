@@ -1,113 +1,27 @@
-import json
-from uuid import UUID
-import aiohttp
 import asyncio
-import async_timeout
+
+from .controller.controller_interface import MaestroControllerInterface
 
 from .responses.model import Model
 from .responses.status import Status
 from .responses.state import State
 
 from .http.request import RequestBuilder
-from .const import LOGIN_URL
-
-
-class MaestroController:
-    def __init__(self, username, password):
-        self._username = username
-        self._password = password
-        self._connected = False
-        self._id = None
-        self._token = None
-        self._stoves = []
-
-    @property
-    def Username(self) -> str:
-        return self._username
-
-    @property
-    def Password(self) -> str:
-        return self._password
-
-    @property
-    def Token(self) -> str:
-        return self._token
-
-    @property
-    def Connected(self) -> bool:
-        return self._connected
-
-    @property
-    def Stoves(self):
-        return self._stoves
-
-    async def MakeRequest(self, method, url, headers={}, body=None):
-        async with async_timeout.timeout(15):
-            headers["auth-token"] = self._token
-
-            try:
-                async with aiohttp.ClientSession() as session:
-                    if method == "GET":
-                        async with session.get(url, headers=headers) as resp:
-                            response = await resp.json()
-                    elif method == "POST":
-                        headers["content-type"] = "application/json"
-                        jbody = json.dumps(body, ensure_ascii=False)
-                        async with session.post(url, headers=headers, data=jbody) as resp:
-                            response = await resp.json()
-                    if resp.status == 200:
-                        return response
-                    else:
-                        await self.Login()
-                        return await self.MakeRequest(
-                            method=method, url=url, headers=headers, body=body
-                        )
-            except:
-                print("Error making request. Attempting to relogin")
-                await self.Login()
-                return await self.MakeRequest(
-                    method=method, url=url, headers=headers, body=body
-                )
-
-    async def Login(self):
-        LOGIN_BODY = {"username": self.Username, "password": self.Password}
-
-        headers = {}
-        headers["content-type"] = "application/json"
-        headers["tenantid"] = "7c201fd8-42bd-4333-914d-0f5822070757"
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                LOGIN_URL, json=LOGIN_BODY, headers=headers
-            ) as resp:
-                response = await resp.json()
-                self._token = response["Token"]
-                self._connected = True
-
-        await self.StoveInfo()
-
-    async def StoveInfo(self):
-        if self.Connected == False:
-            await self.Login()
-        res = await self.MakeRequest(
-            "POST", "https://s.maestro.mcz.it/hlapi/v1.0/Nav/FirstVisibleObjectsPaginated", {}, {}
-        )
-
-        for stove in res:
-            maesto_stove = MaestroStove(self, stove)
-            await maesto_stove.AsyncInit()
-            self._stoves.append(maesto_stove)
 
 
 class MaestroStove:
-    def __init__(self, controller: MaestroController, stove):
+    def __init__(self, controller: MaestroControllerInterface, stove):
         self._stove = stove
-        self._controller: MaestroController = controller
+        self._controller: MaestroControllerInterface = controller
         self._id = stove["Node"]["Id"]
         self._name = stove["Node"]["Name"]
         self._modelid = stove["Node"]["ModelId"]
         self._sensorsettypeid = stove["Node"]["SensorSetTypeId"]
         self._uniquecode = stove["Node"]["UniqueCode"]
+        self._usemockeddata = False
+        self._model = None
+        self._state = None
+        self._status = None
 
     async def AsyncInit(self):
         self._model = await self.StoveModel()
@@ -170,10 +84,17 @@ class MaestroStove:
         )
 
     async def Refresh(self):
-        await self.Ping()
-        await asyncio.sleep(5)
-        self._state = await self.StoveState()
-        self._status = await self.StoveStatus()
+        if(not self._usemockeddata): #make sure not to execute this code with a mocked controller
+            await self.Ping()
+            await asyncio.sleep(5)
+            self._state = await self.StoveState()
+            self._status = await self.StoveStatus()
+    
+    async def SetMockedData(self, model: Model, state: State, status: Status): # for mocked controller only
+        self._model = model
+        self._state = state
+        self._status = status
+        self._usemockeddata = True
 
     async def ActivateProgram(self, sensor_id: str, configuration_id: str, value: object):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"

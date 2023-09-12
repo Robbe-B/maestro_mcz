@@ -2,10 +2,11 @@
 from __future__ import annotations
 from datetime import timedelta
 import logging
+import os
 import async_timeout
-from custom_components.maestro_mcz.config_flow import CONF_POLLING_INTERVAL
-from custom_components.maestro_mcz.maestro.responses.model import Configuration, ModelConfiguration, SensorConfiguration
-from custom_components.maestro_mcz.models import MczConfigItem
+from .config_flow import CONF_POLLING_INTERVAL
+from .maestro.responses.model import Configuration, ModelConfiguration, SensorConfiguration
+from .models import MczConfigItem
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -18,7 +19,11 @@ from homeassistant.const import (
 )
 
 from .const import DOMAIN, DEFAULT_POLLING_INTERVAL
-from .maestro import MaestroController, MaestroStove
+from .maestro import MaestroStove
+from .maestro.controller.controller_interface import MaestroControllerInterface
+from .maestro.controller.maestro_controller import MaestroController
+from .maestro.controller.mocked_controller import MockedController
+
 
 PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.FAN, Platform.NUMBER, Platform.SWITCH, Platform.SELECT, Platform.BINARY_SENSOR, Platform.BUTTON]
 _LOGGER = logging.getLogger(__name__)
@@ -31,8 +36,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     pollling_interval = entry.options.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
 
-    maestroapi = MaestroController(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])
-    await maestroapi.Login()
+    mocked_files = has_mocked_files()
+
+    if mocked_files is None:
+        maestroapi: MaestroControllerInterface = MaestroController(
+            entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
+        )
+        await maestroapi.Login()
+    else:   
+        maestroapi: MaestroControllerInterface = MockedController(mocked_files)
+        await maestroapi.Login()
+
 
     stoveList = []
     for stove in maestroapi.Stoves:
@@ -60,6 +74,18 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     """Handle options update."""
     await hass.config_entries.async_reload(entry.entry_id)
 
+def has_mocked_files() -> list[str] | None:
+    try:
+        folder_path = "config/custom_components/maestro_mcz/mocked"
+        files_in_dir = os.listdir(folder_path)
+        if(files_in_dir is not None):
+            return [folder_path + "/" + file for file in files_in_dir]
+        else:
+            return None
+    except:
+        return None
+
+
 class MczCoordinator(DataUpdateCoordinator):
     """MCZ Coordinator."""
 
@@ -84,14 +110,14 @@ class MczCoordinator(DataUpdateCoordinator):
         return self._maestroapi
     
     def get_model_configuration_by_model_configuration_name(self, model_configuration_name:str) -> ModelConfiguration | None:
-        return next((x for x in self._maestroapi.Model.model_configurations if x.configuration_name.lower() == model_configuration_name.lower()), None)
+        return next((x for x in self._maestroapi.Model.model_configurations if x.configuration_name is not None and x.configuration_name.lower() == model_configuration_name.lower()), None)
     
     def get_sensor_configuration_by_model_configuration_name_and_sensor_name(self, model_configuration_name:str, sensor_name:str) -> SensorConfiguration | None:
         model_configuration = self.get_model_configuration_by_model_configuration_name(model_configuration_name)
         if(model_configuration is None):
             return None
         else:
-            sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_name.lower() == sensor_name.lower()), None)
+            sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_name is not None and x.sensor_name.lower() == sensor_name.lower()), None)
             if(sensor_configuration is not None):
                 return SensorConfiguration(sensor_configuration, model_configuration.configuration_id)
             

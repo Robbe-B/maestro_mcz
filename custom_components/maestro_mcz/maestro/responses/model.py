@@ -13,16 +13,20 @@ class Configuration:
     max: str | None = None
     mappings: dict[str, int] | None = None
 
-    def __init__(self, json) -> None:
-        self.sensor_name = json["SensorName"]
-        self.type = json["Type"]
-        self.visible = json["Visible"]
-        self.variants = json["Variants"]
-        self.sensor_id = json["SensorId"]
-        self.enabled = json["Enabled"]
-        self.min = json["Min"]
-        self.max = json["Max"]
-        self.mappings = json["Mappings"]
+    def __init__(self, json, from_mocked_response = False) -> None:
+        if(from_mocked_response):
+            for k, v in json.items():
+                setattr(self, k, v)
+        else:
+            self.sensor_name = json["SensorName"]
+            self.type = json["Type"]
+            self.visible = json["Visible"]
+            self.variants = json["Variants"]
+            self.sensor_id = json["SensorId"]
+            self.enabled = json["Enabled"]
+            self.min = json["Min"]
+            self.max = json["Max"]
+            self.mappings = json["Mappings"]
 
 @dataclass
 class ModelConfiguration:
@@ -32,12 +36,19 @@ class ModelConfiguration:
     configuration_id: str | None = None
     limitations: str | None = None
 
-    def __init__(self, json) -> None:
-        self.timed = json["Timed"]
-        self.configuration_name = json["ConfigurationName"]
-        self.configurations = [Configuration(configuration) for configuration in json["Configurations"]]
-        self.configuration_id = json["ConfigurationId"]
-        self.limitations = json["Limitations"]
+    def __init__(self, json, from_mocked_response = False) -> None:
+        if(from_mocked_response):
+            for k, v in json.items():
+                if(k == "configurations"):
+                    self.configurations = [Configuration(configuration, True) for configuration in v]
+                else:
+                    setattr(self, k, v)
+        else:
+            self.timed = json["Timed"]
+            self.configuration_name = json["ConfigurationName"]
+            self.configurations = [Configuration(configuration) for configuration in json["Configurations"]]
+            self.configuration_id = json["ConfigurationId"]
+            self.limitations = json["Limitations"]
 
 @dataclass
 class Model:
@@ -48,13 +59,21 @@ class Model:
     sensor_ids: list[str] | None = None
     properties: list[str] | None = None
 
-    def __init__(self, json) -> None:
-        self.model_configurations = [ModelConfiguration(model_configuration) for model_configuration in json["ModelConfigurations"]]
-        self.model_name = json["ModelName"]
-        self.model_id = json["ModelId"]
-        self.sensor_set_type_id = json["SensorSetTypeId"]
-        self.sensor_ids = json["SensorIds"]
-        self.properties = json["Properties"]
+    def __init__(self, json, from_mocked_response = False) -> None:
+        if(from_mocked_response):
+            for k, v in json.items():
+                if(k == "model_configurations"):
+                    self.model_configurations = [ModelConfiguration(model_configuration, True) for model_configuration in v]
+                else:
+                    setattr(self, k, v)
+        else:
+            self.model_configurations = [ModelConfiguration(model_configuration) for model_configuration in json["ModelConfigurations"]]
+            self.model_name = json["ModelName"]
+            self.model_id = json["ModelId"]
+            self.sensor_set_type_id = json["SensorSetTypeId"]
+            self.sensor_ids = json["SensorIds"]
+            self.properties = json["Properties"]
+
 
 @dataclass
 class SensorConfiguration:
