@@ -17,7 +17,8 @@ from homeassistant.const import (
 )
 
 from .const import DOMAIN, DEFAULT_POLLING_INTERVAL
-from .maestro import MaestroController
+from .maestro.controller.controller_interface import MaestroControllerInterface
+from .maestro.controller.maestro_controller import MaestroController
 
 _LOGGER = logging.getLogger(__name__)
 CONF_POLLING_INTERVAL = "polling_interval"
@@ -35,7 +36,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
-    controller = MaestroController(data[CONF_USERNAME], data[CONF_PASSWORD])
+    controller:MaestroControllerInterface = MaestroController(data[CONF_USERNAME], data[CONF_PASSWORD])
     await controller.Login()
     await controller.StoveInfo()
 
