@@ -189,8 +189,9 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         if(self._power_configuration is not None):
+            if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
                 await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, True)
-                await self.coordinator.async_request_refresh()
+            await self.coordinator.async_request_refresh()
 
     async def async_set_fan_mode(self, fan_mode):
         if(self._fan_configuration is not None):
