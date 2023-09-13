@@ -16,7 +16,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = []
     for stove in stoveList:
         stove:MczCoordinator = stove
-        supported_sensors = filter(lambda supported_sensor:(any(supported_sensor.sensor_get_name == sensor_name_state for sensor_name_state in dir(stove.maestroapi.State)) or any(supported_sensor.sensor_get_name == sensor_name_status for sensor_name_status in dir(stove.maestroapi.Status))),iter(models.supported_sensors))
+        supported_sensors = filter(lambda supported_sensor:(any((supported_sensor.sensor_get_name == sensor_name_state and getattr(stove.maestroapi.State, sensor_name_state) is not None) for sensor_name_state in dir(stove.maestroapi.State)) or any((supported_sensor.sensor_get_name == sensor_name_status and getattr(stove.maestroapi.Status, sensor_name_status) is not None) for sensor_name_status in dir(stove.maestroapi.Status))),iter(models.supported_sensors))
         if(supported_sensors is not None):
             for supported_sensor in supported_sensors:
                 if(supported_sensor is not None):

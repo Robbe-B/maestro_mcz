@@ -1,8 +1,8 @@
 """Platform for Climate integration."""
 import logging
 
-from custom_components.maestro_mcz import models
-from custom_components.maestro_mcz.maestro.responses.model import Configuration, SensorConfiguration
+from ..maestro_mcz import models
+from ..maestro_mcz.maestro.responses.model import SensorConfiguration
 
 from . import MczCoordinator
 

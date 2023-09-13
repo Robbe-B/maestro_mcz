@@ -1,6 +1,6 @@
 """Platform for Select integration."""
-from custom_components.maestro_mcz.maestro.responses.model import SensorConfiguration
-from custom_components.maestro_mcz.maestro.types.enums import TypeEnum
+from ..maestro_mcz.maestro.responses.model import SensorConfiguration
+from ..maestro_mcz.maestro.types.enums import TypeEnum
 from . import MczCoordinator, models
 
 from homeassistant.components.select import (
