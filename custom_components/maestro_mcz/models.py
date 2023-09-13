@@ -224,7 +224,8 @@ supported_buttons = [
 
 supported_sensors = [
     SensorMczConfigItem("Current State","state","mdi:power", None, None, EntityCategory.DIAGNOSTIC, None, None, True),
-    SensorMczConfigItem("Temperature","temp_amb_install","mdi:thermometer", UnitOfTemperature.CELSIUS, None, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Ambient Temperature","temp_amb_install","mdi:thermometer", UnitOfTemperature.CELSIUS, None, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
+    SensorMczConfigItem("Water Temperature","temp_caldaia","mdi:water-thermometer", UnitOfTemperature.CELSIUS, None, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
     SensorMczConfigItem("Current Mode","mode","mdi:calendar-multiselect", None, None, EntityCategory.DIAGNOSTIC, None, None, True),
     SensorMczConfigItem("Exhaust Temperature","temp_fumi","mdi:thermometer", UnitOfTemperature.CELSIUS, None, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
     SensorMczConfigItem("Board Temperature","temp_scheda","mdi:thermometer", UnitOfTemperature.CELSIUS, None, EntityCategory.DIAGNOSTIC, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
