@@ -10,7 +10,7 @@ This integration aims to use the same API as the app to enable control via Home 
 
 Currently it provides a Climate entity and a temperature sensor as an initial release.
 
-There are a couple of milestones set. Feel free to check them out at [Milestones](https://github.com/Crisicus/maestro_mcz/milestones)
+There are a couple of milestones set. Feel free to check them out at [Milestones](https://github.com/Robbe-B/maestro_mcz/milestones)
 
 ## Installation
 
@@ -20,7 +20,7 @@ There are a couple of milestones set. Feel free to check them out at [Milestones
 2. Go to HACS "Integrations >" section
 3. Click 3 dots in top right
 4. Click "Custom repositories"
-5. Add repository https://github.com/Crisicus/maestro_mcz with category `Integration`
+5. Add repository https://github.com/Robbe-B/maestro_mcz with category `Integration`
 6. In the lower right click "+ Explore & Download repositories"
 7. Search for "Maestro MCZ (cloud)" and add it
 8. In the Home Assistant (HA) UI go to "Configuration"
