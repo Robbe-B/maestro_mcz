@@ -66,23 +66,11 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             self._supported_thermostat = first_supported_thermostat[0]
             self.set_thermostat_configuration(first_supported_thermostat[1])
 
-        #set preset config
+        #set preset/mode config
         first_supported_climate_function_mode = coordinator.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(models.supported_climate_function_modes)
         if(first_supported_climate_function_mode is not None and first_supported_climate_function_mode[0] is not None and first_supported_climate_function_mode[1] is not None):
             self._supported_climate_function_mode = first_supported_climate_function_mode[0]
             self.set_climate_function_mode_configuration(first_supported_climate_function_mode[1])
-
-        #set pot config
-        first_supported_pot = coordinator.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(models.supported_pots)
-        if(first_supported_pot is not None and first_supported_pot[0] is not None and first_supported_pot[1] is not None):
-            self._supported_pot = first_supported_pot[0]
-            self.set_pot_configuration(first_supported_pot[1])
-
-        #set fan config
-        first_supported_fan = coordinator.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(models.supported_fans)
-        if(first_supported_fan is not None and first_supported_fan[0] is not None and first_supported_fan[1] is not None):
-            self._supported_fan = first_supported_fan[0]
-            self.set_fan_configuration(first_supported_fan[1])
                                
     @property
     def device_info(self) -> DeviceInfo:
@@ -107,20 +95,6 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                     return HVACMode.OFF
         else:
             return None
-        
-    @property
-    def fan_mode(self):
-        if(self._supported_fan is not None): 
-            return str(getattr(self.coordinator._maestroapi.Status, self._supported_fan.sensor_get_name))
-        else :
-            return None
-
-    @property
-    def swing_mode(self):
-        if(self._supported_pot is not None): 
-            return str(getattr(self.coordinator._maestroapi.Status, self._supported_pot.sensor_get_name))
-        else : 
-            return None
 
     @property
     def current_temperature(self): #ToDo in case there can be different => needs more investigation in the future
@@ -144,6 +118,11 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         self._power_configuration = matching_power_configuration
         if(matching_power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
             self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+        elif(matching_power_configuration.configuration.type == TypeEnum.INT.value):
+            self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+            #self._attr_hvac_modes_mappings = matching_power_configuration.configuration.mappings
+            #for key in matching_power_configuration.configuration.variants:
+            #        self._attr_preset_modes.append(key)
 
     def set_thermostat_configuration(self, matching_thermostat_configuration: SensorConfiguration):
         self._thermostat_configuration = matching_thermostat_configuration
@@ -168,18 +147,6 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                     self._attr_preset_modes.append(key)
             self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
 
-    def set_pot_configuration(self, matching_pot_configuration: SensorConfiguration):
-        self._pot_configuration = matching_pot_configuration
-        if(matching_pot_configuration.configuration.type == TypeEnum.INT.value):
-            self._attr_swing_modes = list(map(str,range(int(matching_pot_configuration.configuration.min), int(matching_pot_configuration.configuration.max) + 1 , 1)))
-            self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
-
-    def set_fan_configuration(self, matching_fan_configuration: SensorConfiguration):
-        self._fan_configuration = matching_fan_configuration
-        if(matching_fan_configuration.configuration.type == TypeEnum.INT.value):
-            self._attr_fan_modes = list(map(str,range(int(matching_fan_configuration.configuration.min), int(matching_fan_configuration.configuration.max) + 1 , 1)))
-            self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
-
     async def async_set_preset_mode(self, preset_mode):
         if(self._climate_function_mode_configuration is not None):
             if (preset_mode in self._attr_preset_modes_mappings.keys()):
@@ -189,19 +156,14 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         if(self._power_configuration is not None):
-            if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
-                await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, True)
-            await self.coordinator.async_request_refresh()
-
-    async def async_set_fan_mode(self, fan_mode):
-        if(self._fan_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self._fan_configuration.configuration.sensor_id, self._fan_configuration.configuration_id, int(fan_mode))
-            await self.coordinator.async_request_refresh()
-
-    async def async_set_swing_mode(self, swing_mode):
-        if(self._pot_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self._pot_configuration.configuration.sensor_id, self._pot_configuration.configuration_id,int(swing_mode))
-            await self.coordinator.async_request_refresh()
+            if(self._power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
+                if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
+                    await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, True)
+                await self.coordinator.async_request_refresh()
+            elif(self._power_configuration.configuration.type == TypeEnum.INT.value):
+                if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
+                    await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, True)
+                await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs):
         if(self._thermostat_configuration is not None):

@@ -18,6 +18,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = []
     for stove in stoveList:
         stove:MczCoordinator = stove
+
+        supported_pots = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(models.supported_pots)
+        if(supported_pots is not None):
+            for supported_pot in supported_pots:
+                if(supported_pot[0] is not None and supported_pot[1] is not None):
+                    entities.append(MczSelectEntity(stove, supported_pot[0], supported_pot[1]))
+        
         supported_selectors = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(models.supported_selectors)
         if(supported_selectors is not None):
             for supported_selector in supported_selectors:
@@ -87,6 +94,8 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
             if(current_value and self._selector_configuration is not None):
                 if (self._attr_options_mappings and current_value in self._attr_options_mappings.keys()):
                     return self._attr_options_mappings[current_value]
+                else:
+                    return current_value
                 
         return current_value
 
@@ -95,9 +104,12 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
         if(self._selector_configuration is not None):
             if (self._attr_options_mappings and option in self._attr_options_mappings.values()):
                 found_value = next((key for key, value in self._attr_options_mappings.items() if value == option),None)
-                if(found_value is not None):
-                    await self.coordinator._maestroapi.ActivateProgram(self._selector_configuration.configuration.sensor_id, self._selector_configuration.configuration_id, int(found_value))
-                    await self.coordinator.async_request_refresh()
+            else:
+                found_value = option;   
+
+            if(found_value is not None):
+                await self.coordinator._maestroapi.ActivateProgram(self._selector_configuration.configuration.sensor_id, self._selector_configuration.configuration_id, int(found_value))
+                await self.coordinator.async_request_refresh()
     
     @property
     def entity_registry_enabled_default(self) -> bool:

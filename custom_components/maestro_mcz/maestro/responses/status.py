@@ -91,7 +91,7 @@ class Status:
     blocking_event_id: str | None = None
     pren_acc: bool | None = None
 
-    #m1 only fields
+    #m+ only fields
     pwd_wifi: str | None = None
     mac_wifi: str | None = None
     vs_remoto: str | None = None
