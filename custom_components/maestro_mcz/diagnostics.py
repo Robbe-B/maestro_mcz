@@ -13,7 +13,7 @@ from .const import DOMAIN
 from . import MczCoordinator
 
 CONFIG_FIELDS_TO_REDACT = [CONF_USERNAME, CONF_PASSWORD]
-DATA_FIELDS_TO_REDACT = ["UniqueCode", "sm_sn"]
+DATA_FIELDS_TO_REDACT = ["UniqueCode", "sm_sn", "ssid_wifi", "pwd_wifi", "mac_wifi"]
 OPTION_FIELDS_TO_REDACT = []
 
 

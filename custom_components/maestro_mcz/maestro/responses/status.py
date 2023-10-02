@@ -91,6 +91,15 @@ class Status:
     blocking_event_id: str | None = None
     pren_acc: bool | None = None
 
+    #m1 only fields
+    pwd_wifi: str | None = None
+    mac_wifi: str | None = None
+    vs_remoto: str | None = None
+    vs_wifi_home: str | None = None
+    sm_vs_bootloader: str | None = None
+    vs_ambient: str | None = None
+    sondaWifi: int | None = None
+
     #hydro stove fields
     is_pump_active: bool | None = None
     power_caller: str | None = None
@@ -226,6 +235,15 @@ class Status:
                         case "SiteTimeZone": self.site_time_zone = json[key]
                         case "BlockingEventId": self.blocking_event_id = json[key]
                         case "pren_acc" : self.pren_acc = json[key]
+
+                        case "pwd_wifi": self.pwd_wifi = json[key]
+                        case "mac_wifi": self.mac_wifi = json[key]
+                        case "vs_remoto": self.vs_remoto = json[key]
+                        case "vs_wifi_home": self.vs_wifi_home = json[key]
+                        case "sm_vs_bootloader": self.sm_vs_bootloader = json[key]
+                        case "vs_ambient": self.vs_ambient = json[key]
+                        case "sondaWifi": self.sondaWifi = json[key]
+
                         case "IsPumpActive": self.is_pump_active = json[key]
                         case "power_caller": self.power_caller = json[key]
                         case "ing_term_amb2": self.ing_term_amb2 = json[key]
