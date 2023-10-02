@@ -16,6 +16,11 @@ class MczConfigItem:
     sensor_set_name: str | None = None #name used for setting data trough the API (resolved in configs first)
     sensor_set_config_name: str | None = None
 
+    #optional
+    sensor_set_id: str | None = None #id used for setting data trough the API (resolved in configs first)
+    sensor_set_config_id: str | None = None
+
+
     user_friendly_name: str | None = None
     icon: str | None = None
     enabled_by_default: bool = True
@@ -55,17 +60,6 @@ class ThermostatMczConfigItem(MczConfigItem):
         super().__init__(user_friendly_name)
         self.sensor_get_name = sensor_get_name
         self.icon = "mdi:thermostat"
-        self.sensor_set_name = sensor_set_name
-        self.sensor_set_config_name = sensor_set_config_name
-        self.enabled_by_default = enabled_by_default
-
-@dataclass
-class PotMczConfigItem(MczConfigItem):
-
-    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool):
-        super().__init__(user_friendly_name)
-        self.sensor_get_name = sensor_get_name
-        self.icon = "mdi:pot"
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.enabled_by_default = enabled_by_default
@@ -138,6 +132,12 @@ class SelectMczConfigItem(MczConfigItem):
         self.value_mappings = value_mappings
 
 @dataclass
+class PotMczConfigItem(SelectMczConfigItem):
+
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool):
+        super().__init__(user_friendly_name, sensor_get_name, sensor_set_name, sensor_set_config_name, "mdi:fire", None, enabled_by_default, None)
+
+@dataclass
 class BinarySensorMczConfigItem(MczConfigItem):
     
     device_class: BinarySensorDeviceClass | None = None
@@ -171,6 +171,7 @@ class SensorMczConfigItem(MczConfigItem):
 
 supported_power_settings = [
     PowerSettingMczConfigItem("Power", "fase_op", "com_on_off", "Spegnimento", True),
+    PowerSettingMczConfigItem("Power", "fase_op", "m1_stato_stufa", "Spegnimento", True),
 ]
 
 supported_climate_function_modes = [
@@ -184,7 +185,7 @@ supported_thermostats = [
 ]
 
 supported_pots = [
-    PotMczConfigItem("Pot", "set_pot_man", "set_pot_man", "Set_pot", True)
+    PotMczConfigItem("Manual Power", "set_pot_man", "set_pot_man", "Set_pot", True)
 ]
 
 supported_fans = [

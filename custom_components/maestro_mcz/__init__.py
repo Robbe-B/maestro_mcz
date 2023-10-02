@@ -109,9 +109,21 @@ class MczCoordinator(DataUpdateCoordinator):
     def maestroapi(self) -> MaestroStove:
         return self._maestroapi
     
+    def get_model_configuration_by_model_configuration_id(self, model_configuration_id:str) -> ModelConfiguration | None:
+        return next((x for x in self._maestroapi.Model.model_configurations if x.configuration_id is not None and x.configuration_id.lower() == model_configuration_id.lower()), None)
+    
     def get_model_configuration_by_model_configuration_name(self, model_configuration_name:str) -> ModelConfiguration | None:
         return next((x for x in self._maestroapi.Model.model_configurations if x.configuration_name is not None and x.configuration_name.lower() == model_configuration_name.lower()), None)
     
+    def get_sensor_configuration_by_model_configuration_id_and_sensor_id(self, model_configuration_id:str, sensor_id:str) -> SensorConfiguration | None:
+        model_configuration = self.get_model_configuration_by_model_configuration_id(model_configuration_id)
+        if(model_configuration is None):
+            return None
+        else:
+            sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_id is not None and x.sensor_id.lower() == sensor_id.lower()), None)
+            if(sensor_configuration is not None):
+                return SensorConfiguration(sensor_configuration, model_configuration.configuration_id)
+            
     def get_sensor_configuration_by_model_configuration_name_and_sensor_name(self, model_configuration_name:str, sensor_name:str) -> SensorConfiguration | None:
         model_configuration = self.get_model_configuration_by_model_configuration_name(model_configuration_name)
         if(model_configuration is None):
@@ -120,14 +132,32 @@ class MczCoordinator(DataUpdateCoordinator):
             sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_name is not None and x.sensor_name.lower() == sensor_name.lower()), None)
             if(sensor_configuration is not None):
                 return SensorConfiguration(sensor_configuration, model_configuration.configuration_id)
+
+    def get_first_matching_sensor_configuration_by_model_configuration_id_and_sensor_id(self, mcz_config_items_list_to_match: list[MczConfigItem]) -> tuple[MczConfigItem,SensorConfiguration] | None:
+        for x in mcz_config_items_list_to_match:
+            matching_configuration = self.get_sensor_configuration_by_model_configuration_id_and_sensor_id(x.sensor_set_config_id, x.sensor_set_id)
+            if(matching_configuration is not None):
+                return (x, matching_configuration)
+        return None
             
     def get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(self, mcz_config_items_list_to_match: list[MczConfigItem]) -> tuple[MczConfigItem,SensorConfiguration] | None:
         for x in mcz_config_items_list_to_match:
-             matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(x.sensor_set_config_name, x.sensor_set_name)
-             if(matching_configuration is not None):
+            matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(x.sensor_set_config_name, x.sensor_set_name)
+            if(matching_configuration is not None):
                 return (x, matching_configuration)
         return None
     
+    def get_all_matching_sensor_configurations_by_model_configuration_id_and_sensor_id(self, mcz_config_items_list_to_match: list[MczConfigItem]) -> list(tuple[MczConfigItem,SensorConfiguration]) | None:
+        temp_list = []
+        for x in mcz_config_items_list_to_match:
+             matching_configuration = self.get_sensor_configuration_by_model_configuration_id_and_sensor_id(x.sensor_set_config_id, x.sensor_set_id)
+             if(matching_configuration is not None):
+                temp_list.append((x, matching_configuration))
+        if temp_list:
+            return temp_list
+        else:
+            return None
+        
     def get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(self, mcz_config_items_list_to_match: list[MczConfigItem]) -> list(tuple[MczConfigItem,SensorConfiguration]) | None:
         temp_list = []
         for x in mcz_config_items_list_to_match:
