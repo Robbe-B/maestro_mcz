@@ -37,13 +37,9 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _supported_power_sensor: models.MczConfigItem | None = None
     _supported_thermostat: models.MczConfigItem | None = None
     _supported_climate_function_mode: models.MczConfigItem | None = None
-    _supported_pot: models.MczConfigItem | None = None
-    _supported_fan: models.MczConfigItem | None = None
     #
     _climate_function_mode_configuration: SensorConfiguration | None = None
     _power_configuration: SensorConfiguration | None = None
-    _fan_configuration: SensorConfiguration | None = None
-    _pot_configuration: SensorConfiguration | None = None
     _thermostat_configuration: SensorConfiguration | None = None
 
     
