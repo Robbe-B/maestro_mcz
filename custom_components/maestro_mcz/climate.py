@@ -37,13 +37,9 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _supported_power_sensor: models.MczConfigItem | None = None
     _supported_thermostat: models.MczConfigItem | None = None
     _supported_climate_function_mode: models.MczConfigItem | None = None
-    _supported_pot: models.MczConfigItem | None = None
-    _supported_fan: models.MczConfigItem | None = None
     #
     _climate_function_mode_configuration: SensorConfiguration | None = None
     _power_configuration: SensorConfiguration | None = None
-    _fan_configuration: SensorConfiguration | None = None
-    _pot_configuration: SensorConfiguration | None = None
     _thermostat_configuration: SensorConfiguration | None = None
 
     
@@ -173,11 +169,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         if(self._supported_thermostat is not None): 
-            self._attr_target_temperature = getattr(self.coordinator._maestroapi.State, self._supported_thermostat.sensor_get_name)
-        if(self._supported_fan is not None): 
-            self._attr_fan_mode = str(getattr(self.coordinator._maestroapi.Status, self._supported_fan.sensor_get_name))
-        if(self._supported_pot is not None): 
-            self._attr_swing_mode = str(getattr(self.coordinator._maestroapi.Status, self._supported_pot.sensor_get_name))   
+            self._attr_target_temperature = getattr(self.coordinator._maestroapi.State, self._supported_thermostat.sensor_get_name) 
         if(self._supported_climate_function_mode is not None): 
             self._attr_preset_mode = str(getattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name))
         
