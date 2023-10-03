@@ -62,7 +62,7 @@ class MockedController(MaestroControllerInterface):
                                 "Name": stove_data["Name"],
                                 "ModelId": stove_data["ModelId"],
                                 "SensorSetTypeId": stove_data["SensorSetTypeId"],
-                                "UniqueCode": stove_data["UniqueCode"],
+                                "UniqueCode": stove_data["Name"] + "_" + stove_data["Id"] + stove_data["ModelId"],
                             }
                         }
 
@@ -70,7 +70,12 @@ class MockedController(MaestroControllerInterface):
                         self._stove_states[stove_data["Id"]] = stove_data["State"]
                         self._stove_status[stove_data["Id"]] = stove_data["Status"]
                         maesto_stove = MaestroStove(self, maestro_stove_data)
-                        await maesto_stove.SetMockedData(Model(stove_data["Model"], True), State(stove_data["State"], True), Status(stove_data["Status"], True))
+
+                        model = Model(stove_data["Model"], True)
+                        state  = State(stove_data["State"], True)
+                        status = Status(stove_data["Status"], True)
+                        status.sm_sn = maestro_stove_data["Node"]["UniqueCode"]
+                        await maesto_stove.SetMockedData(model, state, status)
                         self._stoves.append(maesto_stove)
                 except Exception as error:
                     pass
