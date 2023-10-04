@@ -42,6 +42,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self._prop = supported_sensor.sensor_get_name
         self._enabled_default = supported_sensor.enabled_by_default
         self._category = supported_sensor.category
+        self._api_value_renames = supported_sensor.api_value_renames
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -57,12 +58,17 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
+        value = None
+        
         if(hasattr(self.coordinator._maestroapi.State, self._prop)):
-            return getattr(self.coordinator._maestroapi.State, self._prop)
+            value = getattr(self.coordinator._maestroapi.State, self._prop)
         elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
-            return getattr(self.coordinator._maestroapi.Status, self._prop)
+            value = getattr(self.coordinator._maestroapi.Status, self._prop)
+
+        if(self._api_value_renames is not None and value in self._api_value_renames.keys()):
+            return self._api_value_renames[value]
         else:
-            return None
+            return value
 
     @property
     def entity_registry_enabled_default(self) -> bool:
