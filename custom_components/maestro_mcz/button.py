@@ -44,8 +44,8 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         self._prop = supported_button.sensor_set_name
         self._enabled_default = supported_button.enabled_by_default
         self._category = supported_button.category
-        self._button_configuration = matching_button_configuration
-        #if(matching_button_configuration.configuration.type == TypeEnum.BOOLEAN.value):
+
+        self.set_button_configuration(matching_button_configuration)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -58,12 +58,28 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
             + f", Panel:{self.coordinator._maestroapi.Status.mc_vs_app}"
             + f", DB:{self.coordinator._maestroapi.Status.nome_banca_dati_sel}",
         )
+    
+    def set_button_configuration(self, matching_button_configuration: SensorConfiguration):
+        self._button_configuration = matching_button_configuration
+        self._attr_return_value = None
+
+        if(matching_button_configuration.configuration.type == TypeEnum.BOOLEAN.value):
+            self._attr_return_value = True
+        elif(matching_button_configuration.configuration.type == TypeEnum.INT.value):
+            for key in matching_button_configuration.configuration.variants:
+                if key in matching_button_configuration.configuration.mappings.keys():
+                    if(key == "reset"):
+                        self._attr_return_value = matching_button_configuration.configuration.mappings[key]
 
     async def async_press(self) -> None:
         """Button pressed action execute."""
-        if(self._button_configuration is not None):
-            await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, True)
-            await self.coordinator.async_request_refresh()
+        if(self._button_configuration is not None and self._attr_return_value is not None):
+            if(self._button_configuration.configuration.type == TypeEnum.BOOLEAN.value):
+                await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, bool(self._attr_return_value))
+                await self.coordinator.async_request_refresh()
+            elif(self._button_configuration.configuration.type == TypeEnum.INT.value):
+                await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, int(self._attr_return_value))
+                await self.coordinator.async_request_refresh()
 
     @property
     def entity_registry_enabled_default(self) -> bool:

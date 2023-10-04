@@ -89,6 +89,8 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                     return HVACMode.HEAT
                 else: # turning-off | off | cooling-down
                     return HVACMode.OFF
+            else:
+                return HVACMode.OFF
         else:
             return None
 
@@ -106,7 +108,11 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     @property
     def preset_mode(self):
         if(self._supported_climate_function_mode is not None): 
-            return str(getattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name))
+            preset_mode_value = str(getattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name))
+            if(self._supported_climate_function_mode.api_mappings_key_rename is not None and preset_mode_value in self._supported_climate_function_mode.api_mappings_key_rename.keys()):
+                return self._supported_climate_function_mode.api_mappings_key_rename[preset_mode_value]
+            else:
+                return preset_mode_value
         else:
             return None
 
@@ -116,9 +122,13 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
         elif(matching_power_configuration.configuration.type == TypeEnum.INT.value):
             self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
-            #self._attr_hvac_modes_mappings = matching_power_configuration.configuration.mappings
-            #for key in matching_power_configuration.configuration.variants:
-            #        self._attr_preset_modes.append(key)
+            self._attr_hvac_modes_mappings = dict()
+            for key in matching_power_configuration.configuration.variants:
+                if key in matching_power_configuration.configuration.mappings.keys():
+                    if(key == "on"):
+                        self._attr_hvac_modes_mappings[HVACMode.HEAT] = matching_power_configuration.configuration.mappings[key]
+                    elif(key == "off"):
+                        self._attr_hvac_modes_mappings[HVACMode.OFF] = matching_power_configuration.configuration.mappings[key]
 
     def set_thermostat_configuration(self, matching_thermostat_configuration: SensorConfiguration):
         self._thermostat_configuration = matching_thermostat_configuration
@@ -145,7 +155,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode):
         if(self._climate_function_mode_configuration is not None):
-            if (preset_mode in self._attr_preset_modes_mappings.keys()):
+            if (self._attr_preset_modes_mappings is not None and preset_mode in self._attr_preset_modes_mappings.keys()):
                 converted_preset_mode = self._attr_preset_modes_mappings[preset_mode]
                 await self.coordinator._maestroapi.ActivateProgram(self._climate_function_mode_configuration.configuration.sensor_id, self._climate_function_mode_configuration.configuration_id, converted_preset_mode)
                 await self.coordinator.async_request_refresh()
@@ -158,7 +168,8 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                 await self.coordinator.async_request_refresh()
             elif(self._power_configuration.configuration.type == TypeEnum.INT.value):
                 if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
-                    await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, True)
+                    if (self._attr_hvac_modes_mappings and hvac_mode in self._attr_hvac_modes_mappings.keys()):
+                        await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, int(self._attr_hvac_modes_mappings[hvac_mode]))
                 await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs):
@@ -171,6 +182,10 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         if(self._supported_thermostat is not None): 
             self._attr_target_temperature = getattr(self.coordinator._maestroapi.State, self._supported_thermostat.sensor_get_name) 
         if(self._supported_climate_function_mode is not None): 
-            self._attr_preset_mode = str(getattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name))
+            preset_mode_value = str(getattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name))
+            if(self._supported_climate_function_mode.api_mappings_key_rename is not None and preset_mode_value in self._supported_climate_function_mode.api_mappings_key_rename.keys()):
+                self._attr_preset_mode = self._attr_preset_modes_mappings[preset_mode_value]
+            else:
+                self._attr_preset_mode = preset_mode_value
         
         self.async_write_ha_state()
