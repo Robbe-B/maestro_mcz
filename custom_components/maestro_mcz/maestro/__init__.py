@@ -86,7 +86,7 @@ class MaestroStove:
     async def Refresh(self):
         if(not self._usemockeddata): #make sure not to execute this code with a mocked controller
             await self.Ping()
-            await asyncio.sleep(5)
+            await asyncio.sleep(3.5) #we need to wait here because there is an actual delay between sending a SET and receiving the updated value from the polled MCZ database
             self._state = await self.StoveState()
             self._status = await self.StoveStatus()
     
@@ -100,4 +100,4 @@ class MaestroStove:
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
         command = [{"SensorId": sensor_id, "Value": value}]
         body = RequestBuilder(self, ConfigurationId=configuration_id, Commands=command)
-        await self._controller.MakeRequest("POST", url=url, body=body)
+        await self._controller.MakeRequest("POST", url=url, body=body, recursive_try_on_error = False)

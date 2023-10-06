@@ -49,15 +49,7 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
-            name=self.coordinator._maestroapi.Name,
-            manufacturer="MCZ",
-            model=self.coordinator._maestroapi.Model.model_name,
-            sw_version=f"{self.coordinator._maestroapi.Status.sm_nome_app}.{self.coordinator._maestroapi.Status.sm_vs_app}"
-            + f", Panel:{self.coordinator._maestroapi.Status.mc_vs_app}"
-            + f", DB:{self.coordinator._maestroapi.Status.nome_banca_dati_sel}",
-        )
+        return self.coordinator.get_device_info()
     
     def set_button_configuration(self, matching_button_configuration: SensorConfiguration):
         self._button_configuration = matching_button_configuration
@@ -76,10 +68,10 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         if(self._button_configuration is not None and self._attr_return_value is not None):
             if(self._button_configuration.configuration.type == TypeEnum.BOOLEAN.value):
                 await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, bool(self._attr_return_value))
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
             elif(self._button_configuration.configuration.type == TypeEnum.INT.value):
                 await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, int(self._attr_return_value))
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
 
     @property
     def entity_registry_enabled_default(self) -> bool:

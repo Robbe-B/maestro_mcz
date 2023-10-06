@@ -37,6 +37,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class MczSelectEntity(CoordinatorEntity, SelectEntity):   
 
     _attr_has_entity_name = True
+    _attr_current_option = None
 
      # 
     _selector_configuration: SensorConfiguration | None = None
@@ -67,37 +68,18 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
                             self._attr_options_mappings[key] = supported_selector.value_mappings[key]
                         else:
                             self._attr_options.append(key)
+        
+        self.handle_coordinator_update_internal() #getting the initial update directly without delay
 
             
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
-            name=self.coordinator._maestroapi.Name,
-            manufacturer="MCZ",
-            model=self.coordinator._maestroapi.Model.model_name,
-            sw_version=f"{self.coordinator._maestroapi.Status.sm_nome_app}.{self.coordinator._maestroapi.Status.sm_vs_app}"
-            + f", Panel:{self.coordinator._maestroapi.Status.mc_vs_app}"
-            + f", DB:{self.coordinator._maestroapi.Status.nome_banca_dati_sel}",
-        )
+        return self.coordinator.get_device_info()
 
     @property
     def current_option(self):
-        current_value = None
-        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
-            current_value = str(getattr(self.coordinator._maestroapi.State, self._prop))
-        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
-            current_value = str(getattr(self.coordinator._maestroapi.Status, self._prop))
-
-        if(self._selector_configuration.configuration.type == TypeEnum.INT.value):
-            if(current_value and self._selector_configuration is not None):
-                if (self._attr_options_mappings and current_value in self._attr_options_mappings.keys()):
-                    return self._attr_options_mappings[current_value]
-                else:
-                    return current_value
-                
-        return current_value
+        return self._attr_current_option
 
     async def async_select_option(self, option: str) -> None:
         """Set the value."""
@@ -109,7 +91,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
 
             if(found_value is not None):
                 await self.coordinator._maestroapi.ActivateProgram(self._selector_configuration.configuration.sensor_id, self._selector_configuration.configuration_id, int(found_value))
-                await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
     
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -121,4 +103,23 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
+        self.handle_coordinator_update_internal()
         self.async_write_ha_state()
+
+    def handle_coordinator_update_internal(self) -> None:
+        current_value = None
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            current_value = str(getattr(self.coordinator._maestroapi.State, self._prop))
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            current_value = str(getattr(self.coordinator._maestroapi.Status, self._prop))
+
+        if(self._selector_configuration.configuration.type == TypeEnum.INT.value):
+            if(current_value and self._selector_configuration is not None):
+                if (self._attr_options_mappings and current_value in self._attr_options_mappings.keys()):
+                    self._attr_current_option = self._attr_options_mappings[current_value]
+                else:
+                    self._attr_current_option = current_value
+            else:
+                self._attr_current_option = current_value
+        else:
+            self._attr_current_option = current_value

@@ -34,6 +34,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class MczNumberEntity(CoordinatorEntity, NumberEntity):
 
     _attr_has_entity_name = True
+    _attr_native_value = None
 
     # 
     _number_configuration: SensorConfiguration | None = None
@@ -55,28 +56,16 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
             self._attr_native_step = DEFAULT_STEP
             self._attr_native_min_value = float(matching_number_configuration.configuration.min or DEFAULT_MIN_VALUE)
             self._attr_native_max_value = float(matching_number_configuration.configuration.max or DEFAULT_MAX_VALUE)
+        self.handle_coordinator_update_internal() #getting the initial update directly without delay
 
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
-            name=self.coordinator._maestroapi.Name,
-            manufacturer="MCZ",
-            model=self.coordinator._maestroapi.Model.model_name,
-            sw_version=f"{self.coordinator._maestroapi.Status.sm_nome_app}.{self.coordinator._maestroapi.Status.sm_vs_app}"
-            + f", Panel:{self.coordinator._maestroapi.Status.mc_vs_app}"
-            + f", DB:{self.coordinator._maestroapi.Status.nome_banca_dati_sel}",
-        )
+        return self.coordinator.get_device_info()
 
     @property
     def native_value(self):
-        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
-            return getattr(self.coordinator._maestroapi.State, self._prop)
-        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
-            return getattr(self.coordinator._maestroapi.Status, self._prop)
-        else:
-            return None
+        return self._attr_native_value
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -96,8 +85,17 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
                 converted_value = value
             
             await self.coordinator._maestroapi.ActivateProgram(self._number_configuration.configuration.sensor_id, self._number_configuration.configuration_id, converted_value)
-            await self.coordinator.async_request_refresh()       
+            await self.coordinator.async_refresh()       
     
     @callback
     def _handle_coordinator_update(self) -> None:
+        self.handle_coordinator_update_internal()
         self.async_write_ha_state()
+
+    def handle_coordinator_update_internal(self) -> None:
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            self._attr_native_value = getattr(self.coordinator._maestroapi.State, self._prop)
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            self._attr_native_value = getattr(self.coordinator._maestroapi.Status, self._prop)
+        else:
+            self._attr_native_value = None

@@ -28,6 +28,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class MczSensorEntity(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
+    _attr_native_value = None
 
     def __init__(self, coordinator, supported_sensor:models.SensorMczConfigItem):
         super().__init__(coordinator)
@@ -43,32 +44,15 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self._enabled_default = supported_sensor.enabled_by_default
         self._category = supported_sensor.category
         self._api_value_renames = supported_sensor.api_value_renames
+        self.handle_coordinator_update_internal() #getting the initial update directly without delay
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
-            name=self.coordinator._maestroapi.Name,
-            manufacturer="MCZ",
-            model=self.coordinator._maestroapi.Model.model_name,
-            sw_version=f"{self.coordinator._maestroapi.Status.sm_nome_app}.{self.coordinator._maestroapi.Status.sm_vs_app}"
-            + f", Panel:{self.coordinator._maestroapi.Status.mc_vs_app}"
-            + f", DB:{self.coordinator._maestroapi.Status.nome_banca_dati_sel}",
-        )
+        return self.coordinator.get_device_info()
 
     @property
     def native_value(self):
-        value = None
-        
-        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
-            value = getattr(self.coordinator._maestroapi.State, self._prop)
-        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
-            value = getattr(self.coordinator._maestroapi.Status, self._prop)
-
-        if(self._api_value_renames is not None and value in self._api_value_renames.keys()):
-            return self._api_value_renames[value]
-        else:
-            return value
+        return self._attr_native_value
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -78,6 +62,20 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
     @property
     def entity_category(self):
         return self._category
+    
     @callback
-    def _handle_coordinator_update(self) -> None:
+    def _handle_coordinator_update(self) -> None:     
+        self.handle_coordinator_update_internal()
         self.async_write_ha_state()
+
+    def handle_coordinator_update_internal(self) -> None:
+        value = None
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            value = getattr(self.coordinator._maestroapi.State, self._prop)
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            value = getattr(self.coordinator._maestroapi.Status, self._prop)
+
+        if(self._api_value_renames is not None and value in self._api_value_renames.keys()):
+            self._attr_native_value =  self._api_value_renames[value]
+        else:
+            self._attr_native_value = value

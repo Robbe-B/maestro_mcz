@@ -29,6 +29,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
 
     _attr_has_entity_name = True
+    _attr_is_on = None
 
     def __init__(self, coordinator, supported_binary_sensor: models.BinarySensorMczConfigItem):
         super().__init__(coordinator)
@@ -40,27 +41,15 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self._prop = supported_binary_sensor.sensor_get_name
         self._enabled_default = supported_binary_sensor.enabled_by_default
         self._category = supported_binary_sensor.category
+        self.handle_coordinator_update_internal() #getting the initial update directly without delay
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
-            name=self.coordinator._maestroapi.Name,
-            manufacturer="MCZ",
-            model=self.coordinator._maestroapi.Model.model_name,
-            sw_version=f"{self.coordinator._maestroapi.Status.sm_nome_app}.{self.coordinator._maestroapi.Status.sm_vs_app}"
-            + f", Panel:{self.coordinator._maestroapi.Status.mc_vs_app}"
-            + f", DB:{self.coordinator._maestroapi.Status.nome_banca_dati_sel}",
-        )
+        return self.coordinator.get_device_info()
 
     @property
     def is_on(self):
-        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
-            return getattr(self.coordinator._maestroapi.State, self._prop)
-        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
-            return getattr(self.coordinator._maestroapi.Status, self._prop)
-        else:
-            return None
+        return self._attr_is_on
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -72,4 +61,13 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
+        self.handle_coordinator_update_internal()
         self.async_write_ha_state()
+
+    def handle_coordinator_update_internal(self) -> None:
+        if hasattr(self.coordinator._maestroapi.State, self._prop):
+            self._attr_is_on = getattr(self.coordinator._maestroapi.State, self._prop)
+        elif hasattr(self.coordinator._maestroapi.Status, self._prop):
+            self._attr_is_on = getattr(self.coordinator._maestroapi.Status, self._prop)
+        else:
+            self._attr_is_on = None

@@ -35,7 +35,7 @@ class MaestroController(MaestroControllerInterface):
     def Stoves(self):
         return self._stoves
 
-    async def MakeRequest(self, method:str, url:str, headers={}, body=None):
+    async def MakeRequest(self, method:str, url:str, headers={}, body=None, recursive_try_on_error:bool = True, is_first_try:bool = True):
         async with async_timeout.timeout(15):
             headers["auth-token"] = self._token
 
@@ -51,17 +51,20 @@ class MaestroController(MaestroControllerInterface):
                             response = await resp.json()
                     if resp.status == 200:
                         return response
-                    else:
+                    elif(is_first_try or recursive_try_on_error):  #we always try once more in case there was an unsuccessful attempt for the first try or if we need to retry recursively
                         await self.Login()
                         return await self.MakeRequest(
-                            method=method, url=url, headers=headers, body=body
+                            method=method, url=url, headers=headers, body=body, recursive_try_on_error=recursive_try_on_error, is_first_try = False
                         )
-            except:
-                print("Error making request. Attempting to relogin")
-                await self.Login()
-                return await self.MakeRequest(
-                    method=method, url=url, headers=headers, body=body
-                )
+            except Exception as err:
+                print(f"Error making request. Attempting to relogin. Error: {err}")
+
+                #we always try once more in case there was an error for the first try or if we need to retry recursively
+                if(is_first_try or recursive_try_on_error):
+                    await self.Login()
+                    return await self.MakeRequest(
+                        method=method, url=url, headers=headers, body=body, recursive_try_on_error=recursive_try_on_error, is_first_try = False
+                    )
 
     async def Login(self):
         LOGIN_BODY = {"username": self.Username, "password": self.Password}
