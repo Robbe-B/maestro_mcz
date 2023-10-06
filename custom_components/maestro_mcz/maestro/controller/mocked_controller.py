@@ -40,7 +40,7 @@ class MockedController(MaestroControllerInterface):
     def Stoves(self):
         return self._stoves
 
-    async def MakeRequest(self, method: str, url: str, headers={}, body=None):
+    async def MakeRequest(self, method: str, url: str, headers={}, body=None, recursive_try_on_error:bool = True, is_first_try:bool = True):
         return None
 
     async def Login(self):

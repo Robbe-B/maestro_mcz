@@ -12,13 +12,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.const import (
     CONF_USERNAME,
     CONF_PASSWORD,
 )
 
-from .const import DOMAIN, DEFAULT_POLLING_INTERVAL
+from .const import DOMAIN, MANUFACTURER, DEFAULT_POLLING_INTERVAL
 from .maestro import MaestroStove
 from .maestro.controller.controller_interface import MaestroControllerInterface
 from .maestro.controller.maestro_controller import MaestroController
@@ -104,10 +105,21 @@ class MczCoordinator(DataUpdateCoordinator):
         async with async_timeout.timeout(15):
             await self._maestroapi.Refresh()
             return True
-    
+
     @property
     def maestroapi(self) -> MaestroStove:
         return self._maestroapi
+     
+    def get_device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._maestroapi.Status.sm_sn)},
+            name=self._maestroapi.Name,
+            manufacturer=MANUFACTURER,
+            model=self._maestroapi.Model.model_name,
+            sw_version=f"{self._maestroapi.Status.sm_nome_app}.{self._maestroapi.Status.sm_vs_app}"
+            + f", Panel:{self._maestroapi.Status.mc_vs_app}"
+            + f", DB:{self._maestroapi.Status.nome_banca_dati_sel}",
+        )
     
     def get_model_configuration_by_model_configuration_id(self, model_configuration_id:str) -> ModelConfiguration | None:
         return next((x for x in self._maestroapi.Model.model_configurations if x.configuration_id is not None and x.configuration_id.lower() == model_configuration_id.lower()), None)

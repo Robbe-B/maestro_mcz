@@ -34,7 +34,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class MczFanEntity(CoordinatorEntity, FanEntity):
     _attr_has_entity_name = True
-
+    _attr_preset_mode = None
+    _attr_is_on = None
     #
     _fan_configuration: SensorConfiguration | None = None
     _presets: list | None = None
@@ -52,34 +53,19 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         if(matching_fan_configuration.configuration.type == TypeEnum.INT.value):
             self._presets = self._attr_preset_modes = list(map(str,range(int(matching_fan_configuration.configuration.min), int(matching_fan_configuration.configuration.max) + 1 , 1)))
             self._attr_supported_features = (FanEntityFeature.PRESET_MODE)
+        self.handle_coordinator_update_internal() #getting the initial update directly without delay
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator._maestroapi.Status.sm_sn)},
-            name=self.coordinator._maestroapi.Name,
-            manufacturer="MCZ",
-            model=self.coordinator._maestroapi.Model.model_name,
-            sw_version=f"{self.coordinator._maestroapi.Status.sm_nome_app}.{self.coordinator._maestroapi.Status.sm_vs_app}"
-            + f", Panel:{self.coordinator._maestroapi.Status.mc_vs_app}"
-            + f", DB:{self.coordinator._maestroapi.Status.nome_banca_dati_sel}",
-        )
+        return self.coordinator.get_device_info()
 
     @property
     def is_on(self) -> bool:
-        if(self._fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
-            return self.preset_mode != self._presets[0]
-        else:
-            return False
+        return self._attr_is_on
 
     @property
     def preset_mode(self) -> str:
-        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
-            return str(getattr(self.coordinator._maestroapi.State, self._prop))
-        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
-            return str(getattr(self.coordinator._maestroapi.Status, self._prop))
-        else:
-            return None
+        return self._attr_preset_mode
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -94,20 +80,36 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         """Set the preset mode of the fan."""
         if(self._fan_configuration is not None):
             await self.coordinator._maestroapi.ActivateProgram(self._fan_configuration.configuration.sensor_id, self._fan_configuration.configuration_id, int(preset_mode))
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
 
     async def async_turn_on(self) -> None:
         """Turn on the fan."""
         if(self._fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
             await self.coordinator._maestroapi.ActivateProgram(self._fan_configuration.configuration.sensor_id, self._fan_configuration.configuration_id, int(self._presets[-1]))
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn off the fan."""
         if(self._fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
             await self.coordinator._maestroapi.ActivateProgram(self._fan_configuration.configuration.sensor_id, self._fan_configuration.configuration_id, int(self._presets[0]))
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:
+        self.handle_coordinator_update_internal()
         self.async_write_ha_state()
+
+    def handle_coordinator_update_internal(self) -> None:
+        #presets
+        if(hasattr(self.coordinator._maestroapi.State, self._prop)):
+            self._attr_preset_mode = str(getattr(self.coordinator._maestroapi.State, self._prop))
+        elif(hasattr(self.coordinator._maestroapi.Status, self._prop)):
+            self._attr_preset_mode = str(getattr(self.coordinator._maestroapi.Status, self._prop))
+        else:
+            self._attr_preset_mode = None
+
+        # on/off
+        if(self._fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
+            self._attr_is_on = self.preset_mode != self._presets[0]
+        else:
+            self._attr_is_on = False
