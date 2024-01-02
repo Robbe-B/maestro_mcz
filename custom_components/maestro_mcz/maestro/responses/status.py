@@ -90,6 +90,7 @@ class Status:
     site_time_zone: str | None = None
     blocking_event_id: str | None = None
     pren_acc: bool | None = None
+    umid_rel: float | None = None
 
     #first generation M1+ only fields
     pwd_wifi: str | None = None
@@ -139,6 +140,11 @@ class Status:
     soglia_temp_cons_cald: float | None = None
     com_inv_pos_bruciatore: bool | None = None
     tempo_sleep: int | None = None
+    temp_max_stufa_off: float | None = None
+    temp_min_stufa_on: float | None = None
+    is_config_valid: bool | None = None
+    ingr_flux: float | None = None
+    soglia_usc_temp: float | None = None
 
     unknown_fields: dict | None = None
 
@@ -235,6 +241,8 @@ class Status:
                         case "SiteTimeZone": self.site_time_zone = json[key]
                         case "BlockingEventId": self.blocking_event_id = json[key]
                         case "pren_acc" : self.pren_acc = json[key]
+                        case "umid_rel" : self.umid_rel = json[key]
+
 
                         case "pwd_wifi": self.pwd_wifi = json[key]
                         case "mac_wifi": self.mac_wifi = json[key]
@@ -282,6 +290,11 @@ class Status:
                         case "soglia_temp_cons_cald": self.soglia_temp_cons_cald = json[key]
                         case "com_inv_pos_bruciatore": self.com_inv_pos_bruciatore = json[key]
                         case "tempo_sleep": self.tempo_sleep = json[key]
+                        case "temp_max_stufa_off": self.temp_max_stufa_off = json[key]
+                        case "temp_min_stufa_on": self.temp_min_stufa_on = json[key]
+                        case "isConfigValid": self.is_config_valid = json[key]
+                        case "ingr_flux": self.ingr_flux = json[key]
+                        case "soglia_usc_temp": self.soglia_usc_temp = json[key]
                         case _ :
                             temp_unknown_fields[key] = json[key]
                             _LOGGER.warning(f"Unknown status property '{key}' received from API endpoint. If this happens, please make an issue on the github repository")
