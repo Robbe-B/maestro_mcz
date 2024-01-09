@@ -18,6 +18,9 @@ There are a couple of milestones set. Feel free to check them out at [Milestones
 
 ### HACS
 
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Robbe-B&repository=maestro_mcz&category=integration)
+
 1. Install [HACS](https://hacs.xyz/)
 2. Go to HACS "Integrations >" section
 3. Click 3 dots in top right
