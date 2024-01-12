@@ -85,7 +85,7 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
                 converted_value = value
             
             await self.coordinator._maestroapi.ActivateProgram(self._number_configuration.configuration.sensor_id, self._number_configuration.configuration_id, converted_value)
-            await self.coordinator.update_date_after_set()       
+            await self.coordinator.update_data_after_set()       
     
     @callback
     def _handle_coordinator_update(self) -> None:

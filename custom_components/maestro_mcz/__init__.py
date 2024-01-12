@@ -110,7 +110,7 @@ class MczCoordinator(DataUpdateCoordinator):
             await self._maestroapi.Refresh(not self._avoid_ping)
             return True
         
-    async def update_date_after_set(self):
+    async def update_data_after_set(self):
         """force refresh of data from API endpoint after a SET was executed."""
         #we need to wait here because there is an actual delay between sending a SET and receiving the updated value from the polled MCZ database
         await asyncio.sleep(3) 
