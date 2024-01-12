@@ -60,13 +60,13 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         """Set the switch on."""
         if(self._switch_configuration is not None):
             await self.coordinator._maestroapi.ActivateProgram(self._switch_configuration.configuration.sensor_id, self._switch_configuration.configuration_id, True)
-            await self.coordinator.async_refresh()
-
+            await self.coordinator.update_date_after_set()
+            
     async def async_turn_off(self, **kwargs):
         """Set the switch off."""
         if(self._switch_configuration is not None):
             await self.coordinator._maestroapi.ActivateProgram(self._switch_configuration.configuration.sensor_id, self._switch_configuration.configuration_id, False)
-            await self.coordinator.async_refresh()
+            await self.coordinator.update_date_after_set()
 
     @property
     def entity_registry_enabled_default(self) -> bool:

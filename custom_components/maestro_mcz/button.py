@@ -68,10 +68,10 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         if(self._button_configuration is not None and self._attr_return_value is not None):
             if(self._button_configuration.configuration.type == TypeEnum.BOOLEAN.value):
                 await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, bool(self._attr_return_value))
-                await self.coordinator.async_refresh()
+                await self.coordinator.update_date_after_set()
             elif(self._button_configuration.configuration.type == TypeEnum.INT.value):
                 await self.coordinator._maestroapi.ActivateProgram(self._button_configuration.configuration.sensor_id, self._button_configuration.configuration_id, int(self._attr_return_value))
-                await self.coordinator.async_refresh()
+                await self.coordinator.update_date_after_set()
 
     @property
     def entity_registry_enabled_default(self) -> bool:

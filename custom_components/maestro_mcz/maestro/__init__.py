@@ -1,4 +1,3 @@
-import asyncio
 
 from .controller.controller_interface import MaestroControllerInterface
 
@@ -83,10 +82,10 @@ class MaestroStove:
             )
         )
 
-    async def Refresh(self):
+    async def Refresh(self, include_ping: bool = True):
         if(not self._usemockeddata): #make sure not to execute this code with a mocked controller
-            await self.Ping()
-            await asyncio.sleep(3.5) #we need to wait here because there is an actual delay between sending a SET and receiving the updated value from the polled MCZ database
+            if(include_ping):
+                await self.Ping()
             self._state = await self.StoveState()
             self._status = await self.StoveStatus()
     
@@ -96,8 +95,10 @@ class MaestroStove:
         self._status = status
         self._usemockeddata = True
 
-    async def ActivateProgram(self, sensor_id: str, configuration_id: str, value: object):
+    async def ActivateProgram(self, sensor_id: str, configuration_id: str, value: object, callback_on_success = None):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
         command = [{"SensorId": sensor_id, "Value": value}]
         body = RequestBuilder(self, ConfigurationId=configuration_id, Commands=command)
-        await self._controller.MakeRequest("POST", url=url, body=body, recursive_try_on_error = False)
+        success = await self._controller.MakeRequest("POST", url=url, body=body, recursive_try_on_error = False)
+        if(callback_on_success is not None and success is not None):
+            callback_on_success()
