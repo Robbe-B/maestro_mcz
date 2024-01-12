@@ -91,7 +91,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
 
             if(found_value is not None):
                 await self.coordinator._maestroapi.ActivateProgram(self._selector_configuration.configuration.sensor_id, self._selector_configuration.configuration_id, int(found_value))
-                await self.coordinator.update_date_after_set()
+                await self.coordinator.update_data_after_set()
     
     @property
     def entity_registry_enabled_default(self) -> bool:

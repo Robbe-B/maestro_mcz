@@ -138,24 +138,24 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             if (self._attr_preset_modes_mappings is not None and preset_mode in self._attr_preset_modes_mappings.keys()):
                 converted_preset_mode = self._attr_preset_modes_mappings[preset_mode]
                 await self.coordinator._maestroapi.ActivateProgram(self._climate_function_mode_configuration.configuration.sensor_id, self._climate_function_mode_configuration.configuration_id, converted_preset_mode)
-                await self.coordinator.update_date_after_set()
+                await self.coordinator.update_data_after_set()
 
     async def async_set_hvac_mode(self, hvac_mode):
         if(self._power_configuration is not None):
             if(self._power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
                 if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
                     await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, True)
-                    await self.coordinator.update_date_after_set()
+                    await self.coordinator.update_data_after_set()
             elif(self._power_configuration.configuration.type == TypeEnum.INT.value):
                 if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
                     if (self._attr_hvac_modes_mappings and hvac_mode in self._attr_hvac_modes_mappings.keys()):
                         await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, int(self._attr_hvac_modes_mappings[hvac_mode]))
-                        await self.coordinator.update_date_after_set()
+                        await self.coordinator.update_data_after_set()
 
     async def async_set_temperature(self, **kwargs):
         if(self._thermostat_configuration is not None):
             await self.coordinator._maestroapi.ActivateProgram(self._thermostat_configuration.configuration.sensor_id, self._thermostat_configuration.configuration_id, float(kwargs["temperature"]))
-            await self.coordinator.update_date_after_set()
+            await self.coordinator.update_data_after_set()
 
     @callback
     def _handle_coordinator_update(self) -> None:
