@@ -83,3 +83,14 @@ class SensorConfiguration:
     def __init__(self, configuration: Configuration, configuration_id: str) -> None:
         self.configuration = configuration
         self.configuration_id = configuration_id
+
+
+@dataclass
+class SensorConfigurationMultipleModes():
+    mode_configurations: dict[str,SensorConfiguration] | None = None # key => Mode | value => SensorConfiguration for that mode
+
+    def __init__(self, mode_configurations: dict[str,SensorConfiguration]) -> None:
+        self.mode_configurations = mode_configurations
+
+
+
