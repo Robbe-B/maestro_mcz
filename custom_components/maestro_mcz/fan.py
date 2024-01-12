@@ -83,19 +83,19 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         """Set the preset mode of the fan."""
         if(self._current_fan_configuration is not None):
             await self.coordinator._maestroapi.ActivateProgram(self._current_fan_configuration.configuration.sensor_id, self._current_fan_configuration.configuration_id, int(preset_mode))
-            await self.coordinator.async_refresh()
+            await self.coordinator.update_date_after_set()
 
     async def async_turn_on(self) -> None:
         """Turn on the fan."""
         if(self._current_fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
             await self.coordinator._maestroapi.ActivateProgram(self._current_fan_configuration.configuration.sensor_id, self._current_fan_configuration.configuration_id, int(self._presets[-1]))
-            await self.coordinator.async_refresh()
+            await self.coordinator.update_date_after_set()
 
     async def async_turn_off(self) -> None:
         """Turn off the fan."""
         if(self._current_fan_configuration is not None and self._presets is not None and len(self._presets) > 0):
             await self.coordinator._maestroapi.ActivateProgram(self._current_fan_configuration.configuration.sensor_id, self._current_fan_configuration.configuration_id, int(self._presets[0]))
-            await self.coordinator.async_refresh()
+            await self.coordinator.update_date_after_set()
 
     def get_configuration_for_current_stove_mode(self) -> SensorConfiguration | None:
         """Get the correct sensor configuration for the current mode that the stove is in"""

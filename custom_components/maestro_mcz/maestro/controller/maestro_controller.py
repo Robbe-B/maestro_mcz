@@ -56,6 +56,8 @@ class MaestroController(MaestroControllerInterface):
                         return await self.MakeRequest(
                             method=method, url=url, headers=headers, body=body, recursive_try_on_error=recursive_try_on_error, is_first_try = False
                         )
+                    else:
+                        return None
             except Exception as err:
                 print(f"Error making request. Attempting to relogin. Error: {err}")
 
@@ -65,6 +67,7 @@ class MaestroController(MaestroControllerInterface):
                     return await self.MakeRequest(
                         method=method, url=url, headers=headers, body=body, recursive_try_on_error=recursive_try_on_error, is_first_try = False
                     )
+        return None
 
     async def Login(self):
         LOGIN_BODY = {"username": self.Username, "password": self.Password}

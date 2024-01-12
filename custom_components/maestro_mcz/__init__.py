@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 import os
+import asyncio
 import async_timeout
 from .config_flow import CONF_POLLING_INTERVAL
 from .maestro.responses.model import Configuration, ModelConfiguration, SensorConfiguration, SensorConfigurationMultipleModes
@@ -91,6 +92,8 @@ def has_mocked_files() -> list[str] | None:
 class MczCoordinator(DataUpdateCoordinator):
     """MCZ Coordinator."""
 
+    _avoid_ping: bool = False
+
     def __init__(self, hass, maestroapi, polling_interval):
         """Initialize my coordinator."""
         super().__init__(
@@ -104,8 +107,18 @@ class MczCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from API endpoint."""
         async with async_timeout.timeout(15):
-            await self._maestroapi.Refresh()
+            await self._maestroapi.Refresh(not self._avoid_ping)
             return True
+        
+    async def update_date_after_set(self):
+        """force refresh of data from API endpoint after a SET was executed."""
+        #we need to wait here because there is an actual delay between sending a SET and receiving the updated value from the polled MCZ database
+        await asyncio.sleep(3) 
+        await self.async_refresh()
+        await asyncio.sleep(3)
+        self._avoid_ping = True
+        await self.async_refresh()
+        self._avoid_ping = False
 
     @property
     def maestroapi(self) -> MaestroStove:
