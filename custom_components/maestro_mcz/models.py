@@ -20,6 +20,7 @@ class MczConfigItem:
     mode_to_configuration_name_mapping: dict[str,str] | None = None #key => Mode | value => Configuration Name
     user_friendly_name: str | None = None
     icon: str | None = None
+    unavailable_icon: str | None = None
     enabled_by_default: bool = True
     category: EntityCategory | None = None
 
@@ -63,13 +64,16 @@ class ThermostatMczConfigItem(MczConfigItem):
 
 @dataclass
 class FanMczConfigItem(MczConfigItem):
+    silent_enabled_get_name: str | None = None
 
-    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, mode_to_configuration_name_mapping: dict[str,str], enabled_by_default: bool):
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, mode_to_configuration_name_mapping: dict[str,str], silent_enabled_get_name: str | None , enabled_by_default: bool):
         super().__init__(user_friendly_name)
         self.sensor_get_name = sensor_get_name
         self.icon = "mdi:fan"
+        self.unavailable_icon = "mdi:fan-off"
         self.sensor_set_name = sensor_set_name
         self.mode_to_configuration_name_mapping = mode_to_configuration_name_mapping # means we want to find the sensor name in the different mode configs
+        self.silent_enabled_get_name = silent_enabled_get_name
         self.enabled_by_default = enabled_by_default
 
 @dataclass
@@ -194,12 +198,12 @@ supported_pots = [
 ]
 
 supported_fans = [
-    FanMczConfigItem("Fan 1", "set_vent_v1", "set_vent_v1", {"manual":"Manuale", "auto":"Auto", "overnight":"Overnight", "comfort":"Comfort", "turbo":"Turbo"}, True),
-    FanMczConfigItem("Fan 1", "set_vent_v1", "m1_set_vent_v1", {"manual":"Manuale","dynamic":"Dynamic", "overnight":"Overnight", "comfort":"Comfort", "power":"Power"}, True),  #for first generation M1+
-    FanMczConfigItem("Fan 2", "set_vent_v2", "set_vent_v2", {"manual":"Manuale", "auto":"Auto", "overnight":"Overnight", "comfort":"Comfort", "turbo":"Turbo"}, True),
-    FanMczConfigItem("Fan 2", "set_vent_v2", "m1_set_vent_v2", {"manual":"Manuale","dynamic":"Dynamic", "overnight":"Overnight", "comfort":"Comfort", "power":"Power"}, True),  #for first generation M1+
-    FanMczConfigItem("Fan 3", "set_vent_v3", "set_vent_v3", {"manual":"Manuale", "auto":"Auto", "overnight":"Overnight", "comfort":"Comfort", "turbo":"Turbo"}, True),
-    FanMczConfigItem("Fan 3", "set_vent_v3", "m1_set_vent_v3", {"manual":"Manuale","dynamic":"Dynamic", "overnight":"Overnight", "comfort":"Comfort", "power":"Power"}, True),  #for first generation M1+
+    FanMczConfigItem("Fan 1", "set_vent_v1", "set_vent_v1", {"manual":"Manuale", "auto":"Auto", "overnight":"Overnight", "comfort":"Comfort", "turbo":"Turbo"}, "silent_enabled", True),
+    FanMczConfigItem("Fan 1", "set_vent_v1", "m1_set_vent_v1", {"manual":"Manuale","dynamic":"Dynamic", "overnight":"Overnight", "comfort":"Comfort", "power":"Power"}, "silent_enabled", True),  #for first generation M1+
+    FanMczConfigItem("Fan 2", "set_vent_v2", "set_vent_v2", {"manual":"Manuale", "auto":"Auto", "overnight":"Overnight", "comfort":"Comfort", "turbo":"Turbo"}, "silent_enabled", True),
+    FanMczConfigItem("Fan 2", "set_vent_v2", "m1_set_vent_v2", {"manual":"Manuale","dynamic":"Dynamic", "overnight":"Overnight", "comfort":"Comfort", "power":"Power"}, "silent_enabled", True),  #for first generation M1+
+    FanMczConfigItem("Fan 3", "set_vent_v3", "set_vent_v3", {"manual":"Manuale", "auto":"Auto", "overnight":"Overnight", "comfort":"Comfort", "turbo":"Turbo"}, "silent_enabled", True),
+    FanMczConfigItem("Fan 3", "set_vent_v3", "m1_set_vent_v3", {"manual":"Manuale","dynamic":"Dynamic", "overnight":"Overnight", "comfort":"Comfort", "power":"Power"}, "silent_enabled", True),  #for first generation M1+
 ]
 
 supported_switches = [
