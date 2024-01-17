@@ -242,6 +242,7 @@ supported_binary_sensors = [
 ]
 
 supported_sensors = [
+    SensorMczConfigItem("Last Alarm Code","last_alarm","mdi:alert", None, None, EntityCategory.DIAGNOSTIC, None, None, True),
     SensorMczConfigItem("Current State","state","mdi:power", None, None, EntityCategory.DIAGNOSTIC, None, None, True),
     SensorMczConfigItem("Ambient Temperature","temp_amb_install","mdi:thermometer", UnitOfTemperature.CELSIUS, None, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
     SensorMczConfigItem("Water Temperature","temp_caldaia","mdi:water-thermometer", UnitOfTemperature.CELSIUS, None, None, SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, True),
