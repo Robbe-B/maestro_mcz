@@ -46,6 +46,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
     _attr_preset_mode: str | None = None
     _attr_preset_modes: list[str] | None = None
     _attr_speed_count: int = 0
+    _attr_translation_key: str = "main_fan"
     #
     _supported_fan: models.FanMczConfigItem | None = None
     _fan_configuration: SensorConfigurationMultipleModes | None = None

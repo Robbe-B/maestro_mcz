@@ -1,0 +1,32 @@
+{
+    "entity": {
+      "climate": {
+        "main_climate": {
+          "state_attributes": {
+            "preset_mode": {
+              "default": "mdi:confused",
+              "state": {
+                "manual": "mdi:hand-back-right",
+                "auto": "mdi:thermometer-auto",
+                "overnight": "mdi:weather-night",
+                "comfort": "mdi:home-heart",
+                "turbo": "mdi:fire"
+              }
+            }
+          }
+        }
+      },
+      "fan": {
+        "main_fan": {
+          "state_attributes": {
+            "preset_mode": {
+              "state": {
+                "auto": "mdi:fan-auto",
+                "silent": "mdi:fan-off"
+              }
+            }
+          }
+        }
+      }
+    }
+  }

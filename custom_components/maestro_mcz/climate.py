@@ -38,6 +38,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_current_temperature = None
     _attr_target_temperature = None
     _attr_preset_mode = None
+    _attr_translation_key: str = "main_climate"
 
     _supported_power_sensor: models.MczConfigItem | None = None
     _supported_thermostat: models.MczConfigItem | None = None

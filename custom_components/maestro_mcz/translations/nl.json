@@ -25,5 +25,34 @@
                 }
             }
         }
+    },
+    "entity": {
+      "climate": {
+        "main_climate": {
+          "state_attributes": {
+            "preset_mode": {
+              "state": {
+                "manual": "Manual",
+                "auto": "Auto",
+                "overnight": "Overnight",
+                "comfort": "Comfort",
+                "turbo": "Turbo"
+              }
+            }
+          }
+        }
+      },
+      "fan": {
+        "main_fan": {
+          "state_attributes": {
+            "preset_mode": {
+              "state": {
+                "auto": "Auto",
+                "silent": "Silent"
+              }
+            }
+          }
+        }
+      }
     }
 }
