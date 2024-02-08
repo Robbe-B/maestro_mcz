@@ -39,6 +39,8 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_target_temperature = None
     _attr_preset_mode = None
 
+    _enable_turn_on_off_backwards_compatibility = False # to be removed after 2025.1
+
     _supported_power_sensor: models.MczConfigItem | None = None
     _supported_thermostat: models.MczConfigItem | None = None
     _supported_climate_function_mode: models.MczConfigItem | None = None
@@ -99,8 +101,10 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     def set_power_configuration(self, matching_power_configuration: SensorConfiguration):
         self._power_configuration = matching_power_configuration
         if(matching_power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
+            self._attr_supported_features |= (ClimateEntityFeature.TURN_OFF | ClimateEntityFeature.TURN_ON)
             self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
         elif(matching_power_configuration.configuration.type == TypeEnum.INT.value):
+            self._attr_supported_features |= (ClimateEntityFeature.TURN_OFF | ClimateEntityFeature.TURN_ON)
             self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
             self._attr_hvac_modes_mappings = dict()
             for key in matching_power_configuration.configuration.variants:
