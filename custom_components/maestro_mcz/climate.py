@@ -38,6 +38,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_current_temperature = None
     _attr_target_temperature = None
     _attr_preset_mode = None
+    _attr_translation_key: str = "main_climate"
 
     _enable_turn_on_off_backwards_compatibility = False # to be removed after 2025.1
 
