@@ -174,8 +174,8 @@ class SensorMczConfigItem(MczConfigItem):
         self.api_value_renames = api_value_renames
 
 supported_power_settings = [
-    PowerSettingMczConfigItem("Power", "fase_op", "com_on_off", "Spegnimento", True),
-    PowerSettingMczConfigItem("Power", "fase_op", "m1_stato_stufa", "Spegnimento", True), #for first generation M1+
+    PowerSettingMczConfigItem("Power", "stato_stufa", "com_on_off", "Spegnimento", True),
+    PowerSettingMczConfigItem("Power", "stato_stufa", "m1_stato_stufa", "Spegnimento", True), #for first generation M1+
 ]
 
 supported_climate_function_modes = [
