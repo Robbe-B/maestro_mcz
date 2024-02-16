@@ -192,6 +192,16 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
     def handle_coordinator_update_internal(self) -> None:
         """handle coordinator updates for this fan"""
+        
+        #determine if the fan is enabled 
+        if(self._current_fan_configuration is not None and 
+           self._current_fan_configuration.configuration is not None and 
+           self._current_fan_configuration.configuration.enabled == True):
+             self._attr_available = True
+        else:
+            self._attr_available = False
+            return #we can return heere since the fan is disabled in the config and we don't need to update values 
+        
         #determine silent mode is enabled 
         if(self._supported_fan is not None and self._supported_fan.silent_enabled_get_name is not None):
             if(hasattr(self.coordinator._maestroapi.State, self._supported_fan.silent_enabled_get_name)):
@@ -203,7 +213,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
             if(silent_enabled is not None and silent_enabled == True):
                 self._attr_available = False
-                return # we can return here since the rest doesn't matter anymore when the fan is not available    
+                return # we can return here since the rest doesn't matter anymore when the fan is not available
 
 
         #determine the fan value
@@ -243,11 +253,12 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
             self._attr_preset_mode = None
 
         #speed
-        if(self._current_fan_configuration is not None and 
+        if(self._current_fan_configuration is not None and
            self._current_fan_configuration.configuration.min is not None and
            self._current_fan_configuration.configuration.max is not None and
            fan_value is not None and
            type(fan_value) is int and
+           self._attr_speed_count >= 1 and
            int(self._current_fan_configuration.configuration.min) <= fan_value <= int(self._current_fan_configuration.configuration.max) and 
            fan_value != 0):
             self._attr_percentage = ranged_value_to_percentage((1, self._attr_speed_count),fan_value)
