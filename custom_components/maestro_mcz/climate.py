@@ -170,16 +170,17 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     def handle_coordinator_update_internal(self) -> None:
         #HVAC mode
         if(self._supported_power_sensor is not None): 
-            fase_op = getattr(self.coordinator._maestroapi.Status, self._supported_power_sensor.sensor_get_name)
-            if(fase_op is not None):
-                if(str(fase_op).lower() == "on" or str(fase_op).lower() == "turning-on"):
-                    self._attr_hvac_mode = HVACMode.HEAT
-                else: # turning-off | off | cooling-down
+            stato_stufa = getattr(self.coordinator._maestroapi.Status, self._supported_power_sensor.sensor_get_name)
+            if(stato_stufa is not None):
+                if(stato_stufa == 1):
                     self._attr_hvac_mode = HVACMode.OFF
+                else:
+                    self._attr_hvac_mode = HVACMode.HEAT
             else:
                 self._attr_hvac_mode = HVACMode.OFF
         else:
             self._attr_hvac_mode = None
+            
 
         #current temp
         self._attr_current_temperature = self.coordinator._maestroapi.State.temp_amb_install
