@@ -147,12 +147,11 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode):
         if(self._power_configuration is not None):
-            if(self._power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
-                if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
+            if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
+                if(self._power_configuration.configuration.type == TypeEnum.BOOLEAN.value):
                     await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, True)
                     await self.coordinator.update_data_after_set()
-            elif(self._power_configuration.configuration.type == TypeEnum.INT.value):
-                if(self.hvac_mode is not None and self.hvac_mode is not hvac_mode): #avoid sending the same hvac mode to the API because this will result in a toggle of the power setting of the stove
+                elif(self._power_configuration.configuration.type == TypeEnum.INT.value):
                     if (self._attr_hvac_modes_mappings and hvac_mode in self._attr_hvac_modes_mappings.keys()):
                         await self.coordinator._maestroapi.ActivateProgram(self._power_configuration.configuration.sensor_id, self._power_configuration.configuration_id, int(self._attr_hvac_modes_mappings[hvac_mode]))
                         await self.coordinator.update_data_after_set()
@@ -172,7 +171,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         if(self._supported_power_sensor is not None): 
             stato_stufa = getattr(self.coordinator._maestroapi.Status, self._supported_power_sensor.sensor_get_name)
             if(stato_stufa is not None):
-                if(stato_stufa == 1):
+                if(stato_stufa == 0 or stato_stufa == 1):
                     self._attr_hvac_mode = HVACMode.OFF
                 else:
                     self._attr_hvac_mode = HVACMode.HEAT
