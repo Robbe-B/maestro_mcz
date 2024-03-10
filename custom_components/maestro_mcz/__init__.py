@@ -27,7 +27,7 @@ from .maestro.controller.maestro_controller import MaestroController
 from .maestro.controller.mocked_controller import MockedController
 
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.FAN, Platform.NUMBER, Platform.SWITCH, Platform.SELECT, Platform.BINARY_SENSOR, Platform.BUTTON]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.FAN, Platform.NUMBER, Platform.SWITCH, Platform.SELECT, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.DATETIME]
 _LOGGER = logging.getLogger(__name__)
 
 
