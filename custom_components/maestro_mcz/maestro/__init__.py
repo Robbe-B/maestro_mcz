@@ -1,11 +1,12 @@
-
+import dataclasses
+import json
 from .controller.controller_interface import MaestroControllerInterface
 
 from .responses.model import Model
 from .responses.status import Status
 from .responses.state import State
 
-from .http.request import RequestBuilder
+from .http.request import RequestBuilder, MczProgramCommand
 
 
 class MaestroStove:
@@ -95,10 +96,13 @@ class MaestroStove:
         self._status = status
         self._usemockeddata = True
 
-    async def ActivateProgram(self, sensor_id: str, configuration_id: str, value: object, callback_on_success = None):
+    async def ActivateProgram(self, sensor_id: str, configuration_id: str, value: object, callback_on_success = None):         
+        command:list[MczProgramCommand] = [MczProgramCommand(sensor_id, value)]
+        await self.ActivateProgramMultipleCommands(configuration_id, command, callback_on_success)
+    
+    async def ActivateProgramMultipleCommands(self, configuration_id: str, commands:list[MczProgramCommand], callback_on_success = None):
         url = f"https://s.maestro.mcz.it/mcz/v1.0/Program/ActivateProgram/{self.Id}"
-        command = [{"SensorId": sensor_id, "Value": value}]
-        body = RequestBuilder(self, ConfigurationId=configuration_id, Commands=command)
+        body = RequestBuilder(self, ConfigurationId=configuration_id, Commands=[dataclasses.asdict(ob) for ob in commands])
         success = await self._controller.MakeRequest("POST", url=url, body=body, recursive_try_on_error = False)
         if(callback_on_success is not None and success is not None):
             callback_on_success()

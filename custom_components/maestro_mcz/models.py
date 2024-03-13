@@ -133,6 +133,69 @@ class SelectMczConfigItem(MczConfigItem):
         self.value_mappings = value_mappings
 
 @dataclass
+class DateTimeMczConfigItem(MczConfigItem):
+    
+    sensor_set_name_weekday: str | None = None
+    sensor_get_name_weekday: str | None = None
+
+    sensor_set_name_year: str | None = None
+    sensor_get_name_year: str | None = None
+
+    sensor_set_name_month: str | None = None
+    sensor_get_name_month: str | None = None
+
+    sensor_set_name_day: str | None = None
+    sensor_get_name_day: str | None = None
+
+    sensor_set_name_hour: str | None = None
+    sensor_get_name_hour: str | None = None
+
+    sensor_set_name_minute: str | None = None
+    sensor_get_name_minute: str | None = None
+
+    sensor_set_name_second: str | None = None
+    sensor_get_name_second: str | None = None
+
+    sensor_set_name_am_pm: str | None = None
+    sensor_get_name_am_pm: str | None = None
+
+
+
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str,
+                sensor_get_name_weekday:str, sensor_set_name_weekday:str, 
+                sensor_get_name_year:str, sensor_set_name_year:str,
+                sensor_get_name_month:str, sensor_set_name_month:str,
+                sensor_get_name_day:str, sensor_set_name_day:str,
+                sensor_get_name_hour:str, sensor_set_name_hour:str,
+                sensor_get_name_minute:str, sensor_set_name_minute:str,
+                sensor_get_name_second:str, sensor_set_name_second:str,
+                sensor_get_name_am_pm:str, sensor_set_name_am_pm:str,
+                sensor_set_config_name:str, icon:str, category: EntityCategory | None, enabled_by_default: bool):
+        super().__init__(user_friendly_name)
+        self.sensor_get_name = sensor_get_name
+        self.sensor_get_name_weekday = sensor_get_name_weekday
+        self.sensor_get_name_year = sensor_get_name_year
+        self.sensor_get_name_month = sensor_get_name_month
+        self.sensor_get_name_day = sensor_get_name_day
+        self.sensor_get_name_hour = sensor_get_name_hour
+        self.sensor_get_name_minute = sensor_get_name_minute
+        self.sensor_get_name_second = sensor_get_name_second
+        self.sensor_get_name_am_pm = sensor_get_name_am_pm
+        self.icon = icon
+        self.category = category
+        self.sensor_set_name = sensor_set_name
+        self.sensor_set_name_weekday = sensor_set_name_weekday
+        self.sensor_set_name_year = sensor_set_name_year
+        self.sensor_set_name_month = sensor_set_name_month
+        self.sensor_set_name_day = sensor_set_name_day
+        self.sensor_set_name_hour = sensor_set_name_hour
+        self.sensor_set_name_minute = sensor_set_name_minute
+        self.sensor_set_name_second = sensor_set_name_second
+        self.sensor_set_config_name = sensor_set_config_name
+        self.sensor_set_name_am_pm = sensor_set_name_am_pm
+        self.enabled_by_default = enabled_by_default
+
+@dataclass
 class PotMczConfigItem(SelectMczConfigItem):
 
     def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool):
@@ -230,6 +293,31 @@ supported_numbers = [
 supported_selectors = [
     SelectMczConfigItem("Tones", "toni_buzz", "toni_buzz", "Toni", "mdi:volume-high", EntityCategory.CONFIG, True, {"0":"Silent", "1":"Normal", "2":"High"}),
     SelectMczConfigItem("Tones", "toni_buzz", "m1_toni_buzz", "Toni", "mdi:volume-high", EntityCategory.CONFIG, True, {"0":"Silent", "1":"Normal", "2":"High"}), #for first generation M1+
+]
+
+supported_date_times = [
+    DateTimeMczConfigItem("Date & Time",
+                          "giorno", "giorno",
+                          "giorno_sett", "giorno_sett",
+                          "anno", "anno",
+                          "mese", "mese",
+                          "giorno", "giorno",
+                          "ore", "ore",
+                          "minuti", "minuti",
+                          "secondi", "secondi",
+                          "am_pm","am_pm",
+                          "Orodatario", "mdi:calendar-clock", EntityCategory.CONFIG, False),
+    DateTimeMczConfigItem("Date & Time",
+                          "giorno", "m1_giorno",
+                          None, None,
+                          "anno", "m1_anno",
+                          "mese", "m1_mese",
+                          "giorno", "m1_giorno",
+                          "ore", "m1_ore",
+                          "minuti", "m1_minuti",
+                          None, None,
+                          None, None,
+                          "Orodatario", "mdi:calendar-clock", EntityCategory.CONFIG, False),  #for first generation M1+                   
 ]
 
 supported_buttons = [
