@@ -168,7 +168,8 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     def handle_coordinator_update_internal(self) -> None:
         #HVAC mode
-        if(self._supported_power_sensor is not None): 
+        if(self._supported_power_sensor is not None and 
+           hasattr(self.coordinator._maestroapi.Status, self._supported_power_sensor.sensor_get_name)): 
             stato_stufa = getattr(self.coordinator._maestroapi.Status, self._supported_power_sensor.sensor_get_name)
             if(stato_stufa is not None):
                 if(stato_stufa == 0 or stato_stufa == 1):
@@ -185,17 +186,21 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         self._attr_current_temperature = self.coordinator._maestroapi.State.temp_amb_install
 
         #target temp 
-        if(self._supported_thermostat is not None): 
+        if(self._supported_thermostat is not None and 
+           hasattr(self.coordinator._maestroapi.State, self._supported_thermostat.sensor_get_name)): 
             self._attr_target_temperature = getattr(self.coordinator._maestroapi.State, self._supported_thermostat.sensor_get_name)
         else:
             self._attr_target_temperature = None
 
         #preset modes
-        if(self._supported_climate_function_mode is not None): 
-            preset_mode_value = str(getattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name))
-            if(self._supported_climate_function_mode.api_mappings_key_rename is not None and preset_mode_value in self._supported_climate_function_mode.api_mappings_key_rename.keys()):
-                self._attr_preset_mode = self._supported_climate_function_mode.api_mappings_key_rename[preset_mode_value]
-            else:
-                self._attr_preset_mode = preset_mode_value
+        if(self._supported_climate_function_mode is not None and 
+           hasattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name)): 
+            preset_mode_value_raw = getattr(self.coordinator._maestroapi.State, self._supported_climate_function_mode.sensor_get_name)
+            if(preset_mode_value_raw is not None):
+                preset_mode_value = str(preset_mode_value_raw)
+                if(self._supported_climate_function_mode.api_mappings_key_rename is not None and preset_mode_value in self._supported_climate_function_mode.api_mappings_key_rename.keys()):
+                    self._attr_preset_mode = self._supported_climate_function_mode.api_mappings_key_rename[preset_mode_value]
+                else:
+                    self._attr_preset_mode = preset_mode_value
         else:
             self._attr_preset_mode = None

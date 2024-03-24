@@ -144,7 +144,7 @@ class MczCoordinator(DataUpdateCoordinator):
         if(model_configuration is None):
             return None
         else:
-            sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_name is not None and sensor_name is not None and x.sensor_name.lower().strip() == sensor_name.lower().strip()), None)
+            sensor_configuration = next((x for x in model_configuration.configurations if x.sensor_name is not None and sensor_name is not None and x.sensor_name.lower() == sensor_name.lower()), None)
             if(sensor_configuration is not None):
                 return SensorConfiguration(sensor_configuration, model_configuration.configuration_id)
 
