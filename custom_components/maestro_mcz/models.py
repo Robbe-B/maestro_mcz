@@ -284,12 +284,14 @@ supported_numbers = [
     NumberMczConfigItem("Start / Stop - Delay in Shutdown", "rit_ing_standby", "rit_ing_standby", "Start&Stop", "auto", "mdi:fire-off", UnitOfTime.SECONDS ,EntityCategory.CONFIG, None, True), 
     NumberMczConfigItem("Start / Stop - Delay in Shutdown", "rit_ing_standby", "m1_rit_ing_standby", "Start&Stop", "auto", "mdi:fire-off", UnitOfTime.SECONDS ,EntityCategory.CONFIG, None, True), #for first generation M1+ 
     NumberMczConfigItem("Start / Stop - Negative Hysteresis", "ist_eco_neg_amb", "ist_eco_neg_amb", "Start&Stop", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
-    NumberMczConfigItem("Start / Stop - Negative Hysteresis", "ist_eco_neg_amb", "m1_ist_eco_neg_amb", "Start&Stop", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),  #for first generation M1+
+    NumberMczConfigItem("Start / Stop - Negative Hysteresis", "ist_eco_neg_amb", "m1_ist_eco_neg_amb", "Start&Stop", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True), #for first generation M1+
     NumberMczConfigItem("Start / Stop - Positive Hysteresis", "ist_eco_pos_amb", "ist_eco_pos_amb", "Start&Stop", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
     NumberMczConfigItem("Start / Stop - Positive Hysteresis", "ist_eco_pos_amb", "m1_ist_eco_pos_amb", "Start&Stop", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True), #for first generation M1+  
     #ambient
     NumberMczConfigItem("Ambient - Negative Hysteresis", "ist_neg_amb", "ist_neg_amb", "Ambiente", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
+    NumberMczConfigItem("Ambient - Negative Hysteresis", "ist_neg_amb", "m1_ist_neg_amb", "Ambiente", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True), #for first generation M1+
     NumberMczConfigItem("Ambient - Positive Hysteresis", "ist_pos_amb", "ist_pos_amb", "Ambiente", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
+    NumberMczConfigItem("Ambient - Positive Hysteresis", "ist_pos_amb", "m1_ist_pos_amb", "Ambiente", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True), #for first generation M1+
 ]
 
 supported_selectors = [
