@@ -91,6 +91,7 @@ class Status:
     blocking_event_id: str | None = None
     pren_acc: bool | None = None
     umid_rel: float | None = None
+    pres_pul: bool | None = None
 
     #first generation M1+ only fields
     pwd_wifi: str | None = None
@@ -242,6 +243,7 @@ class Status:
                         case "BlockingEventId": self.blocking_event_id = json[key]
                         case "pren_acc" : self.pren_acc = json[key]
                         case "umid_rel" : self.umid_rel = json[key]
+                        case "pres_pul" : self.pres_pul = json[key]
 
 
                         case "pwd_wifi": self.pwd_wifi = json[key]

@@ -42,6 +42,7 @@ class State:
     description: str | None = None
     is_connected: bool | None = None
     is_in_error: bool | None = None
+    pres_pul: bool | None = None
     
     #hydro stove fields
     power_caller: str | None = None
@@ -118,6 +119,7 @@ class State:
                         case "Description": self.description = json[key]
                         case "IsConnected": self.is_connected = json[key]
                         case "IsInError": self.is_in_error = json[key]
+                        case "pres_pul": self.pres_pul = json[key]
                         case "power_caller": self.power_caller = json[key]
                         case "pompa": self.pompa = json[key]
                         case "est_inv": self.est_inv = json[key]
