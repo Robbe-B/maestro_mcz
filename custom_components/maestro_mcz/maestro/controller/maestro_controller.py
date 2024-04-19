@@ -77,12 +77,12 @@ class MaestroController(MaestroControllerInterface):
         headers["tenantid"] = "7c201fd8-42bd-4333-914d-0f5822070757"
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(
-                LOGIN_URL, json=LOGIN_BODY, headers=headers
-            ) as resp:
-                response = await resp.json()
-                self._token = response["Token"]
-                self._connected = True
+            async with session.post(LOGIN_URL, json=LOGIN_BODY, headers=headers) as resp:
+                if resp is not None:
+                    response = await resp.json()
+                    if "Token" in response:
+                        self._token = response["Token"]
+                        self._connected = True
 
         await self.StoveInfo()
 
