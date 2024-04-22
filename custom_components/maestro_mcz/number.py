@@ -39,7 +39,7 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
     # 
     _number_configuration: SensorConfiguration | None = None
 
-    def __init__(self, coordinator, supported_number:models.NumberMczConfigItem, matching_number_configuration: SensorConfiguration):
+    def __init__(self, coordinator, supported_number:models.NumberMczConfigItem, matching_number_configuration: SensorConfiguration)-> None:
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_number.user_friendly_name

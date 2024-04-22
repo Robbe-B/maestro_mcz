@@ -30,7 +30,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_native_value = None
 
-    def __init__(self, coordinator, supported_sensor:models.SensorMczConfigItem):
+    def __init__(self, coordinator, supported_sensor:models.SensorMczConfigItem) -> None:
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_sensor.user_friendly_name

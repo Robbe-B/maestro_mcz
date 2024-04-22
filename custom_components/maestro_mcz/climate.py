@@ -51,7 +51,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _thermostat_configuration: SensorConfiguration | None = None
 
     
-    def __init__(self, coordinator:MczCoordinator, supported_power_sensor: models.PowerSettingMczConfigItem, matching_power_configuration: SensorConfiguration):
+    def __init__(self, coordinator:MczCoordinator, supported_power_sensor: models.PowerSettingMczConfigItem, matching_power_configuration: SensorConfiguration) -> None:
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
 

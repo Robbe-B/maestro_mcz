@@ -31,7 +31,7 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
     _attr_has_entity_name = True
     _attr_is_on = None
 
-    def __init__(self, coordinator, supported_binary_sensor: models.BinarySensorMczConfigItem):
+    def __init__(self, coordinator, supported_binary_sensor: models.BinarySensorMczConfigItem) -> None:
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_binary_sensor.user_friendly_name

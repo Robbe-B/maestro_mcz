@@ -52,7 +52,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
     _fan_configuration: SensorConfigurationMultipleModes | None = None
     _current_fan_configuration: SensorConfiguration | None = None
 
-    def __init__(self, coordinator, supported_fan: models.FanMczConfigItem, matching_fan_configuration: SensorConfigurationMultipleModes):
+    def __init__(self, coordinator, supported_fan: models.FanMczConfigItem, matching_fan_configuration: SensorConfigurationMultipleModes) -> None:
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_fan.user_friendly_name

@@ -42,7 +42,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
      # 
     _selector_configuration: SensorConfiguration | None = None
 
-    def __init__(self, coordinator, supported_selector:models.SelectMczConfigItem, matching_selector_configuration: SensorConfiguration):
+    def __init__(self, coordinator, supported_selector:models.SelectMczConfigItem, matching_selector_configuration: SensorConfiguration) -> None:
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_selector.user_friendly_name
