@@ -196,6 +196,29 @@ class DateTimeMczConfigItem(MczConfigItem):
         self.enabled_by_default = enabled_by_default
 
 @dataclass
+class TimeSyncButtonMczConfigItem(DateTimeMczConfigItem):
+    def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str,
+                sensor_get_name_weekday:str, sensor_set_name_weekday:str, 
+                sensor_get_name_year:str, sensor_set_name_year:str,
+                sensor_get_name_month:str, sensor_set_name_month:str,
+                sensor_get_name_day:str, sensor_set_name_day:str,
+                sensor_get_name_hour:str, sensor_set_name_hour:str,
+                sensor_get_name_minute:str, sensor_set_name_minute:str,
+                sensor_get_name_second:str, sensor_set_name_second:str,
+                sensor_get_name_am_pm:str, sensor_set_name_am_pm:str,
+                sensor_set_config_name:str, icon:str, category: EntityCategory | None, enabled_by_default: bool):
+        super().__init__(user_friendly_name, sensor_get_name, sensor_set_name,
+                sensor_get_name_weekday, sensor_set_name_weekday, 
+                sensor_get_name_year, sensor_set_name_year,
+                sensor_get_name_month, sensor_set_name_month,
+                sensor_get_name_day, sensor_set_name_day,
+                sensor_get_name_hour, sensor_set_name_hour,
+                sensor_get_name_minute, sensor_set_name_minute,
+                sensor_get_name_second, sensor_set_name_second,
+                sensor_get_name_am_pm, sensor_set_name_am_pm,
+                sensor_set_config_name, icon, category, enabled_by_default)
+
+@dataclass
 class PotMczConfigItem(SelectMczConfigItem):
 
     def __init__(self, user_friendly_name:str, sensor_get_name:str, sensor_set_name:str, sensor_set_config_name:str, enabled_by_default: bool):
@@ -327,6 +350,31 @@ supported_date_times = [
 supported_buttons = [
     ButtonMczConfigItem("Alarm Reset","com_reset_allarm","Reset Allarme","mdi:auto-fix", EntityCategory.DIAGNOSTIC, True),
     ButtonMczConfigItem("Alarm Reset","m1_com_reset_allarm","Reset Allarme","mdi:auto-fix", EntityCategory.DIAGNOSTIC, True), #for first generation M1+
+]
+
+supported_time_sync_buttons = [
+    TimeSyncButtonMczConfigItem("Set System Date & Time",
+                                "giorno", "giorno",
+                                "giorno_sett", "giorno_sett",
+                                "anno", "anno",
+                                "mese", "mese",
+                                "giorno", "giorno",
+                                "ore", "ore",
+                                "minuti", "minuti",
+                                "secondi", "secondi",
+                                "am_pm","am_pm",
+                                "Orodatario", "mdi:calendar-clock", EntityCategory.CONFIG, True),
+    TimeSyncButtonMczConfigItem("Set System Date & Time",
+                                "giorno", "m1_giorno",
+                                None, None,
+                                "anno", "m1_anno",
+                                "mese", "m1_mese",
+                                "giorno", "m1_giorno",
+                                "ore", "m1_ore",
+                                "minuti", "m1_minuti",
+                                None, None,
+                                None, None,
+                                "Orodatario", "mdi:calendar-clock", EntityCategory.CONFIG, True),  #for first generation M1+  
 ]
 
 supported_binary_sensors = [
