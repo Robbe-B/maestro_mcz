@@ -43,6 +43,10 @@ class State:
     is_connected: bool | None = None
     is_in_error: bool | None = None
     pres_pul: bool | None = None
+    absolute_battery_charge_level: float | None = None
+    battery_capacity: float | None = None
+    has_battery: bool | None = None
+    pres_rete_ele: bool | None = None
     
     #hydro stove fields
     power_caller: str | None = None
@@ -120,6 +124,11 @@ class State:
                         case "IsConnected": self.is_connected = json[key]
                         case "IsInError": self.is_in_error = json[key]
                         case "pres_pul": self.pres_pul = json[key]
+                        case "absolute_battery_charge_level" : self.absolute_battery_charge_level = json[key]
+                        case "battery_capacity" : self.battery_capacity = json[key]
+                        case "has_battery" : self.has_battery = json[key]
+                        case "pres_rete_ele" : self.pres_rete_ele = json[key]
+
                         case "power_caller": self.power_caller = json[key]
                         case "pompa": self.pompa = json[key]
                         case "est_inv": self.est_inv = json[key]
