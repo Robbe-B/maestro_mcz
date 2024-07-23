@@ -200,7 +200,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
              self._attr_available = True
         else:
             self._attr_available = False
-            return #we can return heere since the fan is disabled in the config and we don't need to update values 
+            return #we can return here since the fan is disabled in the config and we don't need to update values 
         
         #determine silent mode is enabled 
         if(self._supported_fan is not None and self._supported_fan.silent_enabled_get_name is not None):
