@@ -38,7 +38,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self._attr_suggested_display_precision = supported_sensor.display_precision
         self._attr_device_class = supported_sensor.device_class
         self._attr_state_class = supported_sensor.state_class
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_sensor.sensor_get_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_sensor.sensor_get_name}"
         self._attr_icon = supported_sensor.icon
         self._prop = supported_sensor.sensor_get_name
         self._enabled_default = supported_sensor.enabled_by_default

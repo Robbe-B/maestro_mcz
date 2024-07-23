@@ -57,7 +57,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
         #general 
         self._attr_name = None
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}"
         self._attr_icon = "mdi:stove"
 
         #set power on/off config

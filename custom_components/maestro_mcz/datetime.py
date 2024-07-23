@@ -56,7 +56,7 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_date_time.user_friendly_name
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_date_time.sensor_set_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_date_time.sensor_set_name}"
         self._attr_icon = supported_date_time.icon
         self._prop = supported_date_time.sensor_set_name
         self._enabled_default = supported_date_time.enabled_by_default

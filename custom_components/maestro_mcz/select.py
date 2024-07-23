@@ -46,7 +46,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_selector.user_friendly_name
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_selector.sensor_get_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_selector.sensor_get_name}"
         self._attr_icon = supported_selector.icon
         self._prop = supported_selector.sensor_get_name
         self._enabled_default = supported_selector.enabled_by_default

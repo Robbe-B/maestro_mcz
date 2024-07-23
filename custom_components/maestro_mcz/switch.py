@@ -39,7 +39,7 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_switch.user_friendly_name
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_switch.sensor_get_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_switch.sensor_get_name}"
         self._attr_icon = supported_switch.icon
         self._prop = supported_switch.sensor_get_name
         self._enabled_default = supported_switch.enabled_by_default
