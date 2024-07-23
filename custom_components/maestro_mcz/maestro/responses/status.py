@@ -92,6 +92,10 @@ class Status:
     pren_acc: bool | None = None
     umid_rel: float | None = None
     pres_pul: bool | None = None
+    absolute_battery_charge_level: float | None = None
+    battery_capacity: float | None = None
+    has_battery: bool | None = None
+    pres_rete_ele: bool | None = None
 
     #first generation M1+ only fields
     pwd_wifi: str | None = None
@@ -244,6 +248,10 @@ class Status:
                         case "pren_acc" : self.pren_acc = json[key]
                         case "umid_rel" : self.umid_rel = json[key]
                         case "pres_pul" : self.pres_pul = json[key]
+                        case "absolute_battery_charge_level" : self.absolute_battery_charge_level = json[key]
+                        case "battery_capacity" : self.battery_capacity = json[key]
+                        case "has_battery" : self.has_battery = json[key]
+                        case "pres_rete_ele" : self.pres_rete_ele = json[key]
 
 
                         case "pwd_wifi": self.pwd_wifi = json[key]
