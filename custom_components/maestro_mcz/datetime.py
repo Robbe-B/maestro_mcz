@@ -237,28 +237,22 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
             self._attr_weekday = None
 
         if(year is not None and 
-           year != 0 and
            month is not None and
-           month != 0 and
            day is not None and
-           day != 0 and
            hour is not None and
            minute is not None): 
             if(second is None):
                 second = 0
-
-            try:   
-                self._attr_native_value = datetime(
-                    year=year,
-                    month=month,
-                    day=day,
-                    hour=hour,
-                    minute=minute,
-                    second=second,
-                    tzinfo=dt_util.DEFAULT_TIME_ZONE
-                )
-            except:
-                self._attr_native_value = None                
+                
+            self._attr_native_value = datetime(
+                year=year,
+                month=month,
+                day=day,
+                hour=hour,
+                minute=minute,
+                second=second,
+                tzinfo=dt_util.DEFAULT_TIME_ZONE,
+            )        
         else:     
             self._attr_native_value = None
             
