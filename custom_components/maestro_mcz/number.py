@@ -45,7 +45,7 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
         self._attr_name = supported_number.user_friendly_name
         self._attr_native_unit_of_measurement = supported_number.unit
         self._attr_device_class = supported_number.device_class
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_number.sensor_get_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_number.sensor_get_name}"
         self._attr_icon = supported_number.icon
         self._attr_mode = supported_number.mode
         self._prop = supported_number.sensor_get_name

@@ -50,7 +50,7 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_button.user_friendly_name
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_button.sensor_set_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_button.sensor_set_name}"
         self._attr_icon = supported_button.icon
         self._prop = supported_button.sensor_set_name
         self._enabled_default = supported_button.enabled_by_default
@@ -111,7 +111,7 @@ class MczTimeSyncButtonEntity(CoordinatorEntity, ButtonEntity):
         self._mczDateTimeEntity = MczDateTimeEntity(coordinator, supported_time_sync_button, matching_time_sync_button_configuration)
 
         self._attr_name = supported_time_sync_button.user_friendly_name
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_time_sync_button.sensor_set_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_time_sync_button.sensor_set_name}"
         self._attr_icon = supported_time_sync_button.icon
         self._prop = supported_time_sync_button.sensor_set_name
         self._enabled_default = supported_time_sync_button.enabled_by_default

@@ -55,7 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         stove:MaestroStove = stove
         coordinator = MczCoordinator(hass, stove, pollling_interval)
         await coordinator.async_config_entry_first_refresh()
-        if(coordinator.maestroapi.UniqueCode): #avoid adding a disconnected stove without serial number
+        if(coordinator.maestroapi.UniqueCode): #avoid adding a stove without serial number as this is the unique identifier in HA
             stoveList.append(coordinator)
 
     hass.data[DOMAIN][entry.entry_id] = stoveList

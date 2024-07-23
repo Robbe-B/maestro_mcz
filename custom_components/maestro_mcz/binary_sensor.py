@@ -36,7 +36,7 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_binary_sensor.user_friendly_name
         self._attr_device_class = supported_binary_sensor.device_class
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_binary_sensor.sensor_get_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_binary_sensor.sensor_get_name}"
         self._attr_icon = supported_binary_sensor.icon
         self._prop = supported_binary_sensor.sensor_get_name
         self._enabled_default = supported_binary_sensor.enabled_by_default

@@ -56,7 +56,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         super().__init__(coordinator)
         self.coordinator:MczCoordinator = coordinator
         self._attr_name = supported_fan.user_friendly_name
-        self._attr_unique_id = f"{self.coordinator._maestroapi.Status.sm_sn}-{supported_fan.sensor_get_name}"
+        self._attr_unique_id = f"{self.coordinator.maestroapi.UniqueCode}-{supported_fan.sensor_get_name}"
         self._attr_icon = supported_fan.icon
         self._prop = supported_fan.sensor_get_name
         self._enabled_default = supported_fan.enabled_by_default
