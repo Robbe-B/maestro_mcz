@@ -125,14 +125,21 @@ class MczCoordinator(DataUpdateCoordinator):
         return self._maestroapi
      
     def get_device_info(self) -> DeviceInfo:
+        sw_version = ""
+
+        if self.maestroapi.Status.is_connected == True:
+            sw_version = f"{self._maestroapi.Status.sm_nome_app}.{self._maestroapi.Status.sm_vs_app}"
+            +f", Panel:{self._maestroapi.Status.mc_vs_app}"
+            +f", DB:{self._maestroapi.Status.nome_banca_dati_sel}"
+        else:
+            sw_version = "Device Disconnected"
+
         return DeviceInfo(
             identifiers={(DOMAIN, self._maestroapi.UniqueCode)},
             name=self._maestroapi.Name,
             manufacturer=MANUFACTURER,
             model=self._maestroapi.Model.model_name,
-            sw_version=f"{self._maestroapi.Status.sm_nome_app}.{self._maestroapi.Status.sm_vs_app}"
-            + f", Panel:{self._maestroapi.Status.mc_vs_app}"
-            + f", DB:{self._maestroapi.Status.nome_banca_dati_sel}",
+            sw_version=sw_version
         )
     
     def get_model_configuration_by_model_configuration_name(self, model_configuration_name:str) -> ModelConfiguration | None:
