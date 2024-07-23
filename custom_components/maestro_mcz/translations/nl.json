@@ -1,58 +1,58 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "Apparaat is reeds geconfigureerd"
-        },
-        "error": {
-            "cannot_connect": "Verbinding mislukt",
-            "invalid_auth": "Foutieve inloggegevens",
-            "unknown": "Onverwachte fout"
-        },
-        "step": {
-            "user": {
-                "data": {
-                    "password": "Wachtwoord",
-                    "username": "Gebruikersnaam"
-                }
-            }
-        }
-    },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "polling_interval": "Polling Interval (seconden)"
-                }
-            }
-        }
-    },
-    "entity": {
-      "climate": {
-        "main_climate": {
-          "state_attributes": {
-            "preset_mode": {
-              "state": {
-                "manual": "Manual",
-                "auto": "Auto",
-                "overnight": "Overnight",
-                "comfort": "Comfort",
-                "turbo": "Turbo"
+  "config": {
+      "abort": {
+          "already_configured": "Apparaat is reeds geconfigureerd"
+      },
+      "error": {
+          "cannot_connect": "Verbinding mislukt",
+          "invalid_auth": "Foutieve inloggegevens",
+          "unknown": "Onverwachte fout"
+      },
+      "step": {
+          "user": {
+              "data": {
+                  "password": "Wachtwoord",
+                  "username": "Gebruikersnaam"
               }
+          }
+      }
+  },
+  "options": {
+      "step": {
+          "init": {
+              "data": {
+                  "polling_interval": "Polling Interval (seconden)"
+              }
+          }
+      }
+  },
+  "entity": {
+    "climate": {
+      "main_climate": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "manual": "Manueel",
+              "auto": "Automatisch",
+              "overnight": "Nachtmodus",
+              "comfort": "Comfortabel",
+              "turbo": "Krachtig"
             }
           }
         }
-      },
-      "fan": {
-        "main_fan": {
-          "state_attributes": {
-            "preset_mode": {
-              "state": {
-                "auto": "Auto",
-                "silent": "Silent"
-              }
+      }
+    },
+    "fan": {
+      "main_fan": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Automatisch",
+              "silent": "Stil"
             }
           }
         }
       }
     }
+  }
 }
