@@ -48,6 +48,8 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
     _attr_speed_count: int = 0
     _attr_translation_key: str = "main_fan"
     #
+    _enable_turn_on_off_backwards_compatibility = False # to be removed after 2025.2
+    #
     _supported_fan: models.FanMczConfigItem | None = None
     _fan_configuration: SensorConfigurationMultipleModes | None = None
     _current_fan_configuration: SensorConfiguration | None = None
@@ -172,9 +174,14 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
            self._current_fan_configuration.configuration.enabled == True):
                 self._attr_available = True
                 if(self._current_fan_configuration.configuration.type == TypeEnum.INT.value):
+                    #on/off
+                    self._attr_supported_features |= (FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF)
+                    
+                    #speed
                     self._attr_speed_count = int(self._current_fan_configuration.configuration.max)
                     self._attr_supported_features |= FanEntityFeature.SET_SPEED
 
+                    #preset
                     if(self._current_fan_configuration.configuration.variants is not None and 
                         len(self._current_fan_configuration.configuration.variants) > 0):
                             self._attr_preset_modes = []             
