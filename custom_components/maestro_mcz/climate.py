@@ -172,7 +172,10 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
            hasattr(self.coordinator._maestroapi.Status, self._supported_power_sensor.sensor_get_name)): 
             stato_stufa = getattr(self.coordinator._maestroapi.Status, self._supported_power_sensor.sensor_get_name)
             if(stato_stufa is not None):
-                if(stato_stufa == 0 or stato_stufa == 1):
+                if(stato_stufa == -1 or #disconnected
+                   stato_stufa == 0 or #off
+                   stato_stufa == 1 #turning off
+                   ): 
                     self._attr_hvac_mode = HVACMode.OFF
                 else:
                     self._attr_hvac_mode = HVACMode.HEAT
