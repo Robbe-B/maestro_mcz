@@ -3,6 +3,7 @@
 A Home Assistant Custom Component for Maestro MCZ (cloud)
 
 <img src="https://github.com/Robbe-B/maestro_mcz/blob/main/docs/app_icon.png" width="128" height="128">
+<img src="https://github.com/Robbe-B/maestro_mcz/blob/main/docs/old_app_icon.png" width="128" height="128">
 
 ## Functionality
 
