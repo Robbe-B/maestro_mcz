@@ -315,6 +315,12 @@ supported_numbers = [
     NumberMczConfigItem("Ambient - Negative Hysteresis", "ist_neg_amb", "m1_ist_neg_amb", "Ambiente", "auto", "mdi:thermometer-minus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True), #for first generation M1+
     NumberMczConfigItem("Ambient - Positive Hysteresis", "ist_pos_amb", "ist_pos_amb", "Ambiente", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
     NumberMczConfigItem("Ambient - Positive Hysteresis", "ist_pos_amb", "m1_ist_pos_amb", "Ambiente", "auto", "mdi:thermometer-plus", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True), #for first generation M1+
+    
+    #HYDRO - circulation pump
+    NumberMczConfigItem("Circulation Pump - On - Minimum Temperature", "temp_min_circ_on", "temp_min_circ_on", "temp_avanzate", "auto", "mdi:pump", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True),
+    NumberMczConfigItem("Circulation Pump - On - Minimum Temperature", "temp_min_circ_on", "m1_temp_min_circ_on", "temp_avanzate", "auto", "mdi:pump", UnitOfTemperature.CELSIUS ,EntityCategory.CONFIG, NumberDeviceClass.TEMPERATURE, True), #for first generation M1+
+
+
 ]
 
 supported_selectors = [
