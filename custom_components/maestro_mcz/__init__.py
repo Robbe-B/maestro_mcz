@@ -38,7 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     pollling_interval = entry.options.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
 
-    mocked_files = has_mocked_files()
+    mocked_files = await has_mocked_files()
 
     if mocked_files is None:
         maestroapi: MaestroControllerInterface = MaestroController(
@@ -77,10 +77,11 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     """Handle options update."""
     await hass.config_entries.async_reload(entry.entry_id)
 
-def has_mocked_files() -> list[str] | None:
+async def has_mocked_files() -> list[str] | None:
     try:
+        loop = asyncio.get_running_loop()
         folder_path = "config/custom_components/maestro_mcz/mocked"
-        files_in_dir = os.listdir(folder_path)
+        files_in_dir = await loop.run_in_executor(None, os.listdir, folder_path)
         if(files_in_dir is not None):
             return [folder_path + "/" + file for file in files_in_dir]
         else:

@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import asyncio
 
 from ..responses.state import State
 from ..responses.status import Status
@@ -51,7 +52,8 @@ class MockedController(MaestroControllerInterface):
         if(self._file_paths is not None):
             for _file_path in self._file_paths:
                 try:
-                    f = open(_file_path)
+                    loop = asyncio.get_running_loop()
+                    f = await loop.run_in_executor(None, open, _file_path)
                     data = json.load(f)
                     devices = data["data"]["devices"]
                     for stove in list(devices.values()):
