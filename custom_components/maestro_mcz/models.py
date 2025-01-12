@@ -1,12 +1,21 @@
 """Dynamic Models Config."""
 
 from dataclasses import dataclass
+from enum import Enum
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.number import NumberDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfTemperature, UnitOfTime
 from homeassistant.helpers.entity import EntityCategory
+
+
+class MczStoveModelGeneration(Enum):
+    """Representation of a MCZ Stove Model Generation enum."""
+
+    M1 = 1
+    M2 = 2
+    M3 = 3
 
 
 @dataclass
@@ -21,6 +30,10 @@ class MczConfigItem:
     )
     sensor_set_config_name: str | None = None
 
+    stove_model_generation: MczStoveModelGeneration | None = (
+        None  # for sensors this will be null
+    )
+
     # optional
     mode_to_configuration_name_mapping: dict[str, str] | None = (
         None  # key => Mode | value => Configuration Name
@@ -31,9 +44,12 @@ class MczConfigItem:
     enabled_by_default: bool = True
     category: EntityCategory | None = None
 
-    def __init__(self, user_friendly_name: str) -> None:
+    def __init__(
+        self, user_friendly_name: str, stove_model_generation: MczStoveModelGeneration
+    ) -> None:
         """Create a generic MCZ config item."""
         self.user_friendly_name = user_friendly_name
+        self.stove_model_generation = stove_model_generation
 
 
 @dataclass
@@ -47,9 +63,10 @@ class PowerSettingMczConfigItem(MczConfigItem):
         sensor_set_name: str,
         sensor_set_config_name: str,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Power Setting' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.icon = "mdi:power"
         self.sensor_set_name = sensor_set_name
@@ -70,10 +87,11 @@ class ClimateFunctionModeMczConfigItem(MczConfigItem):
         sensor_set_name: str,
         sensor_set_config_name: str,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
         api_mappings_key_rename: dict[str, str] | None,
     ) -> None:
         """Create a 'Climate Function Mode' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.icon = "mdi:thermostat-cog"
         self.sensor_set_name = sensor_set_name
@@ -93,9 +111,10 @@ class ThermostatMczConfigItem(MczConfigItem):
         sensor_set_name: str,
         sensor_set_config_name: str,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Thermostat' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.icon = "mdi:thermostat"
         self.sensor_set_name = sensor_set_name
@@ -117,9 +136,10 @@ class FanMczConfigItem(MczConfigItem):
         mode_to_configuration_name_mapping: dict[str, str],
         silent_enabled_get_name: str | None,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Fan' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.icon = "mdi:fan"
         self.unavailable_icon = "mdi:fan-off"
@@ -141,9 +161,10 @@ class ButtonMczConfigItem(MczConfigItem):
         icon: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Button' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.icon = icon
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
@@ -164,9 +185,10 @@ class SwitchMczConfigItem(MczConfigItem):
         icon: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Switch' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.icon = icon
         self.sensor_set_name = sensor_set_name
@@ -194,9 +216,10 @@ class NumberMczConfigItem(MczConfigItem):
         category: EntityCategory | None,
         device_class: NumberDeviceClass | None,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Number' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.mode = mode
         self.icon = icon
@@ -226,10 +249,11 @@ class SelectMczConfigItem(MczConfigItem):
         icon: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
         value_mappings: dict[str, str] | None,
     ) -> None:
         """Create a 'Select' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.icon = icon
         self.category = category
@@ -292,9 +316,10 @@ class DateTimeMczConfigItem(MczConfigItem):
         icon: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'DateTime' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, stove_model_generation)
         self.sensor_get_name = sensor_get_name
         self.sensor_get_name_weekday = sensor_get_name_weekday
         self.sensor_get_name_year = sensor_get_name_year
@@ -348,6 +373,7 @@ class TimeSyncButtonMczConfigItem(DateTimeMczConfigItem):
         icon: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Time Sync Button' MCZ config item."""
         super().__init__(
@@ -374,6 +400,7 @@ class TimeSyncButtonMczConfigItem(DateTimeMczConfigItem):
             icon,
             category,
             enabled_by_default,
+            stove_model_generation,
         )
 
 
@@ -388,6 +415,7 @@ class PotMczConfigItem(SelectMczConfigItem):
         sensor_set_name: str,
         sensor_set_config_name: str,
         enabled_by_default: bool,
+        stove_model_generation: MczStoveModelGeneration,
     ) -> None:
         """Create a 'Pot' MCZ config item."""
         super().__init__(
@@ -398,6 +426,7 @@ class PotMczConfigItem(SelectMczConfigItem):
             "mdi:fire",
             None,
             enabled_by_default,
+            stove_model_generation,
             None,
         )
 
@@ -418,7 +447,7 @@ class BinarySensorMczConfigItem(MczConfigItem):
         enabled_by_default: bool,
     ) -> None:
         """Create a 'Binary Sensor' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, None)
         self.sensor_get_name = sensor_get_name
         self.icon = icon
         self.category = category
@@ -450,7 +479,7 @@ class SensorMczConfigItem(MczConfigItem):
         api_value_renames: dict[str, str] | None = None,
     ) -> None:
         """Create a 'Sensor' MCZ config item."""
-        super().__init__(user_friendly_name)
+        super().__init__(user_friendly_name, None)
         self.sensor_get_name = sensor_get_name
         self.icon = icon
         self.unit = unit
@@ -464,16 +493,32 @@ class SensorMczConfigItem(MczConfigItem):
 
 supported_power_settings = [
     PowerSettingMczConfigItem(
-        "Power", "stato_stufa", "com_on_off", "Spegnimento", True
+        "Power",
+        "stato_stufa",
+        "com_on_off",
+        "Spegnimento",
+        True,
+        MczStoveModelGeneration.M2,
     ),
     PowerSettingMczConfigItem(
-        "Power", "stato_stufa", "m1_stato_stufa", "Spegnimento", True
-    ),  # for first generation M1+
+        "Power",
+        "stato_stufa",
+        "m1_stato_stufa",
+        "Spegnimento",
+        True,
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_climate_function_modes = [
     ClimateFunctionModeMczConfigItem(
-        "Mode", "mode", "mod_funz", "set_mod", True, {"dynamic": "auto"}
+        "Mode",
+        "mode",
+        "mod_funz",
+        "set_mod",
+        True,
+        MczStoveModelGeneration.M2,
+        {"dynamic": "auto"},
     ),
     ClimateFunctionModeMczConfigItem(
         "Mode",
@@ -481,36 +526,79 @@ supported_climate_function_modes = [
         "m1_mod_lav_att",
         "set_mod",
         True,
+        MczStoveModelGeneration.M1,
         {"dynamic": "auto", "power": "turbo"},
-    ),  # for first generation M1+
+    ),
 ]
 
 supported_thermostats = [
     ThermostatMczConfigItem(
-        "Ambient Temperature", "set_amb1", "set_amb1", "Set_amb_temp", True
+        "Ambient Temperature",
+        "set_amb1",
+        "set_amb1",
+        "Set_amb_temp",
+        True,
+        MczStoveModelGeneration.M2,
     ),
     ThermostatMczConfigItem(
-        "Ambient Temperature", "set_amb1", "m1_set_amb1", "Set_amb_temp", True
-    ),  # for first generation M1+
-    ThermostatMczConfigItem(
-        "Ambient Temperature 2", "set_amb2", "set_amb2", "Set_amb_temp", True
+        "Ambient Temperature",
+        "set_amb1",
+        "m1_set_amb1",
+        "Set_amb_temp",
+        True,
+        MczStoveModelGeneration.M1,
     ),
     ThermostatMczConfigItem(
-        "Ambient Temperature 2", "set_amb2", "m1_set_amb2", "Set_amb_temp", True
-    ),  # for first generation M1+
-    ThermostatMczConfigItem(
-        "Ambient Temperature 3", "set_amb3", "set_amb3", "Set_amb_temp", True
+        "Ambient Temperature 2",
+        "set_amb2",
+        "set_amb2",
+        "Set_amb_temp",
+        True,
+        MczStoveModelGeneration.M2,
     ),
     ThermostatMczConfigItem(
-        "Ambient Temperature 3", "set_amb3", "m1_set_amb3", "Set_amb_temp", True
-    ),  # for first generation M1+
+        "Ambient Temperature 2",
+        "set_amb2",
+        "m1_set_amb2",
+        "Set_amb_temp",
+        True,
+        MczStoveModelGeneration.M1,
+    ),
+    ThermostatMczConfigItem(
+        "Ambient Temperature 3",
+        "set_amb3",
+        "set_amb3",
+        "Set_amb_temp",
+        True,
+        MczStoveModelGeneration.M2,
+    ),
+    ThermostatMczConfigItem(
+        "Ambient Temperature 3",
+        "set_amb3",
+        "m1_set_amb3",
+        "Set_amb_temp",
+        True,
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_pots = [
-    PotMczConfigItem("Manual Power", "set_pot_man", "set_pot_man", "Set_pot", True),
     PotMczConfigItem(
-        "Manual Power", "set_pot_man", "m1_potenza_att", "Set_pot", True
-    ),  # for first generation M1+
+        "Manual Power",
+        "set_pot_man",
+        "set_pot_man",
+        "Set_pot",
+        True,
+        MczStoveModelGeneration.M2,
+    ),
+    PotMczConfigItem(
+        "Manual Power",
+        "set_pot_man",
+        "m1_potenza_att",
+        "Set_pot",
+        True,
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_fans = [
@@ -527,6 +615,7 @@ supported_fans = [
         },
         "silent_enabled",
         True,
+        MczStoveModelGeneration.M2,
     ),
     FanMczConfigItem(
         "Fan 1",
@@ -541,7 +630,8 @@ supported_fans = [
         },
         "silent_enabled",
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     FanMczConfigItem(
         "Fan 2",
         "set_vent_v2",
@@ -555,6 +645,7 @@ supported_fans = [
         },
         "silent_enabled",
         True,
+        MczStoveModelGeneration.M2,
     ),
     FanMczConfigItem(
         "Fan 2",
@@ -569,7 +660,8 @@ supported_fans = [
         },
         "silent_enabled",
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     FanMczConfigItem(
         "Fan 3",
         "set_vent_v3",
@@ -583,6 +675,7 @@ supported_fans = [
         },
         "silent_enabled",
         True,
+        MczStoveModelGeneration.M2,
     ),
     FanMczConfigItem(
         "Fan 3",
@@ -597,22 +690,51 @@ supported_fans = [
         },
         "silent_enabled",
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_switches = [
     SwitchMczConfigItem(
-        "Start / Stop", "att_eco", "att_eco", "Start&Stop", "mdi:leaf", None, True
+        "Start / Stop",
+        "att_eco",
+        "att_eco",
+        "Start&Stop",
+        "mdi:leaf",
+        None,
+        True,
+        MczStoveModelGeneration.M2,
     ),
     SwitchMczConfigItem(
-        "Start / Stop", "att_eco", "m1_att_eco", "Start&Stop", "mdi:leaf", None, True
-    ),  # for first generation M1+
-    SwitchMczConfigItem(
-        "Timer", "crono_enabled", "att", "Crono", "mdi:timer", None, True
+        "Start / Stop",
+        "att_eco",
+        "m1_att_eco",
+        "Start&Stop",
+        "mdi:leaf",
+        None,
+        True,
+        MczStoveModelGeneration.M1,
     ),
     SwitchMczConfigItem(
-        "Timer", "crono_enabled", "m1_crono_enabled", "Crono", "mdi:timer", None, True
-    ),  # for first generation M1+
+        "Timer",
+        "crono_enabled",
+        "att",
+        "Crono",
+        "mdi:timer",
+        None,
+        True,
+        MczStoveModelGeneration.M2,
+    ),
+    SwitchMczConfigItem(
+        "Timer",
+        "crono_enabled",
+        "m1_crono_enabled",
+        "Crono",
+        "mdi:timer",
+        None,
+        True,
+        MczStoveModelGeneration.M1,
+    ),
     # SwitchMczConfigItem("Silent Mode", "silent_enabled", "m1_silent_enabled", "set_v1", "mdi:fan-off", None, True),  #for first generation M1+
 ]
 
@@ -629,6 +751,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         None,
         True,
+        MczStoveModelGeneration.M2,
     ),
     NumberMczConfigItem(
         "Start / Stop - Delay in Ignition",
@@ -641,7 +764,8 @@ supported_numbers = [
         EntityCategory.CONFIG,
         None,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     NumberMczConfigItem(
         "Start / Stop - Delay in Shutdown",
         "rit_ing_standby",
@@ -653,6 +777,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         None,
         True,
+        MczStoveModelGeneration.M2,
     ),
     NumberMczConfigItem(
         "Start / Stop - Delay in Shutdown",
@@ -665,7 +790,8 @@ supported_numbers = [
         EntityCategory.CONFIG,
         None,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     NumberMczConfigItem(
         "Start / Stop - Negative Hysteresis",
         "ist_eco_neg_amb",
@@ -677,6 +803,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
+        MczStoveModelGeneration.M2,
     ),
     NumberMczConfigItem(
         "Start / Stop - Negative Hysteresis",
@@ -689,7 +816,8 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     NumberMczConfigItem(
         "Start / Stop - Positive Hysteresis",
         "ist_eco_pos_amb",
@@ -701,6 +829,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
+        MczStoveModelGeneration.M2,
     ),
     NumberMczConfigItem(
         "Start / Stop - Positive Hysteresis",
@@ -713,7 +842,8 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     # ambient
     NumberMczConfigItem(
         "Ambient - Negative Hysteresis",
@@ -726,6 +856,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
+        MczStoveModelGeneration.M2,
     ),
     NumberMczConfigItem(
         "Ambient - Negative Hysteresis",
@@ -738,7 +869,8 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     NumberMczConfigItem(
         "Ambient - Positive Hysteresis",
         "ist_pos_amb",
@@ -750,6 +882,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
+        MczStoveModelGeneration.M2,
     ),
     NumberMczConfigItem(
         "Ambient - Positive Hysteresis",
@@ -762,7 +895,8 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
     # HYDRO - circulation pump
     NumberMczConfigItem(
         "Circulation Pump - On - Minimum Temperature",
@@ -775,6 +909,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
+        MczStoveModelGeneration.M2,
     ),
     NumberMczConfigItem(
         "Circulation Pump - On - Minimum Temperature",
@@ -787,7 +922,8 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_selectors = [
@@ -799,6 +935,7 @@ supported_selectors = [
         "mdi:volume-high",
         EntityCategory.CONFIG,
         True,
+        MczStoveModelGeneration.M2,
         {"0": "Silent", "1": "Normal", "2": "High"},
     ),
     SelectMczConfigItem(
@@ -809,8 +946,9 @@ supported_selectors = [
         "mdi:volume-high",
         EntityCategory.CONFIG,
         True,
+        MczStoveModelGeneration.M1,
         {"0": "Silent", "1": "Normal", "2": "High"},
-    ),  # for first generation M1+
+    ),
 ]
 
 supported_date_times = [
@@ -838,6 +976,7 @@ supported_date_times = [
         "mdi:calendar-clock",
         EntityCategory.CONFIG,
         False,
+        MczStoveModelGeneration.M2,
     ),
     DateTimeMczConfigItem(
         "Date & Time",
@@ -863,7 +1002,8 @@ supported_date_times = [
         "mdi:calendar-clock",
         EntityCategory.CONFIG,
         False,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_buttons = [
@@ -874,6 +1014,7 @@ supported_buttons = [
         "mdi:auto-fix",
         EntityCategory.DIAGNOSTIC,
         True,
+        MczStoveModelGeneration.M2,
     ),
     ButtonMczConfigItem(
         "Alarm Reset",
@@ -882,7 +1023,8 @@ supported_buttons = [
         "mdi:auto-fix",
         EntityCategory.DIAGNOSTIC,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_time_sync_buttons = [
@@ -910,6 +1052,7 @@ supported_time_sync_buttons = [
         "mdi:calendar-clock",
         EntityCategory.CONFIG,
         True,
+        MczStoveModelGeneration.M2,
     ),
     TimeSyncButtonMczConfigItem(
         "Set System Date & Time",
@@ -935,7 +1078,8 @@ supported_time_sync_buttons = [
         "mdi:calendar-clock",
         EntityCategory.CONFIG,
         True,
-    ),  # for first generation M1+
+        MczStoveModelGeneration.M1,
+    ),
 ]
 
 supported_binary_sensors = [
