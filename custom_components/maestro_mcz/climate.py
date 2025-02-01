@@ -60,7 +60,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     _enable_turn_on_off_backwards_compatibility = False  # to be removed after 2025.1
 
-    _supported_power_sensor: models.MczConfigItem | None = None
+    _supported_power_sensor: models.PowerSettingMczConfigItem | None = None
     _supported_thermostat: models.MczConfigItem | None = None
     _supported_climate_function_mode: models.MczConfigItem | None = None
     #
@@ -283,6 +283,19 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                 self.coordinator.maestroapi.Status,
                 self._supported_power_sensor.sensor_get_name,
             )
+
+            fase_op = getattr(
+                self.coordinator.maestroapi.Status,
+                self._supported_power_sensor.fase_sensor_get_name,
+            )
+
+            
+            #sub_fase_op = getattr(
+            #    self.coordinator.maestroapi.Status,
+            #    self._supported_power_sensor.sub_fase_sensor_get_name,
+            #)
+            
+
             if stato_stufa is not None:
                 match self._supported_power_sensor.stove_model_generation:
                     case models.MczStoveModelGeneration.M1:  # M1 models
@@ -323,18 +336,28 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                                 self._attr_hvac_action = HVACAction.OFF
                                 self._attr_hvac_mode = HVACMode.OFF
                             case 1:  # turning-off (cooling-down)
-                                self._attr_hvac_action = HVACAction.IDLE
-                                self._attr_hvac_mode = HVACMode.OFF
+                                if fase_op is not None and fase_op == "turning-off":
+                                    self._attr_hvac_action = HVACAction.IDLE
+                                    self._attr_hvac_mode = HVACMode.OFF
+                                else:
+                                    self._attr_hvac_action = HVACAction.OFF
+                                    self._attr_hvac_mode = HVACMode.OFF
                             case 2:  # standby
                                 # cooling down => turning-off (turning-off 2)
-                                # really off => off (null)
-                                self._attr_hvac_action = HVACAction.IDLE
-                                self._attr_hvac_mode = HVACMode.HEAT
+                                if fase_op is not None and fase_op == "turning-off":
+                                    self._attr_hvac_action = HVACAction.IDLE
+                                    self._attr_hvac_mode = HVACMode.HEAT
+                                else: # really off => off (null)
+                                    self._attr_hvac_action = HVACAction.IDLE
+                                    self._attr_hvac_mode = HVACMode.HEAT
                             case 3:  # on
                                 # starting up (preheat) => turning-on (loading, start-1, start-2, stabilization, anti-condensation)
-                                # on (working) => on (null)
-                                self._attr_hvac_action = HVACAction.HEATING
-                                self._attr_hvac_mode = HVACMode.HEAT
+                                if fase_op is not None and fase_op == "turning-on":
+                                    self._attr_hvac_action = HVACAction.PREHEATING
+                                    self._attr_hvac_mode = HVACMode.HEAT
+                                else:  #on (working) => on (null)
+                                    self._attr_hvac_action = HVACAction.HEATING
+                                    self._attr_hvac_mode = HVACMode.HEAT
                             case _:  # default (on)
                                 self._attr_hvac_action = HVACAction.HEATING
                                 self._attr_hvac_mode = HVACMode.HEAT

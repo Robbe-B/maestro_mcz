@@ -55,6 +55,14 @@ class MczConfigItem:
 @dataclass
 class PowerSettingMczConfigItem(MczConfigItem):
     """Representation of a 'Power Setting' MCZ config item."""
+   
+    fase_sensor_get_name: str | None = (
+        None  # name used for getting data out of the state and status reponses
+    )
+
+    sub_fase_sensor_get_name: str | None = (
+        None  # name used for getting data out of the state and status reponses
+    )
 
     def __init__(
         self,
@@ -62,6 +70,8 @@ class PowerSettingMczConfigItem(MczConfigItem):
         sensor_get_name: str,
         sensor_set_name: str,
         sensor_set_config_name: str,
+        fase_sensor_get_name: str,
+        sub_fase_sensor_get_name: str,
         enabled_by_default: bool,
         stove_model_generation: MczStoveModelGeneration,
     ) -> None:
@@ -71,6 +81,8 @@ class PowerSettingMczConfigItem(MczConfigItem):
         self.icon = "mdi:power"
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
+        self.fase_sensor_get_name = fase_sensor_get_name
+        self.sub_fase_sensor_get_name = sub_fase_sensor_get_name
         self.enabled_by_default = enabled_by_default
 
 
@@ -497,6 +509,8 @@ supported_power_settings = [
         "stato_stufa",
         "com_on_off",
         "Spegnimento",
+        "fase_op",
+        "sub_fase_op",
         True,
         MczStoveModelGeneration.M2,
     ),
@@ -505,6 +519,8 @@ supported_power_settings = [
         "stato_stufa",
         "m1_stato_stufa",
         "Spegnimento",
+        "fase_op",
+        "sub_fase_op",
         True,
         MczStoveModelGeneration.M1,
     ),
