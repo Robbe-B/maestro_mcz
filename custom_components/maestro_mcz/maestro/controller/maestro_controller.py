@@ -1,6 +1,6 @@
 import json
 import aiohttp
-import async_timeout
+import asyncio
 
 from .. import MaestroStove
 from ..const import LOGIN_URL
@@ -36,7 +36,7 @@ class MaestroController(MaestroControllerInterface):
         return self._stoves
 
     async def MakeRequest(self, method:str, url:str, headers={}, body=None, recursive_try_on_error:bool = True, is_first_try:bool = True):
-        async with async_timeout.timeout(15):
+        async with asyncio.timeout(15):
             headers["auth-token"] = self._token
 
             try:
