@@ -47,6 +47,7 @@ class State:
     battery_capacity: float | None = None
     has_battery: bool | None = None
     pres_rete_ele: bool | None = None
+    is_live_only: bool | None = None
     
     #hydro stove fields
     power_caller: str | None = None
@@ -128,6 +129,7 @@ class State:
                         case "battery_capacity" : self.battery_capacity = json[key]
                         case "has_battery" : self.has_battery = json[key]
                         case "pres_rete_ele" : self.pres_rete_ele = json[key]
+                        case "IsLiveOnly" : self.is_live_only = json[key]
 
                         case "power_caller": self.power_caller = json[key]
                         case "pompa": self.pompa = json[key]

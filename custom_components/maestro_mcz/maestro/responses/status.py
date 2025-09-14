@@ -96,6 +96,10 @@ class Status:
     battery_capacity: float | None = None
     has_battery: bool | None = None
     pres_rete_ele: bool | None = None
+    en_sav_m : int | None = None
+    sav_m : bool | None = None
+    pos_ric_asp: float | None = None
+    is_live_only: bool | None = None
 
     #first generation M1+ only fields
     pwd_wifi: str | None = None
@@ -252,6 +256,10 @@ class Status:
                         case "battery_capacity" : self.battery_capacity = json[key]
                         case "has_battery" : self.has_battery = json[key]
                         case "pres_rete_ele" : self.pres_rete_ele = json[key]
+                        case "en_sav_m" : self.en_sav_m = json[key]
+                        case "sav_m" : self.sav_m = json[key]
+                        case "pos_ric_asp" : self.pos_ric_asp = json[key]
+                        case "IsLiveOnly" : self.is_live_only = json[key]
 
 
                         case "pwd_wifi": self.pwd_wifi = json[key]
