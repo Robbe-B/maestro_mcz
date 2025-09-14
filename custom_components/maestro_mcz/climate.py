@@ -321,6 +321,9 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                             case 46:  # standby
                                 self._attr_hvac_action = HVACAction.IDLE
                                 self._attr_hvac_mode = HVACMode.HEAT
+                            case 51: #alarm
+                                self._attr_hvac_action = HVACAction.OFF
+                                self._attr_hvac_mode = HVACMode.OFF
                             case _:  # default (on)
                                 self._attr_hvac_action = HVACAction.HEATING
                                 self._attr_hvac_mode = HVACMode.HEAT
