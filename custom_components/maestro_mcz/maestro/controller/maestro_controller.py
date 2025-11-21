@@ -6,6 +6,8 @@ from .. import MaestroStove
 from ..const import LOGIN_URL
 from ..controller.controller_interface import MaestroControllerInterface
 
+_LOGGER = logging.getLogger(__name__)
+
 class MaestroController(MaestroControllerInterface):
     def __init__(self, username, password):
         self._username = username
@@ -49,7 +51,8 @@ class MaestroController(MaestroControllerInterface):
                         jbody = json.dumps(body, ensure_ascii=False)
                         async with session.post(url, headers=headers, data=jbody) as resp:
                             response = await resp.json()
-                    if resp.status == 200:
+                    
+                    if resp is not None and resp.status == 200:
                         return response
                     elif(is_first_try or recursive_try_on_error):  #we always try once more in case there was an unsuccessful attempt for the first try or if we need to retry recursively
                         await self.Login()
@@ -59,14 +62,15 @@ class MaestroController(MaestroControllerInterface):
                     else:
                         return None
             except Exception as err:
-                print(f"Error making request. Attempting to relogin. Error: {err}")
-
                 #we always try once more in case there was an error for the first try or if we need to retry recursively
                 if(is_first_try or recursive_try_on_error):
+                    _LOGGER.warning(f"Error making request. Attempting to relogin... Error: {err}")
                     await self.Login()
                     return await self.MakeRequest(
                         method=method, url=url, headers=headers, body=body, recursive_try_on_error=recursive_try_on_error, is_first_try = False
                     )
+                else:
+                    _LOGGER.warning(f"Error making request. Error: {err}")
         return None
 
     async def Login(self):
