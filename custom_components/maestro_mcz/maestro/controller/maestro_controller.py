@@ -1,6 +1,7 @@
 import json
 import aiohttp
 import asyncio
+import logging
 
 from .. import MaestroStove
 from ..const import LOGIN_URL
