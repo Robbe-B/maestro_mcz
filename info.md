@@ -15,3 +15,5 @@ Since this integration is still in the beta stage, breaking changes might occur 
 
 There are a couple of milestones set. Feel free to check them out at [Milestones](https://github.com/Robbe-B/maestro_mcz/milestones)
 
+## Credits
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/rbprojects)
