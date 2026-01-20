@@ -18,3 +18,6 @@ There are a couple of milestones set. Feel free to check them out at [Milestones
 ## Installation
 
 [Wiki Instructions](https://github.com/Robbe-B/maestro_mcz/wiki/Setup)
+
+## Credits
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/rbprojects)
