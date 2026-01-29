@@ -76,6 +76,9 @@ class State:
     ing_term_amb3: bool | None = None
     ingr_ntc2: int | None = None
     ingr_ntc3: int | None = None
+    min_temp_puffer: int | None = None
+    max_temp_puffer: int | None = None
+
     
 
     unknown_fields: dict | None = None
@@ -157,6 +160,8 @@ class State:
                         case "ing_term_amb3": self.ing_term_amb3 = json[key]
                         case "ingr_ntc2": self.ingr_ntc2 = json[key]
                         case "ingr_ntc3": self.ingr_ntc3 = json[key]
+                        case "min_temp_puffer": self.min_temp_puffer = json[key]
+                        case "max_temp_puffer": self.max_temp_puffer = json[key]
                         case _ :
                             temp_unknown_fields[key] = json[key]
                             _LOGGER.warning(f"Unknown state property '{key}' received from API endpoint. If this happens, please make an issue on the github repository")
