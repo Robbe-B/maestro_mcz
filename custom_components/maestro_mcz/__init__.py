@@ -7,14 +7,15 @@ from datetime import timedelta
 import logging
 import os
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .config_flow import CONF_POLLING_INTERVAL
-from .const import DEFAULT_POLLING_INTERVAL, DOMAIN, MANUFACTURER
+from .const import DEFAULT_POLLING_INTERVAL, DOMAIN, MANUFACTURER, MOCKED_FILES
 from .maestro import MaestroStove
 from .maestro.controller.controller_interface import MaestroControllerInterface
 from .maestro.controller.maestro_controller import MaestroController
@@ -40,6 +41,28 @@ PLATFORMS: list[Platform] = [
 _LOGGER = logging.getLogger(__name__)
 
 
+async def async_setup(hass: HomeAssistant, config: ConfigType):
+    """Set up the integration from code."""
+
+    # create a new hub when there are mocked files
+    mocked_files = await has_mocked_files()
+
+    if mocked_files is not None:
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_IMPORT},
+                data={
+                    MOCKED_FILES: mocked_files,
+                    CONF_HOST: "127.0.0.1",
+                    CONF_USERNAME: "DummyUsername",
+                    CONF_PASSWORD: "DummyPassword",
+                },
+            )
+        )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up maestro_mcz from a config entry."""
 
@@ -49,7 +72,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL
     )
 
-    mocked_files = await has_mocked_files()
+    mocked_files = entry.data.get(MOCKED_FILES, None)
 
     if mocked_files is None:
         maestroapi: MaestroControllerInterface = MaestroController(
@@ -72,7 +95,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
     return True
 
 
