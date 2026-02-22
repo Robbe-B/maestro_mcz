@@ -1,4 +1,5 @@
 """Config flow for maestro_mcz integration."""
+
 from __future__ import annotations
 
 import logging
@@ -6,17 +7,18 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 
-from homeassistant.const import (
-    CONF_USERNAME,
-    CONF_PASSWORD,
-)
-
-from .const import DOMAIN, DEFAULT_POLLING_INTERVAL
+from .const import DEFAULT_POLLING_INTERVAL, DOMAIN
 from .maestro.controller.controller_interface import MaestroControllerInterface
 from .maestro.controller.maestro_controller import MaestroController
 
@@ -36,7 +38,9 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
-    controller:MaestroControllerInterface = MaestroController(data[CONF_USERNAME], data[CONF_PASSWORD])
+    controller: MaestroControllerInterface = MaestroController(
+        data[CONF_USERNAME], data[CONF_PASSWORD]
+    )
     await controller.Login()
     await controller.StoveInfo()
 
@@ -49,7 +53,8 @@ class MCZConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
         if user_input is None:
@@ -76,13 +81,28 @@ class MCZConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
-    
+
+    async def async_step_import(self, import_data: dict[str, Any]) -> ConfigFlowResult:
+        """Handle a flow initiated by the async_setup code."""
+
+        # 1. Set a unique ID based on something static (IP, MAC, or a fixed string)
+        await self.async_set_unique_id(import_data[CONF_HOST])
+
+        # 2. This helper immediately stops the flow if the ID is already in HA
+        self._abort_if_unique_id_configured()
+
+        # 3. If not already there, create the entry
+        return self.async_create_entry(
+            title=f"Hub ({import_data[CONF_HOST]})", data=import_data
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         """Get the options flow for this handler."""
         return OptionsFlowHandler()
-        
+
+
 class OptionsFlowHandler(OptionsFlow):
     """Handle a option flow for MCZ."""
 
@@ -104,7 +124,8 @@ class OptionsFlowHandler(OptionsFlow):
         }
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(base_schema))
-    
+
+
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
 
