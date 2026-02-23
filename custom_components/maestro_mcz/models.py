@@ -55,7 +55,7 @@ class MczConfigItem:
 @dataclass
 class PowerSettingMczConfigItem(MczConfigItem):
     """Representation of a 'Power Setting' MCZ config item."""
-   
+
     fase_sensor_get_name: str | None = (
         None  # name used for getting data out of the state and status reponses
     )
@@ -1105,6 +1105,14 @@ supported_binary_sensors = [
         "mdi:alert",
         EntityCategory.DIAGNOSTIC,
         BinarySensorDeviceClass.PROBLEM,
+        True,
+    ),
+    BinarySensorMczConfigItem(
+        "Device Connection Status",
+        "is_connected",
+        "mdi:connection",
+        EntityCategory.DIAGNOSTIC,
+        BinarySensorDeviceClass.CONNECTIVITY,
         True,
     ),
 ]
