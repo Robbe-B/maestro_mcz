@@ -5,17 +5,18 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 import logging
-import os
+from pathlib import Path
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .config_flow import CONF_POLLING_INTERVAL
-from .const import DEFAULT_POLLING_INTERVAL, DOMAIN, MANUFACTURER, MOCKED_FILES
+from .const import DEFAULT_POLLING_INTERVAL, DOMAIN, MANUFACTURER, MOCKED_FOLDER
 from .maestro import MaestroStove
 from .maestro.controller.controller_interface import MaestroControllerInterface
 from .maestro.controller.maestro_controller import MaestroController
@@ -45,16 +46,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
     """Set up the integration from code."""
 
     # create a new hub when there are mocked files
-    mocked_files = await has_mocked_files()
+    mocked_folder = await has_mocked_folder()
 
-    if mocked_files is not None:
+    if mocked_folder is not None:
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN,
                 context={"source": SOURCE_IMPORT},
                 data={
-                    MOCKED_FILES: mocked_files,
-                    CONF_HOST: "127.0.0.1",
+                    MOCKED_FOLDER: mocked_folder,
+                    CONF_HOST: "MockedHost",
                     CONF_USERNAME: "DummyUsername",
                     CONF_PASSWORD: "DummyPassword",
                 },
@@ -68,20 +69,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
 
+    session = async_get_clientsession(hass)
+
     pollling_interval = entry.options.get(
         CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL
     )
 
-    mocked_files = entry.data.get(MOCKED_FILES, None)
+    mocked_folder = entry.data.get(MOCKED_FOLDER, None)
 
-    if mocked_files is None:
+    if mocked_folder is None:
         maestroapi: MaestroControllerInterface = MaestroController(
-            entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
+            session,
+            entry.data[CONF_USERNAME],
+            entry.data[CONF_PASSWORD],
         )
-        await maestroapi.Login()
     else:
-        maestroapi: MaestroControllerInterface = MockedController(mocked_files)
-        await maestroapi.Login()
+        maestroapi: MaestroControllerInterface = MockedController(mocked_folder)
+
+    await maestroapi.StoveInfo()
 
     stoveList = []
     for stove in maestroapi.Stoves:
@@ -111,18 +116,12 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def has_mocked_files() -> list[str] | None:
-    """Check if there are mocked files, if so returns it."""
-    try:
-        loop = asyncio.get_running_loop()
-        folder_path = "config/custom_components/maestro_mcz/mocked"
-        files_in_dir = await loop.run_in_executor(None, os.listdir, folder_path)
-        if files_in_dir is not None:
-            return [folder_path + "/" + file for file in files_in_dir]
-    except:
-        return None
-    else:
-        return None
+async def has_mocked_folder() -> str | None:
+    """Check if there is a mocked folder."""
+    mocked_folder = Path("config/custom_components/maestro_mcz/mocked")
+    if mocked_folder.is_dir():
+        return str(mocked_folder)
+    return None
 
 
 class MczCoordinator(DataUpdateCoordinator):
