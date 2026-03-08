@@ -1,30 +1,25 @@
+"""Interface for controller."""
+
+
 class MaestroControllerInterface:
-    
-    @property
-    def Username(self) -> str:
-        pass
-
-    @property
-    def Password(self) -> str:
-        pass
-
-    @property
-    def Token(self) -> str:
-        pass
+    """Interface for controller."""
 
     @property
     def Connected(self) -> bool:
-        pass
+        """Returns the current connection state."""
+        pass  # noqa: PIE790
 
     @property
     def Stoves(self):
-        pass
-    
-    async def MakeRequest(self, method:str, url:str, headers={}, body=None, recursive_try_on_error:bool = True, is_first_try:bool = True, callback=None):
-        pass
+        """Returns a list of stoves linked to your account (once logged in)."""
+        pass  # noqa: PIE790
 
-    async def Login(self):
-        pass
+    async def MakeRequest(
+        self, method: str, url: str, headers: dict | None = None, body=None
+    ):
+        """Makes a request to the API."""
+        pass  # noqa: PIE790
 
     async def StoveInfo(self):
-        pass
+        """Gets information about the stoves linked to the user account."""
+        pass  # noqa: PIE790

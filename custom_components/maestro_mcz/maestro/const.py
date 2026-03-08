@@ -1,1 +1,11 @@
-LOGIN_URL = "https://s.maestro.mcz.it/hlapi/v1.0/Authorization/Login"
+"""Constants for the maestro MCZ Integration."""
+
+MCZ_BASE_URL = "https://s.maestro.mcz.it"
+LOGIN_URL = f"{MCZ_BASE_URL}/hlapi/v1.0/Authorization/Login"
+STOVE_INFO_URL = f"{MCZ_BASE_URL}/hlapi/v1.0/Nav/FirstVisibleObjectsPaginated"
+STOVE_MODEL_URL = f"{MCZ_BASE_URL}/hlapi/v1.0/Model"
+PING_URL = f"{MCZ_BASE_URL}/mcz/v1.0/Program/Ping"
+APPLIANCE_URL = f"{MCZ_BASE_URL}/mcz/v1.0/Appliance"
+ACTIVATE_PROGRAM_URL = f"{MCZ_BASE_URL}/mcz/v1.0/Program/ActivateProgram"
+TENTANT_ID = "7c201fd8-42bd-4333-914d-0f5822070757"
+CONTENT_TYPE = "application/json"

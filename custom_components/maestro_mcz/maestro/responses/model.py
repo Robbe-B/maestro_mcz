@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from ..types.enums import TypeEnum
+from dataclasses import dataclass
+
 
 @dataclass
 class Configuration:
@@ -13,8 +13,8 @@ class Configuration:
     max: str | None = None
     mappings: dict[str, int] | None = None
 
-    def __init__(self, json, from_mocked_response = False) -> None:
-        if(from_mocked_response):
+    def __init__(self, json, from_mocked_response=False) -> None:
+        if from_mocked_response:
             for k, v in json.items():
                 setattr(self, k, v)
         else:
@@ -28,6 +28,7 @@ class Configuration:
             self.max = json["Max"]
             self.mappings = json["Mappings"]
 
+
 @dataclass
 class ModelConfiguration:
     timed: bool | None = None
@@ -36,19 +37,24 @@ class ModelConfiguration:
     configuration_id: str | None = None
     limitations: str | None = None
 
-    def __init__(self, json, from_mocked_response = False) -> None:
-        if(from_mocked_response):
+    def __init__(self, json, from_mocked_response=False) -> None:
+        if from_mocked_response:
             for k, v in json.items():
-                if(k == "configurations"):
-                    self.configurations = [Configuration(configuration, True) for configuration in v]
+                if k == "configurations":
+                    self.configurations = [
+                        Configuration(configuration, True) for configuration in v
+                    ]
                 else:
                     setattr(self, k, v)
         else:
             self.timed = json["Timed"]
             self.configuration_name = json["ConfigurationName"]
-            self.configurations = [Configuration(configuration) for configuration in json["Configurations"]]
+            self.configurations = [
+                Configuration(configuration) for configuration in json["Configurations"]
+            ]
             self.configuration_id = json["ConfigurationId"]
             self.limitations = json["Limitations"]
+
 
 @dataclass
 class Model:
@@ -59,15 +65,21 @@ class Model:
     sensor_ids: list[str] | None = None
     properties: list[str] | None = None
 
-    def __init__(self, json, from_mocked_response = False) -> None:
-        if(from_mocked_response):
+    def __init__(self, json, from_mocked_response=False) -> None:
+        if from_mocked_response:
             for k, v in json.items():
-                if(k == "model_configurations"):
-                    self.model_configurations = [ModelConfiguration(model_configuration, True) for model_configuration in v]
+                if k == "model_configurations":
+                    self.model_configurations = [
+                        ModelConfiguration(model_configuration, True)
+                        for model_configuration in v
+                    ]
                 else:
                     setattr(self, k, v)
         else:
-            self.model_configurations = [ModelConfiguration(model_configuration) for model_configuration in json["ModelConfigurations"]]
+            self.model_configurations = [
+                ModelConfiguration(model_configuration)
+                for model_configuration in json["ModelConfigurations"]
+            ]
             self.model_name = json["ModelName"]
             self.model_id = json["ModelId"]
             self.sensor_set_type_id = json["SensorSetTypeId"]
@@ -86,11 +98,10 @@ class SensorConfiguration:
 
 
 @dataclass
-class SensorConfigurationMultipleModes():
-    mode_configurations: dict[str,SensorConfiguration] | None = None # key => Mode | value => SensorConfiguration for that mode
+class SensorConfigurationMultipleModes:
+    mode_configurations: dict[str, SensorConfiguration] | None = (
+        None  # key => Mode | value => SensorConfiguration for that mode
+    )
 
-    def __init__(self, mode_configurations: dict[str,SensorConfiguration]) -> None:
+    def __init__(self, mode_configurations: dict[str, SensorConfiguration]) -> None:
         self.mode_configurations = mode_configurations
-
-
-

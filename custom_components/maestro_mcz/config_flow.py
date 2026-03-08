@@ -17,6 +17,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DEFAULT_POLLING_INTERVAL, DOMAIN
 from .maestro.controller.controller_interface import MaestroControllerInterface
@@ -37,11 +38,10 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
-
+    session = async_get_clientsession(hass)
     controller: MaestroControllerInterface = MaestroController(
-        data[CONF_USERNAME], data[CONF_PASSWORD]
+        session, data[CONF_USERNAME], data[CONF_PASSWORD]
     )
-    await controller.Login()
     await controller.StoveInfo()
 
     # Return info that you want to store in the config entry.
