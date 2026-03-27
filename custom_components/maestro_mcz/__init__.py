@@ -7,26 +7,25 @@ from datetime import timedelta
 import logging
 from pathlib import Path
 
-from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry, ConfigFlowContext
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .config_flow import CONF_POLLING_INTERVAL
 from .const import DEFAULT_POLLING_INTERVAL, DOMAIN, MANUFACTURER, MOCKED_FOLDER
 from .maestro import MaestroStove
 from .maestro.controller.controller_interface import MaestroControllerInterface
-from .maestro.controller.maestro_controller import MaestroController
-from .maestro.controller.mocked_controller import MockedController
-from .maestro.responses.model import (
-    ModelConfiguration,
-    SensorConfiguration,
-    SensorConfigurationMultipleModes,
+from .maestro.controller.maestro_controller import (
+    MaestroAuthenticationException,
+    MaestroConnectionException,
+    MaestroController,
 )
-from .models import MczConfigItem
+from .maestro.controller.mocked_controller import MockedController
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -39,6 +38,7 @@ PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SWITCH,
 ]
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -46,13 +46,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
     """Set up the integration from code."""
 
     # create a new hub when there are mocked files
-    mocked_folder = await has_mocked_folder()
+    mocked_folder = await _has_mocked_folder()
 
     if mocked_folder is not None:
         hass.async_create_task(
             hass.config_entries.flow.async_init(
-                DOMAIN,
-                context={"source": SOURCE_IMPORT},
+                DOMAIN,  # Required: specifies which integration's flow to trigger
+                context=ConfigFlowContext(source=SOURCE_IMPORT),
                 data={
                     MOCKED_FOLDER: mocked_folder,
                     CONF_HOST: "MockedHost",
@@ -64,20 +64,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> bool:
     """Set up maestro_mcz from a config entry."""
 
-    hass.data.setdefault(DOMAIN, {})
-
-    session = async_get_clientsession(hass)
-
-    pollling_interval = entry.options.get(
-        CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL
-    )
-
+    # 1. Check if we have a mocked folder
     mocked_folder = entry.data.get(MOCKED_FOLDER, None)
 
+    # 2. Create the api / controller to use for the coordinator
+    #    if mocked_folder is not None it means we want to use mocked data instead of connecting to the real API
     if mocked_folder is None:
+        session = async_get_clientsession(hass)
         maestroapi: MaestroControllerInterface = MaestroController(
             session,
             entry.data[CONF_USERNAME],
@@ -86,29 +85,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         maestroapi: MaestroControllerInterface = MockedController(mocked_folder)
 
-    await maestroapi.StoveInfo()
+    # 3. Get all stoves stove linked to the account
+    try:
+        stove_infos = await maestroapi.retrieve_linked_stove_infos()
+    except MaestroAuthenticationException as exception:
+        _LOGGER.error("Authentication failed: %s", exception)
+        return False
+    except MaestroConnectionException as exception:
+        _LOGGER.error("Connection failed: %s", exception)
+        return False
 
-    stoveList = []
-    for stove in maestroapi.Stoves:
-        coordinator = MczCoordinator(hass, stove, pollling_interval)
+    # 4. Create a coordinator for each stove linked to the account
+    coordinators: dict[str, MczDeviceCoordinator] = {}
+    for stove_info in stove_infos:
+        coordinator = MczDeviceCoordinator(
+            hass, entry, MaestroStove(maestroapi, stove_info)
+        )
         await coordinator.async_config_entry_first_refresh()
-        if coordinator.maestroapi.UniqueCode:  # avoid adding a stove without serial number as this is the unique identifier in HA
-            stoveList.append(coordinator)
+        coordinators[stove_info.node.unique_code] = coordinator
 
-    hass.data[DOMAIN][entry.entry_id] = stoveList
+    # 5. Store the coordinators in the entry so that they can be accessed by the platforms
+    entry.runtime_data = coordinators
 
+    # 6. Add an update listener to handle options updates
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
+    # 7. Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
-
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -116,7 +125,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def has_mocked_folder() -> str | None:
+async def _has_mocked_folder() -> str | None:
     """Check if there is a mocked folder."""
     mocked_folder = Path("config/custom_components/maestro_mcz/mocked")
     if mocked_folder.is_dir():
@@ -124,161 +133,79 @@ async def has_mocked_folder() -> str | None:
     return None
 
 
-class MczCoordinator(DataUpdateCoordinator):
+class MczDeviceCoordinator(DataUpdateCoordinator):
     """MCZ Coordinator."""
 
-    _avoid_ping: bool = False
+    _stove: MaestroStove = None
 
     def __init__(
         self,
-        hass: HomeAssistant | None,
-        maestroapi: MaestroStove,
-        polling_interval: int,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        stove: MaestroStove,
     ) -> None:
-        """Initialize my coordinator."""
+        """Initialize coordinator."""
         super().__init__(
-            hass,
-            _LOGGER,
-            name="MCZ Stove",
-            update_interval=timedelta(seconds=polling_interval),
+            hass=hass,
+            logger=_LOGGER,
+            config_entry=config_entry,
+            name=stove.Name,
+            update_interval=timedelta(
+                seconds=config_entry.options.get(
+                    CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL
+                )
+            ),
         )
-        self._maestroapi = maestroapi
+        self._stove = stove
+
+    async def _async_setup(self):
+        """Set up the coordinator."""
+        await self.stove.AsyncInit()
 
     async def _async_update_data(self):
         """Fetch data from API endpoint."""
-        async with asyncio.timeout(10):
-            await self._maestroapi.Refresh(not self._avoid_ping)
-            return True
 
-    async def update_data_after_set(self):
+        try:
+            return await self.stove.refresh()
+        except MaestroAuthenticationException as err:
+            # Cancels future updates & Triggers re-auth flow
+            raise ConfigEntryAuthFailed from err
+        except MaestroConnectionException as err:
+            # This marks entities as unavailable and schedules a retry
+            raise UpdateFailed(f"Error communicating with Maestro API: {err}") from err
+
+    async def update_data_after_set(
+        self,
+    ):  # should be revised in the future to be more efficient
         """Force refresh of data from API endpoint after a SET was executed."""
         # we need to wait here because there is an actual delay between sending a SET and receiving the updated value from the polled MCZ database
         await asyncio.sleep(3)
         await self.async_refresh()
         await asyncio.sleep(3)
-        self._avoid_ping = True
         await self.async_refresh()
-        self._avoid_ping = False
 
     @property
-    def maestroapi(self) -> MaestroStove:
-        """Return the Maestro api."""
-        return self._maestroapi
+    def stove(self) -> MaestroStove:
+        """Return the stove."""
+        return self._stove
 
     def get_device_info(self) -> DeviceInfo:
         """Return device info."""
         sw_version = ""
 
-        if self.maestroapi.Status.is_connected:
+        if self.stove.Status.is_connected:
             sw_version = (
-                f"{self._maestroapi.Status.sm_nome_app}.{self._maestroapi.Status.sm_vs_app}"
-                f", Panel:{self._maestroapi.Status.mc_vs_app}"
-                f", DB:{self._maestroapi.Status.nome_banca_dati_sel}"
+                f"{self.stove.Status.sm_nome_app}.{self.stove.Status.sm_vs_app}"
+                f", Panel:{self.stove.Status.mc_vs_app}"
+                f", DB:{self.stove.Status.nome_banca_dati_sel}"
             )
         else:
             sw_version = "Device Disconnected"
 
         return DeviceInfo(
-            identifiers={(DOMAIN, self._maestroapi.UniqueCode)},
-            name=self._maestroapi.Name,
+            identifiers={(DOMAIN, self.stove.UniqueCode)},
+            name=self.stove.Name,
             manufacturer=MANUFACTURER,
-            model=self._maestroapi.Model.model_name,
+            model=self.stove.Model.model_name,
             sw_version=sw_version,
         )
-
-    def get_model_configuration_by_model_configuration_name(
-        self, model_configuration_name: str
-    ) -> ModelConfiguration | None:
-        """Get the model configuration by the name of the model configuration."""
-        return next(
-            (
-                x
-                for x in self._maestroapi.Model.model_configurations
-                if x.configuration_name is not None
-                and model_configuration_name is not None
-                and x.configuration_name.lower().strip()
-                == model_configuration_name.lower().strip()
-            ),
-            None,
-        )
-
-    def get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        self, model_configuration_name: str, sensor_name: str
-    ) -> SensorConfiguration | None:
-        """Get the sensor configuration by the name of the model configuration and sensor name."""
-        model_configuration = self.get_model_configuration_by_model_configuration_name(
-            model_configuration_name
-        )
-        if model_configuration is None:
-            return None
-
-        sensor_configuration = next(
-            (
-                x
-                for x in model_configuration.configurations
-                if x.sensor_name is not None
-                and sensor_name is not None
-                and x.sensor_name.lower() == sensor_name.lower()
-            ),
-            None,
-        )
-        if sensor_configuration is not None:
-            return SensorConfiguration(
-                sensor_configuration, model_configuration.configuration_id
-            )
-        return None
-
-    def get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        self, mcz_config_items_list_to_match: list[MczConfigItem]
-    ) -> tuple[MczConfigItem, SensorConfiguration] | None:
-        """Get the first sensor configuration matching by the name of the model configuration and sensor name."""
-        for x in mcz_config_items_list_to_match:
-            if x.sensor_set_config_name is not None:
-                matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                    x.sensor_set_config_name, x.sensor_set_name
-                )
-                if matching_configuration is not None:
-                    return (x, matching_configuration)
-        return None
-
-    def get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        self, mcz_config_items_list_to_match: list[MczConfigItem]
-    ) -> list[tuple[MczConfigItem, SensorConfiguration]] | None:
-        """Get the all sensor configurations matching by the name of the model configuration and sensor name."""
-        temp_list = []
-        for x in mcz_config_items_list_to_match:
-            if x.sensor_set_config_name is not None:
-                matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                    x.sensor_set_config_name, x.sensor_set_name
-                )
-                if matching_configuration is not None:
-                    temp_list.append((x, matching_configuration))
-        if temp_list:
-            return temp_list
-        return None
-
-    def get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
-        self, mcz_config_items_list_to_match: list[MczConfigItem]
-    ) -> list[tuple[MczConfigItem, SensorConfigurationMultipleModes]] | None:
-        """Get the all sensor configurations matching for the matching mode by the name of the model configuration and sensor name."""
-        temp_list = []
-        for x in mcz_config_items_list_to_match:
-            if x.mode_to_configuration_name_mapping is not None:
-                temp_mode_configurations: dict[str, SensorConfiguration] = {}
-                for mode in x.mode_to_configuration_name_mapping:
-                    matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                        x.mode_to_configuration_name_mapping[mode], x.sensor_set_name
-                    )
-                    if matching_configuration is not None:
-                        temp_mode_configurations[mode] = matching_configuration
-
-            if (
-                temp_mode_configurations is not None
-                and len(temp_mode_configurations) > 0
-            ):
-                temp_list.append(
-                    (x, SensorConfigurationMultipleModes(temp_mode_configurations))
-                )
-        if temp_list:
-            return temp_list
-        return None
