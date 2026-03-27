@@ -57,6 +57,8 @@ class Node:
     ssid_wifi: str | None = None
     mac_address_ble: str | None = None
 
+    unknown_fields: dict | None = None
+
     def __init__(self, json, from_mocked_response=False) -> None:
         if json is not None:
             if from_mocked_response:
@@ -125,6 +127,8 @@ class AccessControl:
     is_top: bool | None = None
     created: float | None = None
     modified: float | None = None
+
+    unknown_fields: dict | None = None
 
     def __init__(self, json, from_mocked_response=False) -> None:
         if json is not None:

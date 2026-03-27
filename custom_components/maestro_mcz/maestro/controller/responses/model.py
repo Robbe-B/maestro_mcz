@@ -1,3 +1,5 @@
+"""Models for Maestro Controller responses."""
+
 from dataclasses import dataclass
 
 

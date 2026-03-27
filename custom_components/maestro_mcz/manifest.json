@@ -1,16 +1,16 @@
 {
-    "domain": "maestro_mcz",
-    "name": "Maestro MCZ",
-    "codeowners": [
-      "@crisicus",
-      "@Robbe-B"  
-    ],
-    "config_flow": true,
-    "dependencies": [],
-    "documentation": "https://github.com/Robbe-B/maestro_mcz",
-    "integration_type": "hub",
-    "iot_class": "cloud_polling",
-    "issue_tracker": "https://github.com/Robbe-B/maestro_mcz/issues",
-    "requirements": [],
-    "version": "0.6.7-beta"
+  "domain": "maestro_mcz",
+  "name": "Maestro MCZ",
+  "codeowners": [
+    "@crisicus",
+    "@Robbe-B"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/Robbe-B/maestro_mcz",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/Robbe-B/maestro_mcz/issues",
+  "requirements": [],
+  "version": "0.6.7-beta"
 }

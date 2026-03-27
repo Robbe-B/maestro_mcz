@@ -21,7 +21,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DEFAULT_POLLING_INTERVAL, DOMAIN
 from .maestro.controller.controller_interface import MaestroControllerInterface
-from .maestro.controller.maestro_controller import MaestroController
+from .maestro.controller.maestro_controller import (
+    MaestroAuthenticationException,
+    MaestroConnectionException,
+    MaestroController,
+)
 
 _LOGGER = logging.getLogger(__name__)
 CONF_POLLING_INTERVAL = "polling_interval"
@@ -42,7 +46,13 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     controller: MaestroControllerInterface = MaestroController(
         session, data[CONF_USERNAME], data[CONF_PASSWORD]
     )
-    await controller.StoveInfo()
+    try:
+        await controller.retrieve_linked_stove_infos()
+
+    except MaestroAuthenticationException as exc:
+        raise InvalidAuth from exc
+    except MaestroConnectionException as exc:
+        raise CannotConnect from exc
 
     # Return info that you want to store in the config entry.
     return {"title": data[CONF_USERNAME]}
