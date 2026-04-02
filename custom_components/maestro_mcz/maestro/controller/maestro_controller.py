@@ -137,7 +137,7 @@ class MaestroController(MaestroControllerInterface):
 
                     # Token expired or invalid path
                     if resp.status in (401, 403):
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             "Authentication expired (Status %s). Clearing token",
                             resp.status,
                         )
@@ -174,7 +174,7 @@ class MaestroController(MaestroControllerInterface):
             await self._backoff(attempt)
 
         # maximum retries reached, log and give up
-        _LOGGER.error("Maximum retries (%s) reached for %s", attempts, url)
+        _LOGGER.debug("Maximum retries (%s) reached for %s", attempts, url)
         return None
 
     async def retrieve_linked_stove_infos(self) -> list[StoveInfo]:
@@ -197,38 +197,36 @@ class MaestroController(MaestroControllerInterface):
         url = f"{PING_URL}/{device_id}"
         ping_res = await self.make_request("POST", url=url)
         if ping_res is None:
-            raise MaestroConnectionException(f"Ping failed for device {device_name}.")
+            raise MaestroConnectionException(f"Ping failed for device '{device_name}'")
 
-    async def get_stove_model_for_stove(self, model_id: str) -> Model:
+    async def get_stove_model_for_stove(self, model_id: str, device_name: str) -> Model:
         """Gets the stove model for a given model ID."""
-        response = await self.make_request(
-            "GET", f"{STOVE_MODEL_URL}/{model_id}", avoid_retries=True
-        )
+        response = await self.make_request("GET", f"{STOVE_MODEL_URL}/{model_id}")
         if response is None:
             raise MaestroConnectionException(
-                f"Failed to retrieve model for model ID {model_id}"
+                f"Failed to retrieve model for device '{device_name}'"
             )
         return Model(response)
 
-    async def get_stove_status_for_stove(self, device_id: str) -> Status:
+    async def get_stove_status_for_stove(
+        self, device_id: str, device_name: str
+    ) -> Status:
         """Gets the stove status for a given device ID."""
-        response = await self.make_request(
-            "GET", f"{APPLIANCE_URL}/{device_id}/Status", avoid_retries=True
-        )
+        response = await self.make_request("GET", f"{APPLIANCE_URL}/{device_id}/Status")
         if response is None:
             raise MaestroConnectionException(
-                f"Failed to retrieve status for device ID {device_id}"
+                f"Failed to retrieve status for device '{device_name}'"
             )
         return Status(response)
 
-    async def get_stove_state_for_stove(self, device_id: str) -> State:
+    async def get_stove_state_for_stove(
+        self, device_id: str, device_name: str
+    ) -> State:
         """Gets the stove state for a given device ID."""
-        response = await self.make_request(
-            "GET", f"{APPLIANCE_URL}/{device_id}/State", avoid_retries=True
-        )
+        response = await self.make_request("GET", f"{APPLIANCE_URL}/{device_id}/State")
         if response is None:
             raise MaestroConnectionException(
-                f"Failed to retrieve state for device ID {device_id}"
+                f"Failed to retrieve state for device '{device_name}'"
             )
         return State(response)
 

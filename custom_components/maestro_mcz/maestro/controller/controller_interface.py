@@ -34,15 +34,19 @@ class MaestroControllerInterface:
         """Pings the stove to check connectivity."""
         pass  # noqa: PIE790
 
-    async def get_stove_model_for_stove(self, model_id: str) -> Model:
+    async def get_stove_model_for_stove(self, model_id: str, device_name: str) -> Model:
         """Gets the stove model for a given model ID."""
         pass  # noqa: PIE790
 
-    async def get_stove_status_for_stove(self, device_id: str) -> Status:
+    async def get_stove_status_for_stove(
+        self, device_id: str, device_name: str
+    ) -> Status:
         """Gets the stove status for a given device ID."""
         pass  # noqa: PIE790
 
-    async def get_stove_state_for_stove(self, device_id: str) -> State:
+    async def get_stove_state_for_stove(
+        self, device_id: str, device_name: str
+    ) -> State:
         """Gets the stove state for a given device ID."""
         pass  # noqa: PIE790
 
