@@ -160,7 +160,10 @@ class MczDeviceCoordinator(DataUpdateCoordinator):
 
     async def _async_setup(self):
         """Set up the coordinator."""
-        await self.stove.AsyncInit()
+        try:
+            return await self.stove.AsyncInit()
+        except MaestroConnectionException as err:
+            raise UpdateFailed(f"Error communicating with Maestro API: {err}") from err
 
     async def _async_update_data(self):
         """Fetch data from API endpoint."""

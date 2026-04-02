@@ -87,13 +87,19 @@ class MaestroStove:
         await self._controller.do_ping_for_stove(self.Id, self.Name)
 
     async def _getStoveModel(self) -> None:
-        self._model = await self._controller.get_stove_model_for_stove(self.ModelId)
+        self._model = await self._controller.get_stove_model_for_stove(
+            self.ModelId, self.Name
+        )
 
     async def _getStoveStatus(self) -> None:
-        self._status = await self._controller.get_stove_status_for_stove(self.Id)
+        self._status = await self._controller.get_stove_status_for_stove(
+            self.Id, self.Name
+        )
 
     async def _getStoveState(self) -> None:
-        self._state = await self._controller.get_stove_state_for_stove(self.Id)
+        self._state = await self._controller.get_stove_state_for_stove(
+            self.Id, self.Name
+        )
 
     async def refresh(self):
         """Refresh the stove information, status and state."""
