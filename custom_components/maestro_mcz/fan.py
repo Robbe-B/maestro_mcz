@@ -192,14 +192,14 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         self._attr_supported_features = FanEntityFeature(0)  # resetting the features
         self._attr_preset_modes = None
         self._attr_speed_count = 0
-        self._attr_available = False
+        self._set_available_internal(False)
 
         if (
             self._current_fan_configuration is not None
             and self._current_fan_configuration.configuration is not None
             and self._current_fan_configuration.configuration.enabled
         ):
-            self._attr_available = True
+            self._set_available_internal(True)
             if (
                 self._current_fan_configuration.configuration.type
                 == SensorTypeEnum.INT.value
@@ -245,9 +245,9 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
             and self._current_fan_configuration.configuration is not None
             and self._current_fan_configuration.configuration.enabled
         ):
-            self._attr_available = True
+            self._set_available_internal(True)
         else:
-            self._attr_available = False
+            self._set_available_internal(False)
             return  # we can return here since the fan is disabled in the config and we don't need to update values
 
         # determine silent mode is enabled
@@ -279,7 +279,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
                 silent_enabled = None
 
             if silent_enabled is not None and silent_enabled:
-                self._attr_available = False
+                self._set_available_internal(False)
                 return  # we can return here since the rest doesn't matter anymore when the fan is not available
 
         # determine the fan value
@@ -352,6 +352,10 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
             )
         else:
             self._attr_percentage = None
+
+    def _set_available_internal(self, available: bool) -> None:
+        """Set the availability of the fan."""
+        self._attr_available = self.coordinator.stove.is_connected and available
 
 
 async def async_setup_entry(
