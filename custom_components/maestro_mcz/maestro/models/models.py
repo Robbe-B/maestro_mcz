@@ -1174,6 +1174,17 @@ supported_sensors = [
         True,
     ),
     SensorMczConfigItem(
+        "Wi-Fi Probe Temperature",
+        "sondaWifi",
+        "mdi:thermometer",
+        UnitOfTemperature.CELSIUS,
+        None,
+        None,
+        SensorDeviceClass.TEMPERATURE,
+        SensorStateClass.MEASUREMENT,
+        True,
+    ),
+    SensorMczConfigItem(
         "Current Mode",
         "mode",
         "mdi:calendar-multiselect",
