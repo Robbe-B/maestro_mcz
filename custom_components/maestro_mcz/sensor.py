@@ -62,11 +62,9 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        value = None
-        if hasattr(self._stove.Status, self._prop):
-            value = getattr(self._stove.Status, self._prop)
-        elif hasattr(self._stove.State, self._prop):
-            value = getattr(self._stove.State, self._prop)
+        value = getattr(self._stove.Status, self._prop, None)
+        if value is None:
+            value = getattr(self._stove.State, self._prop, None)
 
         if self._api_value_renames is not None and value in self._api_value_renames:
             self._attr_native_value = self._api_value_renames[value]
