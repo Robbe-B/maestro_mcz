@@ -152,9 +152,9 @@ class AccessControl:
                         case "ClassType":
                             self.class_type = json[key]
                         case "Roles":
-                            self.role_operations = json[key]
+                            self.roles = json[key]
                         case "RoleOperations":
-                            self.unique_code = json[key]
+                            self.role_operations = json[key]
                         case "IsTop":
                             self.is_top = json[key]
                         case "Created":

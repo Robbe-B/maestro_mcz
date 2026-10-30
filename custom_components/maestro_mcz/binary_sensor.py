@@ -66,12 +66,10 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        if hasattr(self._stove.Status, self._prop):
-            self._attr_is_on = getattr(self._stove.Status, self._prop)
-        elif hasattr(self._stove.State, self._prop):
-            self._attr_is_on = getattr(self._stove.State, self._prop)
-        else:
-            self._attr_is_on = None
+        value = getattr(self._stove.Status, self._prop, None)
+        if value is None:
+            value = getattr(self._stove.State, self._prop, None)
+        self._attr_is_on = value
 
 
 class MczConnectionStatusBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):

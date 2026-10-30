@@ -311,11 +311,14 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
             if type(fan_value) is str:
                 self._attr_preset_mode = fan_value
             elif type(fan_value) is int:
-                self._attr_preset_mode = self._current_fan_configuration.configuration.mappings[
-                    list(
-                        self._current_fan_configuration.configuration.mappings.values()
-                    ).index(fan_value)
-                ]
+                self._attr_preset_mode = next(
+                    (
+                        key
+                        for key, mapped in self._current_fan_configuration.configuration.mappings.items()
+                        if mapped == fan_value
+                    ),
+                    None,
+                )
         else:
             self._attr_preset_mode = None
 
