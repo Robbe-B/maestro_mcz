@@ -1,6 +1,7 @@
 "MaestroStove class."
 
 import asyncio
+import logging
 
 from homeassistant.helpers.entity import DeviceInfo
 
@@ -21,6 +22,9 @@ from .controller.responses.state import State
 from .controller.responses.status import Status
 from .controller.responses.stove_info import StoveInfo
 from .models.models import MczConfigItem
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MaestroStove:
@@ -99,7 +103,78 @@ class MaestroStove:
         """Return the stove model."""
         return self._model
 
+    async def _do_ping_configuration(self, ping: SensorConfiguration) -> None:
+        try:
+            configuration = ping.configuration
+            mappings = configuration.mappings
+            if (
+                not ping.configuration_id
+                or not configuration.sensor_id
+                or not configuration.enabled
+                or configuration.type != "int"
+                or not isinstance(mappings, dict)
+                or type(mappings.get("Ping")) is not int
+            ):
+                raise MaestroConnectionException(
+                    f"Invalid M2+ ping configuration for device '{self.Name}'"
+                )
+
+            await self.activateProgram(
+                configuration.sensor_id,
+                ping.configuration_id,
+                mappings["Ping"],
+            )
+        except MaestroConnectionException as err:
+            _LOGGER.warning(
+                "M2+ configuration ping failed for '%s'; continuing with cloud refresh: %s",
+                self.Name,
+                err,
+            )
+
+    async def _do_ping_m1_configuration(self, ping: SensorConfiguration) -> None:
+        configuration = ping.configuration
+        mappings = configuration.mappings
+        if (
+            not ping.configuration_id
+            or not configuration.sensor_id
+            or not configuration.enabled
+            or configuration.type != "int"
+            or not isinstance(mappings, dict)
+            or type(mappings.get("C|RecuperoParametri")) is not int
+            or mappings.get("C|RecuperoParametri") != 0
+            or type(mappings.get("C|RecuperoInfo")) is not int
+            or mappings.get("C|RecuperoInfo") != 1
+        ):
+            raise MaestroConnectionException(
+                f"Invalid M1 PING STOVE configuration for device '{self.Name}'"
+            )
+
+        for command in ("C|RecuperoParametri", "C|RecuperoInfo"):
+            await self.activateProgram(
+                configuration.sensor_id,
+                ping.configuration_id,
+                mappings[command],
+            )
+            await asyncio.sleep(1)
+
     async def _ping(self) -> None:
+        m1_ping = (
+            self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                "PING STOVE", "m1_cod_for_spe_mqtt"
+            )
+        )
+        if m1_ping is not None:
+            await self._do_ping_m1_configuration(m1_ping)
+            return
+
+        if False:  # For now, we don't want to ping M2+ stoves, as it can cause issues with some models. This can be re-enabled in the future if needed.
+            m2_plus_ping = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                "cod_for_spe_mqtt", "cod_for_spe_mqtt"
+            )
+
+            if m2_plus_ping is not None:
+                await self._do_ping_configuration(m2_plus_ping)
+
         await self._controller.do_ping_for_stove(self.Id, self.Name)
 
     async def _getStoveModel(self) -> None:
@@ -121,21 +196,16 @@ class MaestroStove:
         """Refresh the stove information, status and state."""
         try:
             await self._ping()
-            # if the ping is successful and we are authenticated, we can proceed to refresh the status and state
             self._is_integration_connected_to_cloud = self._controller.is_authenticated
+
+            calls = {self._getStoveStatus(), self._getStoveState()}
+            await asyncio.gather(*calls, return_exceptions=False)
+
+            if self.Status is not None and self.Status.is_connected is not None:
+                self._is_stove_connected_to_cloud = self.Status.is_connected
         except MaestroAuthenticationException, MaestroConnectionException:
-            # First set connection state before raising the exception to make sure that the state is updated
             self._is_integration_connected_to_cloud = False
             raise
-
-        calls = {self._getStoveStatus(), self._getStoveState()}
-        await asyncio.gather(*calls, return_exceptions=False)
-        # return_exceptions = False to raise the first exception encountered
-        # flagging the update as 'failed' and marking the stove as unavailable
-
-        # setting the stove connection status to cloud
-        if self.Status is not None and self.Status.is_connected is not None:
-            self._is_stove_connected_to_cloud = self.Status.is_connected
 
     async def activateProgram(
         self,

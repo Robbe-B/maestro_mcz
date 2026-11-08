@@ -1,4 +1,9 @@
-"""Shared synthetic cloud fixtures using real Home Assistant classes."""
+"""Reusable starting points: one account, one stove, and example cloud replies.
+
+The stove starts connected, heating normally, with a room temperature of
+20.5 degrees. Tests change only the details needed for their own story.
+No fixture contacts a real stove or cloud account.
+"""
 
 from copy import deepcopy
 from unittest.mock import AsyncMock
@@ -28,6 +33,7 @@ def custom_integration(enable_custom_integrations):
 
 @pytest.fixture
 def entry(hass):
+    """Register a pretend account with Home Assistant."""
     config_entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="test-user",
@@ -39,6 +45,7 @@ def entry(hass):
 
 @pytest.fixture
 def stove_info_payload():
+    """Describe the living-room stove and the IDs used to address it."""
     return {
         "Node": {
             "Id": "device-1",
@@ -53,10 +60,10 @@ def stove_info_payload():
 
 @pytest.fixture
 def configuration():
-    """Build raw API configurations, not objects replacing production parsers."""
+    """Build a sensor description, allowing a test to change specific details."""
 
     def build(name, kind=SensorTypeEnum.INT.value, **overrides):
-        return {
+        sensor_description = {
             "SensorName": name,
             "SensorId": f"id-{name}",
             "Type": kind,
@@ -66,14 +73,19 @@ def configuration():
             "Max": "5",
             "Variants": [],
             "Mappings": {},
-        } | overrides
+        }
+        sensor_description.update(overrides)
+        return sensor_description
 
     return build
 
 
 @pytest.fixture
 def model_payload(configuration):
+    """Describe the controls our pretend stove supports."""
+
     def group(name, configs):
+        """Keep related controls together, just as the cloud response does."""
         return {
             "ConfigurationName": name,
             "ConfigurationId": f"config-{name}",
@@ -81,6 +93,24 @@ def model_payload(configuration):
             "Limitations": None,
             "Configurations": configs,
         }
+
+    # Most clock fields are numbers; the AM/PM flag is a yes/no value.
+    clock_configurations = []
+    for sensor_name in (
+        "giorno_sett",
+        "anno",
+        "mese",
+        "giorno",
+        "ore",
+        "minuti",
+        "secondi",
+        "am_pm",
+    ):
+        if sensor_name == "am_pm":
+            sensor_type = SensorTypeEnum.BOOLEAN.value
+        else:
+            sensor_type = SensorTypeEnum.INT.value
+        clock_configurations.append(configuration(sensor_name, sensor_type))
 
     return {
         "ModelName": "Synthetic Air Stove",
@@ -128,40 +158,21 @@ def model_payload(configuration):
                     configuration("com_reset_allarm", SensorTypeEnum.BOOLEAN.value),
                 ],
             ),
-            group(
-                "Orodatario",
-                [
-                    configuration(
-                        name,
-                        SensorTypeEnum.BOOLEAN.value
-                        if name == "am_pm"
-                        else SensorTypeEnum.INT.value,
-                    )
-                    for name in (
-                        "giorno_sett",
-                        "anno",
-                        "mese",
-                        "giorno",
-                        "ore",
-                        "minuti",
-                        "secondi",
-                        "am_pm",
-                    )
-                ],
-            ),
+            group("Orodatario", clock_configurations),
         ],
     }
 
 
 @pytest.fixture
 def controller(stove_info_payload, model_payload):
-    result = AsyncMock(spec=MaestroController)
-    result.is_authenticated = True
-    result.retrieve_linked_stove_infos.return_value = [
+    """Stand in for the cloud while keeping the real response-parsing code."""
+    mocked_controller = AsyncMock(spec=MaestroController)
+    mocked_controller.is_authenticated = True
+    mocked_controller.retrieve_linked_stove_infos.return_value = [
         StoveInfo(deepcopy(stove_info_payload))
     ]
-    result.get_stove_model_for_stove.return_value = Model(deepcopy(model_payload))
-    result.get_stove_state_for_stove.return_value = State(
+    mocked_controller.get_stove_model_for_stove.return_value = Model(deepcopy(model_payload))
+    mocked_controller.get_stove_state_for_stove.return_value = State(
         {
             "temp_amb_install": 20.5,
             "set_amb1": 22.0,
@@ -170,7 +181,7 @@ def controller(stove_info_payload, model_payload):
             "last_alarm": "A00",
         }
     )
-    result.get_stove_status_for_stove.return_value = Status(
+    mocked_controller.get_stove_status_for_stove.return_value = Status(
         {
             "IsConnected": True,
             "stato_stufa": 3,
@@ -195,23 +206,28 @@ def controller(stove_info_payload, model_payload):
             "nome_banca_dati_sel": "database",
         }
     )
-    return result
+    return mocked_controller
 
 
 @pytest.fixture
 async def stove(controller):
-    result = MaestroStove(
-        controller, controller.retrieve_linked_stove_infos.return_value[0]
-    )
-    await result.async_init()
-    await result.refresh()
-    return result
+    """Load and refresh the stove, so tests start with known readings.
+
+    Tests checking request counts reset the controller's recorded calls first:
+    this initial refresh has already made requests.
+    """
+    stove_info = controller.retrieve_linked_stove_infos.return_value[0]
+    living_room_stove = MaestroStove(controller, stove_info)
+    await living_room_stove.async_init()
+    await living_room_stove.refresh()
+    return living_room_stove
 
 
 @pytest.fixture
 def coordinator(hass, entry, stove):
-    result = MczAccountCoordinator(hass, entry, "test-account", [stove])
-    result.last_update_success = True
-    result.update_data_after_set = AsyncMock()
-    entry.runtime_data = result
-    return result
+    """Connect the stove to HA's refresh manager without waiting after commands."""
+    account_coordinator = MczAccountCoordinator(hass, entry, "test-account", [stove])
+    account_coordinator.last_update_success = True
+    account_coordinator.update_data_after_set = AsyncMock()
+    entry.runtime_data = account_coordinator
+    return account_coordinator

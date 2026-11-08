@@ -14,6 +14,7 @@ from custom_components.maestro_mcz.maestro.controller.responses.stove_info impor
 )
 
 
+# The cloud sometimes spells a field differently from our Python attribute.
 STATE_ALIASES = {
     "mode": "mod_lav_att",
     "status_timestamp": "StatusTimestamp",
@@ -62,24 +63,40 @@ NODE_ALIASES = {
     "response_type,expected_count", [(State, 70), (Status, 145), (Node, 19)]
 )
 def test_baseline_schema_does_not_silently_drop_fields(response_type, expected_count):
-    assert len(fields(response_type)) == expected_count
+    """Keep every supported reading, so a parser change cannot silently lose data."""
+    # 1. Count the fields in this kind of stove response.
+    actual_count = len(fields(response_type))
+    # 2. The established field count must stay intact.
+    assert actual_count == expected_count
+
+
+def declared_payload_field_cases():
+    """Give each supported field its own test, including renamed cloud fields."""
+    test_cases = []
+    response_types_and_aliases = (
+        (State, STATE_ALIASES),
+        (Status, STATUS_ALIASES),
+        (Node, NODE_ALIASES),
+    )
+    for response_type, aliases in response_types_and_aliases:
+        for response_field in fields(response_type):
+            if response_field.name == "unknown_fields":
+                continue
+            attribute_name = response_field.name
+            cloud_field_name = aliases.get(attribute_name, attribute_name)
+            test_cases.append((response_type, attribute_name, cloud_field_name))
+    return test_cases
 
 
 @pytest.mark.parametrize(
     ("response_type", "attribute", "wire_name"),
-    [
-        (response_type, field.name, aliases.get(field.name, field.name))
-        for response_type, aliases in (
-            (State, STATE_ALIASES),
-            (Status, STATUS_ALIASES),
-            (Node, NODE_ALIASES),
-        )
-        for field in fields(response_type)
-        if field.name != "unknown_fields"
-    ],
+    declared_payload_field_cases(),
 )
 def test_each_declared_payload_field(response_type, attribute, wire_name):
+    """Put a cloud reading in the right place, rather than discarding or renaming it."""
+    # 1. Send one field with an easily recognizable example value.
     parsed = response_type({wire_name: 17})
+    # 2. It belongs in its expected attribute, not the unknown-fields collection.
     assert getattr(parsed, attribute) == 17
     assert parsed.unknown_fields is None
 
@@ -89,15 +106,22 @@ def test_each_declared_payload_field(response_type, attribute, wire_name):
 )
 @pytest.mark.parametrize("empty", [None, {}])
 def test_empty_payload(response_type, empty):
+    """Leave missing readings empty, so HA does not display invented measurements."""
+    # 1. Parse a response containing no readings.
     parsed = response_type(empty)
-    assert all(value is None for value in asdict(parsed).values())
+    # 2. Every field should remain empty.
+    for field_name, value in asdict(parsed).items():
+        assert value is None, f"{field_name} should be empty"
 
 
 @pytest.mark.parametrize(
     "response_type", [State, Status, Node, AccessControl, StoveInfo]
 )
 def test_unknown_fields_are_preserved_and_warned(response_type, caplog):
+    """Keep unfamiliar readings for investigation when the cloud adds new fields."""
+    # 1. Supply a field that this parser has never been taught about.
     parsed = response_type({"FutureField": {"value": 0}})
+    # 2. Save the original data and warn, rather than silently dropping it.
     assert parsed.unknown_fields == {"FutureField": {"value": 0}}
     assert "FutureField" in caplog.text
 
@@ -112,18 +136,29 @@ def test_unknown_fields_are_preserved_and_warned(response_type, caplog):
     ],
 )
 def test_falsy_values_are_not_replaced(response_type, wire_name, attribute, value):
-    assert getattr(response_type({wire_name: value}), attribute) == value
+    """Preserve zero, false, and empty values because they can be genuine stove readings."""
+    # 1. Parse the small or empty value chosen for this case.
+    parsed = response_type({wire_name: value})
+    # 2. The value must not be replaced with a guessed default.
+    assert getattr(parsed, attribute) == value
 
 
 @pytest.mark.parametrize(
     "response_type", [State, Status, Node, AccessControl, StoveInfo]
 )
 def test_mocked_payload_mode(response_type):
-    assert response_type({"synthetic": False}, True).synthetic is False
+    """Read saved reports faithfully so offline troubleshooting uses the original data."""
+    # 1. Load a saved-report field instead of a live cloud field.
+    parsed = response_type({"synthetic": False}, True)
+    # 2. Its original value remains accessible.
+    assert parsed.synthetic is False
 
 
 def test_nested_stove_info(stove_info_payload):
+    """Keep account permissions separate from stove identity so the right device is used."""
+    # 1. Parse a response containing both stove details and access permissions.
     parsed = StoveInfo(stove_info_payload)
+    # 2. Both sections are understood, and the stove keeps its own IDs.
     assert isinstance(parsed.node, Node)
     assert isinstance(parsed.access_control, AccessControl)
     assert parsed.node.id == "device-1"
@@ -131,8 +166,13 @@ def test_nested_stove_info(stove_info_payload):
 
 
 def test_model_live_and_diagnostics_round_trip(model_payload):
+    """Preserve supported controls when a live model is saved and replayed later."""
+    # 1. Parse the live model, then save its report representation.
     parsed = Model(model_payload)
-    restored = Model(asdict(parsed), True)
+    saved_model = asdict(parsed)
+    # 2. Read the saved representation back as an offline model.
+    restored = Model(saved_model, True)
+    # 3. No control information or identifiers should change.
     assert asdict(restored) == asdict(parsed)
     assert restored.model_name == "Synthetic Air Stove"
     configuration = restored.model_configurations[0]
@@ -155,21 +195,36 @@ def test_model_live_and_diagnostics_round_trip(model_payload):
     ],
 )
 def test_access_control_fields(key, attribute):
-    assert getattr(AccessControl({key: 42}), attribute) == 42
+    """Read account permission fields correctly so access information is not lost."""
+    # 1. Parse one cloud permission field.
+    permissions = AccessControl({key: 42})
+    # 2. Its value appears under the corresponding Python name.
+    assert getattr(permissions, attribute) == 42
 
 
 def test_access_control_roles():
-    assert AccessControl({"Roles": ["owner"]}).roles == ["owner"]
+    """Retain the account's role, rather than confusing it with device details."""
+    # 1. The cloud says this account is an owner.
+    permissions = AccessControl({"Roles": ["owner"]})
+    # 2. Parsing should keep that role unchanged.
+    assert permissions.roles == ["owner"]
 
 
 def test_access_control_role_operations():
-    assert AccessControl({"RoleOperations": ["read"]}).role_operations == ["read"]
+    """Retain allowed operations so an account's permissions remain understandable."""
+    # 1. The cloud permits this account to read stove information.
+    permissions = AccessControl({"RoleOperations": ["read"]})
+    # 2. The parser should preserve that operation.
+    assert permissions.role_operations == ["read"]
 
 
 def test_access_control_roles_and_operations_round_trip():
+    """Preserve permissions through report replay without inventing a stove serial number."""
+    # 1. Parse an account with both a role and an allowed operation.
     parsed = AccessControl({"Roles": ["owner"], "RoleOperations": ["read"]})
     assert parsed.roles == ["owner"]
     assert parsed.role_operations == ["read"]
     assert not hasattr(parsed, "unique_code")
+    # 2. Save and restore those permissions; the result must stay identical.
     restored = AccessControl(asdict(parsed), True)
     assert asdict(restored) == asdict(parsed)
