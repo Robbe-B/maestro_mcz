@@ -247,7 +247,11 @@ class MaestroController(MaestroControllerInterface):
             )
         )
         success = await self.make_request("POST", url=url, body=body)
-        if callback_on_success is not None and success is not None:
+        if success is None:
+            raise MaestroConnectionException(
+                f"Failed to activate program for device '{device_id}'"
+            )
+        if callback_on_success is not None:
             callback_on_success()
 
 
