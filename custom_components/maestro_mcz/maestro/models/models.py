@@ -1106,7 +1106,15 @@ supported_binary_sensors = [
         EntityCategory.DIAGNOSTIC,
         BinarySensorDeviceClass.PROBLEM,
         True,
-    )
+    ),
+    BinarySensorMczConfigItem(
+        "Pellet Level",
+        "sens_liv_pellet",
+        "mdi:seesaw",
+        EntityCategory.DIAGNOSTIC,
+        None,
+        True,
+    ),
 ]
 
 supported_sensors = [
