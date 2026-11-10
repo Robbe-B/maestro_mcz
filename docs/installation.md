@@ -30,11 +30,15 @@ Starting with Home Assistant 2026.11, Marketplace replaces the separate HACS int
 
 For **Home Assistant 2026.11 or newer**:
 
+[![Open the Maestro MCZ repository in Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Robbe-B&repository=maestro_mcz&category=integration)
+
 1. Go to **Settings > Marketplace** as an administrator and accept the community-content notice if prompted.
 2. Select **Add from link**, enter `https://github.com/Robbe-B/maestro_mcz`, and select **Add**. Connect GitHub if prompted.
 3. If asked for a content type, choose **Integration**.
 4. Open the added repository, select **Install**, and confirm the version.
 5. Follow any restart prompt, then continue with [Add your account](#add-your-account). If the setup dialog opens automatically, use that dialog.
+
+The button above opens the repository in Home Assistant's marketplace flow; it does not install or configure the integration automatically. If it does not work, follow the Marketplace steps above or use the repo URL directly.
 
 See the [Marketplace custom repository guide](https://www.home-assistant.io/integrations/marketplace/#custom-repositories) if the repository cannot be added.
 
