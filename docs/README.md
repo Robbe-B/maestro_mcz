@@ -21,8 +21,8 @@ Bring a stove linked to your Maestro account into Home Assistant. These guides e
 The integration uses the same cloud service as the official Maestro app. First confirm that you can sign in to that app and see your stove online.
 
 <p>
-  <img src="app_icon.png" alt="Maestro app icon" width="72" height="72">
-  <img src="old_app_icon.png" alt="Earlier Maestro app icon" width="72" height="72">
+  <img src="app_icon.png" alt="Maestro app icon" width="72" height="72" style="border-radius: 0;">
+  <img src="old_app_icon.png" alt="Earlier Maestro app icon" width="72" height="72" style="border-radius: 0;">
 </p>
 
 The app icons above are retained from the original project documentation to help you recognize the app. An icon alone does not establish stove compatibility.
@@ -33,16 +33,16 @@ The app icons above are retained from the original project documentation to help
 Home Assistant  <-->  Maestro cloud service  <-->  Your stove
 ```
 
-Home Assistant periodically retrieves cloud data and sends supported commands through the same service. A working connection on one side does not guarantee a working connection on the other; the integration provides separate [cloud and device connection indicators](entities.md#connectivity-and-alarms).
+Home Assistant periodically retrieves cloud data and sends supported commands through the same service. A working connection on one side does not guarantee a working connection on the other; the installation and cloud account still need to be valid.
 
 > [!NOTE]
-> These guides describe the cloud implementation on the repository's `main` branch. Installed releases can differ; polling defaults are listed by version in [Configuration](configuration.md#polling-interval). Development Bluetooth code is not a promise of released Bluetooth or offline support.
+> These guides describe the cloud implementation on the repository's `main` branch. Installed releases can differ; polling defaults are listed by version in [Configuration](configuration.md#polling-intervals).
 
 ## What to expect
 
-Features depend on the model information returned by the cloud, including enabled settings, ranges, and operating modes. Use the controls Home Assistant actually exposes for your stove rather than expecting every example in this documentation.
+Features depend on the model information returned by the cloud, including enabled settings, ranges, and operating modes. Use the controls Home Assistant actually exposes for your stove rather than assuming every supported option appears everywhere.
 
-Cloud updates are not instantaneous. After changing a setting, allow time for the stove and cloud to report the new value. The [configuration guide](configuration.md#updates-and-response-time) explains this behavior.
+Cloud updates are not instantaneous. After changing a setting, allow time for the stove and cloud to report the new value. The [configuration guide](configuration.md#updates-and-response-time) explains the expected timing.
 
 ---
 
