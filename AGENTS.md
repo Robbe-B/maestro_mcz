@@ -4,9 +4,25 @@ Keep the README user-facing and edit it only when the user explicitly requests
 a README update. Do not update it automatically for implementation, setup,
 usage, or user-visible behavior changes.
 
+Preserve the current plain-language, uncluttered balance in the README and
+user guides. Write for someone installing or using the integration, not someone
+reading its source code. Explain what to do, what to expect, and relevant
+limitations without requiring implementation knowledge.
+
+Keep the installation shortcut and shortest setup path prominent in the README.
+Make detailed guides available when needed rather than required reading before
+installation. Include technical details only when they help the reader complete
+a task or understand a limitation; explain unfamiliar terms when needed.
+
+Keep documentation readable as plain Markdown as well as when rendered. Prefer
+short paragraphs and use headings, lists, and tables where they genuinely help.
+Avoid duplicated instructions, exhaustive internal details, and unnecessary
+sections. Update the relevant guide instead of appending technical notes to
+user-facing pages.
+
 Preserve valuable technical background in separate developer documentation or
-issue artifacts, not the README. Keep agent instructions in this file rather
-than technical analyses.
+issue artifacts, not the README or user guides. Keep agent instructions in this
+file rather than technical analyses.
 
 # Test readability
 
