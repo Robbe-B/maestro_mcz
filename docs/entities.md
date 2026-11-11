@@ -14,7 +14,7 @@ The integration supports nine Home Assistant entity platforms. The tables below 
 | Switch | Enable or disable a function | Start / Stop, Timer |
 | Number | Adjust numeric settings | Ignition/shutdown delays, hysteresis, pump threshold |
 | Sensor | Read measurements and status | Temperatures, operating mode, maintenance information |
-| Binary sensor | Read on/off status | Alarm, cloud connection, device connection |
+| Binary sensor | Read on/off status | Alarm, Pellet Level Low, cloud connection, device connection |
 | Button | Run a one-time command | Alarm Reset, Set System Date & Time |
 | Date/time | Set the stove clock | Date & Time; disabled by default |
 
@@ -79,6 +79,8 @@ If several replay files describe the same stove ID and name, the most recently m
 **Cloud Connection Status** and **Device Connection Status** help distinguish the integration-to-cloud connection from the stove-to-cloud connection. See [how to interpret them](configuration.md#connectivity-and-limitations).
 
 The **Alarm** binary sensor indicates an error state. **Last Alarm Code** provides the last reported code. Use the stove's manual or MCZ support to interpret a code; this integration is not a fault-diagnosis or safety system.
+
+**Pellet Level Low** turns on when the stove's pellet level probe reports that the hopper is running low, the same moment the MCZ app shows its pellet warning. It appears only on stoves that send a probe reading. This warning is not an alarm: **Alarm** stays off.
 
 The **Alarm Reset** button sends a reset command when the model exposes one. Resolve the cause and follow the manufacturer's instructions before resetting an alarm.
 

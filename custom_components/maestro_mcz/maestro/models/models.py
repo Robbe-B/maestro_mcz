@@ -457,6 +457,7 @@ class BinarySensorMczConfigItem(MczConfigItem):
         category: EntityCategory | None,
         device_class: BinarySensorDeviceClass | None,
         enabled_by_default: bool,
+        inverted: bool = False,
     ) -> None:
         """Create a 'Binary Sensor' MCZ config item."""
         super().__init__(user_friendly_name, None)
@@ -465,6 +466,7 @@ class BinarySensorMczConfigItem(MczConfigItem):
         self.category = category
         self.device_class = device_class
         self.enabled_by_default = enabled_by_default
+        self.inverted = inverted
 
 
 @dataclass
@@ -1106,7 +1108,18 @@ supported_binary_sensors = [
         EntityCategory.DIAGNOSTIC,
         BinarySensorDeviceClass.PROBLEM,
         True,
-    )
+    ),
+    # 'sens_liv_pel' is the live reading of the pellet level probe:
+    # True = enough pellets, False = pellet reserve warning (stove beeps).
+    BinarySensorMczConfigItem(
+        "Pellet Level Low",
+        "sens_liv_pel",
+        "mdi:gauge-low",
+        None,
+        BinarySensorDeviceClass.PROBLEM,
+        True,
+        inverted=True,
+    ),
 ]
 
 supported_sensors = [
