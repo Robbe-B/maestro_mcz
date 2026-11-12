@@ -1,6 +1,9 @@
 {
   "domain": "maestro_mcz",
   "name": "Maestro MCZ",
+  "categories": [
+    "climate.thermostats_heating"
+  ],
   "codeowners": [
     "@Robbe-B"
   ],
