@@ -852,3 +852,55 @@ def test_sensor_falls_back_to_state_when_status_is_null(
     setattr(stove.State, prop, None)
     item._handle_coordinator_update_internal()
     assert getattr(item, value_property) is None
+
+
+async def setup_binary_sensors(hass, entry):
+    """Set up the binary sensor platform and return the controls it creates."""
+    module = importlib.import_module("custom_components.maestro_mcz.binary_sensor")
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    return add_entities.call_args.args[0]
+
+
+@pytest.mark.parametrize("probe_reading", [True, False])
+async def test_pellet_level_low_appears_only_when_stove_reports_its_probe(
+    hass, entry, coordinator, stove, probe_reading
+):
+    """Show the pellet warning only on stoves that send a probe reading, not on every stove."""
+    # 1. Our example stove sends no pellet probe reading.
+    assert stove.Status.sens_liv_pel is None
+    controls_without_probe = await setup_binary_sensors(hass, entry)
+    ids_without_probe = {control.unique_id for control in controls_without_probe}
+    assert "SERIAL-001-sens_liv_pel" not in ids_without_probe
+    # 2. The stove now sends a reading from its pellet level probe.
+    stove.Status.sens_liv_pel = probe_reading
+    controls_with_probe = await setup_binary_sensors(hass, entry)
+    ids_with_probe = {control.unique_id for control in controls_with_probe}
+    # 3. The pellet warning appears, and the existing alarm keeps its ID.
+    assert "SERIAL-001-sens_liv_pel" in ids_with_probe
+    assert "SERIAL-001-is_in_error" in ids_with_probe
+
+
+@pytest.mark.parametrize(
+    "probe_reading,expected_warning",
+    [
+        (True, False),  # enough pellets: no warning
+        (False, True),  # reserve reached: the stove beeps, so warn
+        (None, None),  # no reading: unknown, never a guessed warning
+    ],
+)
+async def test_pellet_level_low_turns_on_when_the_reserve_is_reached(
+    hass, entry, coordinator, stove, probe_reading, expected_warning
+):
+    """Turn the warning on exactly when the probe reports that pellets are running out."""
+    # 1. Start with a stove that has a pellet level probe.
+    stove.Status.sens_liv_pel = True
+    controls = await setup_binary_sensors(hass, entry)
+    pellet_warning = next(
+        control for control in controls if getattr(control, "_prop", None) == "sens_liv_pel"
+    )
+    # 2. The probe sends a new reading (or none at all).
+    stove.Status.sens_liv_pel = probe_reading
+    pellet_warning._handle_coordinator_update_internal()
+    # 3. The warning follows the probe, inverted: False from the probe means "low".
+    assert pellet_warning.is_on is expected_warning

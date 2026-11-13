@@ -41,6 +41,7 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self._attr_icon = supported_binary_sensor.icon
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_binary_sensor.sensor_get_name
+        self._inverted = getattr(supported_binary_sensor, "inverted", False)
         self.entity_registry_enabled_default = (
             supported_binary_sensor.enabled_by_default
         )
@@ -69,6 +70,8 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         value = getattr(self._stove.Status, self._prop, None)
         if value is None:
             value = getattr(self._stove.State, self._prop, None)
+        if value is not None and self._inverted:
+            value = not value
         self._attr_is_on = value
 
 
@@ -189,9 +192,15 @@ def _getStoveBinarySensorEntities(
     """Get the binary sensor entities to create for this stove."""
     entities = []
     supported_binary_sensors = filter(
-        lambda supported_binary_sensor: any(
-            supported_binary_sensor.sensor_get_name == binary_sensor_name
-            for binary_sensor_name in dir(stove.State)
+        lambda supported_binary_sensor: (
+            any(
+                supported_binary_sensor.sensor_get_name == binary_sensor_name
+                for binary_sensor_name in dir(stove.State)
+            )
+            # Status-only fields (such as the pellet level probe) are declared for
+            # every stove, so only create them when this stove reports a value.
+            or getattr(stove.Status, supported_binary_sensor.sensor_get_name, None)
+            is not None
         ),
         iter(models.supported_binary_sensors),
     )
