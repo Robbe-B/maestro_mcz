@@ -2,7 +2,7 @@
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "--strict-markers --disable-socket --allow-unix-socket"
+addopts = "-p no:respx --strict-markers --disable-socket --allow-unix-socket"
 
 [tool.coverage.run]
 branch = true
