@@ -4,10 +4,11 @@ Keep the README user-facing and edit it only when the user explicitly requests
 a README update. Do not update it automatically for implementation, setup,
 usage, or user-visible behavior changes.
 
-Preserve the current plain-language, uncluttered balance in the README and
-user guides. Write for someone installing or using the integration, not someone
-reading its source code. Explain what to do, what to expect, and relevant
-limitations without requiring implementation knowledge.
+The README and user guides are for nontechnical users. Assume no programming
+or knowledge of the integration's internals. Keep explanations short, practical,
+and in plain language: what to do, what to expect, and any relevant limitations.
+Describe the controls users see, not how the code chooses commands. Avoid
+internal identifiers, protocol details, and implementation history.
 
 Keep the installation shortcut and shortest setup path prominent in the README.
 Make detailed guides available when needed rather than required reading before
@@ -20,9 +21,8 @@ Avoid duplicated instructions, exhaustive internal details, and unnecessary
 sections. Update the relevant guide instead of appending technical notes to
 user-facing pages.
 
-Preserve valuable technical background in separate developer documentation or
-issue artifacts, not the README or user guides. Keep agent instructions in this
-file rather than technical analyses.
+Preserve valuable technical background in issue artifacts, not the README or
+user guides. Keep agent instructions in this file rather than technical analyses.
 
 # Home Assistant quality
 
@@ -30,6 +30,13 @@ Aim for Platinum-quality Home Assistant changes. Consult the current
 [Integration Quality Scale](https://contributors.home-assistant.io/core/quality-scale/)
 when implementing or reviewing changes. Do not claim a tier unless the whole
 integration meets its requirements.
+
+# Python linting
+
+Keep Python linting and formatting in mind while writing code. Use existing
+tooling and configuration, and run available checks on changed Python files
+before finishing. Fix issues introduced by the change without weakening rules,
+adding blanket suppressions, or reformatting unrelated code.
 
 # Imports
 

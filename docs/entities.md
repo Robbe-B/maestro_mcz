@@ -26,6 +26,8 @@ The main climate entity supports **Heat** and **Off** when a recognized power co
 
 Possible presets include **Manual**, **Auto**, **Overnight**, **Comfort**, and **Turbo**. Your stove determines the available subset and temperature range. The integration normalizes some older model names: `dynamic` becomes `auto`, and `power` becomes `turbo`.
 
+Some older stoves may show extra presets they do not support. Use **Manual** or **Auto** if another preset does not work.
+
 **Heat** expresses the selected HVAC mode; it does not mean the stove is burning at that instant. Startup, shutdown, standby, and other phases can affect the reported heating action.
 
 ## Fans and manual power

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
-from homeassistant.components.climate import HVACAction, HVACMode
+from homeassistant.components.climate import ClimateEntityFeature, HVACAction, HVACMode
 from homeassistant.components.fan import FanEntityFeature
 from homeassistant.const import UnitOfTemperature
 from homeassistant.helpers.entity import EntityCategory
@@ -23,6 +23,7 @@ from custom_components.maestro_mcz.button import (
     MczTimeSyncButtonEntity,
 )
 from custom_components.maestro_mcz.climate import MczClimateEntity
+from custom_components.maestro_mcz.fan import MczFanEntity
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Configuration,
     ModelConfiguration,
@@ -57,6 +58,70 @@ def last_sent_command(controller):
     activation = controller.activate_program_with_commands_for_stove.await_args
     sent_commands = activation.args[4]
     return sent_commands[0]
+
+
+@pytest.fixture
+def m1_mode_stove(stove, configuration):
+    """Provide an M1 stove exposing both mode commands, as the affected cloud model does."""
+    sensor_names = {
+        "com_on_off": "m1_stato_stufa",
+        "mod_funz": "m1_mod_lav_att",
+        "set_vent_v1": "m1_set_vent_v1",
+        "cod_for_spe_mqtt": "m1_cod_for_spe_mqtt",
+    }
+    for group in stove.Model.model_configurations:
+        if group.configuration_name == "cod_for_spe_mqtt":
+            group.configuration_name = "PING STOVE"
+            group.configurations[0].mappings = {
+                "C|RecuperoParametri": 0,
+                "C|RecuperoInfo": 1,
+            }
+        elif group.configuration_name == "Auto":
+            group.configuration_name = "Dynamic"
+            group.configurations[0].enabled = True
+        elif group.configuration_name == "set_mod":
+            group.configurations[0].variants.extend(["overnight", "power"])
+            group.configurations[0].mappings.update({"overnight": 3, "power": 4})
+        for sensor in group.configurations:
+            if sensor.sensor_name in sensor_names:
+                sensor.sensor_name = sensor_names[sensor.sensor_name]
+                sensor.sensor_id = f"id-{sensor.sensor_name}"
+    stove.Model.model_configurations.append(
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Cambio_mod_2MOD",
+                "ConfigurationId": "legacy-mode-config",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration("m1_automode", "boolean")],
+            }
+        )
+    )
+    stove.Model.model_configurations.append(
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Ricetta Pellet",
+                "ConfigurationId": "legacy-recipe-config",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [
+                    configuration(
+                        "m1_mod_lav_att",
+                        Variants=["manual", "dynamic", "overnight", "comfort", "power"],
+                        Mappings={
+                            "manual": 10,
+                            "dynamic": 11,
+                            "overnight": 12,
+                            "comfort": 13,
+                            "power": 14,
+                        },
+                    )
+                ],
+            }
+        )
+    )
+    stove.Status.sm_vs_bootloader = "1.2"
+    return stove
 
 
 def test_all_platforms_discover_supported_entities_and_keep_legacy_ids(entities):
@@ -496,6 +561,306 @@ async def test_climate_targets_presets_and_toggle_guard(
     stove.State.mode = "dynamic"
     item._handle_coordinator_update_internal()
     assert item.preset_mode == "auto"
+
+
+@pytest.mark.parametrize(
+    "bootloader,legacy",
+    [
+        ("1.2", True),
+        ("1.2.9", True),
+        ("1.3", False),
+        ("1.10", False),
+        ("2.0", False),
+        (None, False),
+        ("", False),
+        ("unknown", False),
+        ("1", False),
+        ("1.2beta", False),
+    ],
+)
+async def test_m1_mode_commands_follow_bootloader(
+    m1_mode_stove, coordinator, controller, bootloader, legacy, caplog
+):
+    """Keep all advertised modes and send each through the control supported by its stove version."""
+    # 1. Standard and older controls exist, and the cloud advertises five modes.
+    stove = m1_mode_stove
+    stove.Status.sm_vs_bootloader = bootloader
+    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        models.supported_power_settings
+    )
+
+    # 2. Create the heating control and switch in both directions.
+    item = MczClimateEntity(coordinator, stove.UniqueCode, *power)
+    assert item.supported_features & ClimateEntityFeature.PRESET_MODE
+    assert item.preset_modes == ["manual", "auto", "comfort", "overnight", "turbo"]
+    if legacy:
+        expected_sensor = "id-m1_automode"
+        expected_configuration = "legacy-mode-config"
+        expected_values = [True, False]
+    else:
+        expected_sensor = "id-m1_mod_lav_att"
+        expected_configuration = "config-set_mod"
+        expected_values = [1, 0]
+    for preset, expected_value in zip(("auto", "manual"), expected_values):
+        await item.async_set_preset_mode(preset)
+
+        # 3. Send the correct sensor, group and exact value type to the cloud.
+        command = last_sent_command(controller)
+        assert command.SensorId == expected_sensor
+        assert command.Value == expected_value
+        assert type(command.Value) is type(expected_value)
+        activation = controller.activate_program_with_commands_for_stove.await_args
+        assert activation.args[2] == expected_configuration
+    for preset, reported_mode, standard_value, legacy_value in (
+        ("comfort", "comfort", 2, 13),
+        ("overnight", "overnight", 3, 12),
+        ("turbo", "power", 4, 14),
+    ):
+        await item.async_set_preset_mode(preset)
+        command = last_sent_command(controller)
+        assert command.SensorId == "id-m1_mod_lav_att"
+        expected_value = legacy_value if legacy else standard_value
+        assert command.Value == expected_value
+        assert type(command.Value) is int
+        activation = controller.activate_program_with_commands_for_stove.await_args
+        expected_configuration = "legacy-recipe-config" if legacy else "config-set_mod"
+        assert activation.args[2] == expected_configuration
+        stove.State.mode = reported_mode
+        item._handle_coordinator_update_internal()
+        assert item.preset_mode == preset
+        assert stove.State.mode == reported_mode
+    assert coordinator.update_data_after_set.await_count == 5
+    if bootloader in (None, "", "unknown", "1", "1.2beta"):
+        assert "retaining standard mode commands" in caplog.text
+
+
+async def test_legacy_mode_switch_preserves_mode_based_fans(
+    m1_mode_stove, coordinator, controller
+):
+    """Keep fan commands attached to the reported mode when an older stove switches to automatic."""
+    # 1. An older stove starts in manual mode with its ordinary M1 fan controls.
+    stove = m1_mode_stove
+    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        models.supported_power_settings
+    )
+    climate = MczClimateEntity(coordinator, stove.UniqueCode, *power)
+    fan_configuration = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
+        models.supported_fans
+    )[0]
+    fan = MczFanEntity(coordinator, stove.UniqueCode, *fan_configuration)
+    await fan.async_set_percentage(50)
+    manual_activation = controller.activate_program_with_commands_for_stove.await_args
+    assert manual_activation.args[2] == "config-Manuale"
+
+    # 2. Switch the stove to auto; its next report still calls that mode dynamic.
+    await climate.async_set_preset_mode("auto")
+    assert last_sent_command(controller).Value is True
+    stove.State.mode = "dynamic"
+    climate._handle_coordinator_update_internal()
+    fan._update_features_based_on_current_stove_mode()
+    fan._handle_coordinator_update_internal()
+    await fan.async_set_percentage(50)
+
+    # 3. Display Auto without changing the raw mode or the numeric fan command.
+    assert climate.preset_mode == "auto"
+    assert stove.State.mode == "dynamic"
+    assert fan.available is True
+    dynamic_activation = controller.activate_program_with_commands_for_stove.await_args
+    assert dynamic_activation.args[2] == "config-Auto"
+    command = last_sent_command(controller)
+    assert command.SensorId == "id-m1_set_vent_v1"
+    assert command.Value == 3
+    assert type(command.Value) is int
+
+
+@pytest.mark.parametrize(
+    "legacy_problem",
+    ["missing", "disabled", "wrong_type", "missing_sensor_id", "missing_group_id"],
+)
+async def test_legacy_mode_without_valid_command_keeps_standard_commands(
+    m1_mode_stove, coordinator, controller, caplog, legacy_problem
+):
+    """Keep existing controls working when the cloud omits or cannot use the older command."""
+    # 1. The cloud still advertises standard modes, but its older command is unusable.
+    stove = m1_mode_stove
+    legacy_group = stove.get_model_configuration_by_model_configuration_name(
+        "Cambio_mod_2MOD"
+    )
+    if legacy_problem == "missing":
+        stove.Model.model_configurations.remove(legacy_group)
+    elif legacy_problem == "disabled":
+        legacy_group.configurations[0].enabled = False
+    elif legacy_problem == "wrong_type":
+        legacy_group.configurations[0].type = "int"
+    elif legacy_problem == "missing_sensor_id":
+        legacy_group.configurations[0].sensor_id = None
+    else:
+        legacy_group.configuration_id = None
+    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        models.supported_power_settings
+    )
+
+    # 2. Create the heating control and switch between automatic and manual.
+    item = MczClimateEntity(coordinator, stove.UniqueCode, *power)
+    for preset, expected_value in (("auto", 1), ("manual", 0)):
+        await item.async_set_preset_mode(preset)
+
+        # 3. Keep all advertised presets and send the standard numeric command.
+        command = last_sent_command(controller)
+        assert command.SensorId == "id-m1_mod_lav_att"
+        assert command.Value == expected_value
+        assert type(command.Value) is int
+        activation = controller.activate_program_with_commands_for_stove.await_args
+        assert activation.args[2] == "config-set_mod"
+    assert item.preset_modes == ["manual", "auto", "comfort", "overnight", "turbo"]
+    assert item.supported_features & ClimateEntityFeature.PRESET_MODE
+    assert "retaining standard mode commands" in caplog.text
+    await item.async_set_preset_mode("comfort")
+    assert last_sent_command(controller).Value == 13
+    recipe_activation = controller.activate_program_with_commands_for_stove.await_args
+    assert recipe_activation.args[2] == "legacy-recipe-config"
+
+
+@pytest.mark.parametrize(
+    "recipe_problem",
+    [
+        "missing",
+        "disabled",
+        "wrong_type",
+        "missing_sensor_id",
+        "missing_group_id",
+        "missing_mapping",
+        "missing_mappings",
+        "boolean_mapping",
+        "missing_variant",
+        "missing_variants",
+    ],
+)
+async def test_legacy_recipe_without_valid_command_keeps_standard_commands(
+    m1_mode_stove, coordinator, controller, caplog, recipe_problem
+):
+    """Keep presets usable when an older stove's alternate preset command cannot be used safely."""
+    # 1. The ordinary controls work, but the older recipe control has a problem.
+    stove = m1_mode_stove
+    recipe_group = stove.get_model_configuration_by_model_configuration_name(
+        "Ricetta Pellet"
+    )
+    recipe_sensor = recipe_group.configurations[0]
+    if recipe_problem == "missing":
+        stove.Model.model_configurations.remove(recipe_group)
+    elif recipe_problem == "disabled":
+        recipe_sensor.enabled = False
+    elif recipe_problem == "wrong_type":
+        recipe_sensor.type = "boolean"
+    elif recipe_problem == "missing_sensor_id":
+        recipe_sensor.sensor_id = None
+    elif recipe_problem == "missing_group_id":
+        recipe_group.configuration_id = None
+    elif recipe_problem == "missing_mapping":
+        del recipe_sensor.mappings["comfort"]
+    elif recipe_problem == "missing_mappings":
+        recipe_sensor.mappings = None
+    elif recipe_problem == "boolean_mapping":
+        recipe_sensor.mappings["comfort"] = True
+    elif recipe_problem == "missing_variants":
+        recipe_sensor.variants = None
+    else:
+        recipe_sensor.variants.remove("comfort")
+    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        models.supported_power_settings
+    )
+
+    # 2. Request a preset whose older command is unavailable or invalid.
+    item = MczClimateEntity(coordinator, stove.UniqueCode, *power)
+    await item.async_set_preset_mode("comfort")
+
+    # 3. Use its standard command without hiding modes or breaking Manual/Auto.
+    command = last_sent_command(controller)
+    assert command.SensorId == "id-m1_mod_lav_att"
+    assert command.Value == 2
+    assert type(command.Value) is int
+    activation = controller.activate_program_with_commands_for_stove.await_args
+    assert activation.args[2] == "config-set_mod"
+    assert item.preset_modes == ["manual", "auto", "comfort", "overnight", "turbo"]
+    assert "retaining standard" in caplog.text
+    await item.async_set_preset_mode("auto")
+    assert last_sent_command(controller).Value is True
+    auto_activation = controller.activate_program_with_commands_for_stove.await_args
+    assert auto_activation.args[2] == "legacy-mode-config"
+    if recipe_problem in ("missing_mapping", "boolean_mapping", "missing_variant"):
+        await item.async_set_preset_mode("turbo")
+        assert last_sent_command(controller).Value == 14
+        turbo_activation = controller.activate_program_with_commands_for_stove.await_args
+        assert turbo_activation.args[2] == "legacy-recipe-config"
+
+
+async def test_legacy_recipe_uses_model_mapping_values(
+    m1_mode_stove, coordinator, controller
+):
+    """Follow the stove's own preset values instead of assuming every older model uses the same numbers."""
+    # 1. This model assigns Comfort a different value in its older control.
+    stove = m1_mode_stove
+    recipe_group = stove.get_model_configuration_by_model_configuration_name(
+        "Ricetta Pellet"
+    )
+    recipe_group.configurations[0].mappings["comfort"] = 23
+    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        models.supported_power_settings
+    )
+
+    # 2. Create the heating control and choose Comfort.
+    item = MczClimateEntity(coordinator, stove.UniqueCode, *power)
+    await item.async_set_preset_mode("comfort")
+
+    # 3. Send this model's value, not a fixed number or the standard mapping.
+    command = last_sent_command(controller)
+    assert command.SensorId == "id-m1_mod_lav_att"
+    assert command.Value == 23
+    assert type(command.Value) is int
+    activation = controller.activate_program_with_commands_for_stove.await_args
+    assert activation.args[2] == "legacy-recipe-config"
+
+
+@pytest.mark.parametrize("legacy_enabled", [True, False])
+async def test_legacy_only_mode_configuration(
+    m1_mode_stove, coordinator, controller, legacy_enabled
+):
+    """Offer two presets only when the cloud's sole mode control is a usable older command."""
+    # 1. No standard mode control exists, and the older command may be disabled.
+    stove = m1_mode_stove
+    stove.Model.model_configurations = [
+        group
+        for group in stove.Model.model_configurations
+        if group.configuration_name != "set_mod"
+    ]
+    legacy_group = stove.get_model_configuration_by_model_configuration_name(
+        "Cambio_mod_2MOD"
+    )
+    legacy_group.configurations[0].enabled = legacy_enabled
+    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        models.supported_power_settings
+    )
+
+    # 2. Create the heating control and request each basic mode.
+    item = MczClimateEntity(coordinator, stove.UniqueCode, *power)
+    for preset, expected_value in (("auto", True), ("manual", False)):
+        await item.async_set_preset_mode(preset)
+
+        # 3. Send boolean values only if the sole command is enabled.
+        if legacy_enabled:
+            assert item.preset_modes == ["manual", "auto"]
+            command = last_sent_command(controller)
+            assert command.SensorId == "id-m1_automode"
+            assert command.Value is expected_value
+            activation = controller.activate_program_with_commands_for_stove.await_args
+            assert activation.args[2] == "legacy-mode-config"
+        else:
+            assert item.preset_modes is None
+            assert not item.supported_features & ClimateEntityFeature.PRESET_MODE
+            controller.activate_program_with_commands_for_stove.assert_not_awaited()
+    previous_command_count = controller.activate_program_with_commands_for_stove.await_count
+    await item.async_set_preset_mode("comfort")
+    assert controller.activate_program_with_commands_for_stove.await_count == previous_command_count
 
 
 @pytest.mark.parametrize("current,target", [(18.5, 23.5), (0, 0), (None, None)])
