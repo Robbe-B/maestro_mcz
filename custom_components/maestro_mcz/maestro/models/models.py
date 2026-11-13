@@ -448,6 +448,7 @@ class BinarySensorMczConfigItem(MczConfigItem):
     """Representation of a 'Binary Sensor' MCZ config item."""
 
     device_class: BinarySensorDeviceClass | None = None
+    enabled_sensor_get_name: str | None = None
 
     def __init__(
         self,
@@ -458,6 +459,10 @@ class BinarySensorMczConfigItem(MczConfigItem):
         device_class: BinarySensorDeviceClass | None,
         enabled_by_default: bool,
         inverted: bool = False,
+        enabled_sensor_get_name: str | None = None,
+        sensor_set_name: str | None = None,
+        sensor_set_config_name: str | None = None,
+        stove_model_generation: MczStoveModelGeneration | None = None,
     ) -> None:
         """Create a 'Binary Sensor' MCZ config item."""
         super().__init__(user_friendly_name, None)
@@ -467,6 +472,10 @@ class BinarySensorMczConfigItem(MczConfigItem):
         self.device_class = device_class
         self.enabled_by_default = enabled_by_default
         self.inverted = inverted
+        self.enabled_sensor_get_name = enabled_sensor_get_name
+        self.sensor_set_name = sensor_set_name
+        self.sensor_set_config_name = sensor_set_config_name
+        self.stove_model_generation = stove_model_generation
 
 
 @dataclass
@@ -1119,6 +1128,23 @@ supported_binary_sensors = [
         BinarySensorDeviceClass.PROBLEM,
         True,
         inverted=True,
+        enabled_sensor_get_name="sens_liv_pellet",
+        sensor_set_name="sens_liv_pellet",
+        sensor_set_config_name="Sensore Livello Pellet",
+        stove_model_generation=MczStoveModelGeneration.M2_PLUS,
+    ),
+    BinarySensorMczConfigItem(
+        "Pellet Level Low",
+        "sens_liv_pel",
+        "mdi:gauge-low",
+        None,
+        BinarySensorDeviceClass.PROBLEM,
+        True,
+        inverted=True,
+        enabled_sensor_get_name="sens_liv_pellet",
+        sensor_set_name="m1_sens_liv_pellet",
+        sensor_set_config_name="Sensore Livello Pellet",
+        stove_model_generation=MczStoveModelGeneration.M1,
     ),
 ]
 

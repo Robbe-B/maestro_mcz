@@ -17,6 +17,29 @@ from .maestro import MaestroStove
 from .maestro.models import models
 
 
+def _binary_sensor_enabled(
+    stove: MaestroStove, supported_binary_sensor: models.BinarySensorMczConfigItem
+) -> bool:
+    """Check optional model configuration and its reported enable setting."""
+    if (
+        supported_binary_sensor.sensor_set_config_name is not None
+        and supported_binary_sensor.sensor_set_name is not None
+    ):
+        configuration = stove.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+            supported_binary_sensor.sensor_set_config_name,
+            supported_binary_sensor.sensor_set_name,
+        )
+        if configuration is None:
+            return False
+    enabled_sensor = supported_binary_sensor.enabled_sensor_get_name
+    if enabled_sensor is None:
+        return True
+    enabled = getattr(stove.Status, enabled_sensor, None)
+    if enabled is None:
+        enabled = getattr(stove.State, enabled_sensor, None)
+    return enabled is True
+
+
 class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
     """Generic binary sensor for Maestro MCZ stoves."""
 
@@ -41,6 +64,7 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self._attr_icon = supported_binary_sensor.icon
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_binary_sensor.sensor_get_name
+        self._supported_binary_sensor = supported_binary_sensor
         self._inverted = getattr(supported_binary_sensor, "inverted", False)
         self.entity_registry_enabled_default = (
             supported_binary_sensor.enabled_by_default
@@ -70,6 +94,8 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         value = getattr(self._stove.Status, self._prop, None)
         if value is None:
             value = getattr(self._stove.State, self._prop, None)
+        if not _binary_sensor_enabled(self._stove, self._supported_binary_sensor):
+            value = None
         if value is not None and self._inverted:
             value = not value
         self._attr_is_on = value
@@ -193,14 +219,16 @@ def _getStoveBinarySensorEntities(
     entities = []
     supported_binary_sensors = filter(
         lambda supported_binary_sensor: (
-            any(
-                supported_binary_sensor.sensor_get_name == binary_sensor_name
-                for binary_sensor_name in dir(stove.State)
+            _binary_sensor_enabled(stove, supported_binary_sensor)
+            and (
+                any(
+                    supported_binary_sensor.sensor_get_name == binary_sensor_name
+                    for binary_sensor_name in dir(stove.State)
+                )
+                # Status fields are declared for every stove; require a reading.
+                or getattr(stove.Status, supported_binary_sensor.sensor_get_name, None)
+                is not None
             )
-            # Status-only fields (such as the pellet level probe) are declared for
-            # every stove, so only create them when this stove reports a value.
-            or getattr(stove.Status, supported_binary_sensor.sensor_get_name, None)
-            is not None
         ),
         iter(models.supported_binary_sensors),
     )

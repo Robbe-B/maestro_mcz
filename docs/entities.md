@@ -80,7 +80,7 @@ If several replay files describe the same stove ID and name, the most recently m
 
 The **Alarm** binary sensor indicates an error state. **Last Alarm Code** provides the last reported code. Use the stove's manual or MCZ support to interpret a code; this integration is not a fault-diagnosis or safety system.
 
-**Pellet Level Low** turns on when the stove's pellet level probe reports that the hopper is running low and turns off when it reports enough pellets. It appears only on stoves that provide a probe reading. The MCZ app's warning may appear later; the two are not guaranteed to update together. A low-pellet reading does not by itself mean the stove has an alarm.
+**Pellet Level Low** turns on when the stove's pellet level probe reports that the hopper is running low and turns off when it reports enough pellets. It is only created when the stove reports an enabled probe and provides a reading. If the probe is later disabled or its enabled status is unknown, the entity shows no reading rather than a low-pellet warning. The MCZ app's warning may appear later; the two are not guaranteed to update together. A low-pellet reading does not by itself mean the stove has an alarm.
 
 The **Alarm Reset** button sends a remote reset request when the model exposes one; it cannot clear every alarm. Some alarms require physical intervention and a reset on the stove's own panel. The button cannot bypass that restriction.
 
