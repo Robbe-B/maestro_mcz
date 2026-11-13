@@ -26,7 +26,31 @@
           }
       }
   },
+  "exceptions": {
+    "consumption_invalid_auth": {
+      "message": "Authenticatie mislukt bij het ophalen van de verbruiksgeschiedenis"
+    },
+    "consumption_cannot_connect": {
+      "message": "De verbruiksgeschiedenis kon niet worden opgehaald: {error}"
+    },
+    "consumption_invalid_response": {
+      "message": "De Maestro-dienst heeft een ongeldige verbruiksgeschiedenis teruggestuurd"
+    }
+  },
   "entity": {
+    "sensor": {
+      "consumption_yesterday": {
+        "name": "Verbruik gisteren",
+        "state_attributes": {
+          "consumption_date": {
+            "name": "Verbruiksdatum"
+          },
+          "last_successful_update": {
+            "name": "Laatste geslaagde update"
+          }
+        }
+      }
+    },
     "climate": {
       "main_climate": {
         "state_attributes": {

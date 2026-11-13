@@ -19,7 +19,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DEFAULT_POLLING_INTERVAL, DOMAIN
+from .const import CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL, DOMAIN
 from .maestro.controller.controller_interface import MaestroControllerInterface
 from .maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
@@ -28,7 +28,6 @@ from .maestro.controller.maestro_controller import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-CONF_POLLING_INTERVAL = "polling_interval"
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): str,

@@ -9,13 +9,13 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.maestro_mcz import (
     PLATFORMS,
-    MczAccountCoordinator,
     _async_update_listener,
     _has_mocked_folder,
     async_setup,
     async_setup_entry,
     async_unload_entry,
 )
+from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
 from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
@@ -202,7 +202,8 @@ async def test_coordinator_delayed_refresh_contract(coordinator):
     # 1. Record waits and refreshes without actually delaying the test.
     with (
         patch(
-            "custom_components.maestro_mcz.asyncio.sleep", new_callable=AsyncMock
+            "custom_components.maestro_mcz.coordinator.asyncio.sleep",
+            new_callable=AsyncMock,
         ) as sleep,
         patch.object(coordinator, "async_refresh", new_callable=AsyncMock) as refresh,
     ):

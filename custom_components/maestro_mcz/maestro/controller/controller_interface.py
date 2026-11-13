@@ -1,6 +1,9 @@
 """Interface for controller."""
 
+from datetime import date
+
 from .requests.activate_program import ProgramCommand
+from .responses.consumption import ConsumptionHistory
 from .responses.model import Model
 from .responses.state import State
 from .responses.status import Status
@@ -49,6 +52,12 @@ class MaestroControllerInterface:
     ) -> State:
         """Gets the stove state for a given device ID."""
         pass  # noqa: PIE790
+
+    async def get_consumption_for_stove(
+        self, unique_code: str, anchor_date: date
+    ) -> ConsumptionHistory:
+        """Get the week containing the requested date, if the service provides it."""
+        raise NotImplementedError
 
     async def activate_program_with_commands_for_stove(
         self,

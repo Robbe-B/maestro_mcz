@@ -11,11 +11,14 @@ from unittest.mock import AsyncMock
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.maestro_mcz import MczAccountCoordinator
 from custom_components.maestro_mcz.const import DOMAIN
+from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
 from custom_components.maestro_mcz.maestro import MaestroStove
 from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
     MaestroController,
+)
+from custom_components.maestro_mcz.maestro.controller.responses.consumption import (
+    ConsumptionHistory,
 )
 from custom_components.maestro_mcz.maestro.controller.responses.model import Model
 from custom_components.maestro_mcz.maestro.controller.responses.state import State
@@ -77,7 +80,7 @@ def configuration():
 
 @pytest.fixture
 def model_payload(configuration):
-    """Describe the controls our pretend stove supports."""
+    """Describe our pretend stove's controls and newer-model ping protocol."""
 
     def group(name, configs):
         """Keep related controls together, just as the cloud response does."""
@@ -154,6 +157,10 @@ def model_payload(configuration):
                 ],
             ),
             group("Orodatario", clock_configurations),
+            group(
+                "cod_for_spe_mqtt",
+                [configuration("cod_for_spe_mqtt", Mappings={"Ping": 1122})],
+            ),
         ],
     }
 
@@ -163,6 +170,9 @@ def controller(stove_info_payload, model_payload):
     """Stand in for the cloud while keeping the real response-parsing code."""
     mocked_controller = AsyncMock(spec=MaestroController)
     mocked_controller.is_authenticated = True
+    mocked_controller.get_consumption_for_stove.return_value = ConsumptionHistory(
+        days=(), total=0, vs_previous_interval=None
+    )
     mocked_controller.retrieve_linked_stove_infos.return_value = [
         StoveInfo(deepcopy(stove_info_payload))
     ]

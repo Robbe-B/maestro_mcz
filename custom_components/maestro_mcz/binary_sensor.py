@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.models import models
 

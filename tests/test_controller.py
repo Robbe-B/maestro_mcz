@@ -1,5 +1,6 @@
 """Cloud wire protocol, authentication, retries, and command regression tests."""
 
+from datetime import date
 import json
 from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
@@ -10,6 +11,7 @@ from custom_components.maestro_mcz.maestro.controller.const import (
     ACTIVATE_PROGRAM_URL,
     APPLIANCE_URL,
     CONTENT_TYPE,
+    CONSUMPTION_URL,
     LOGIN_URL,
     PING_URL,
     STOVE_INFO_URL,
@@ -379,3 +381,107 @@ async def test_activate_program_preserves_command_values_and_callback(api, succe
         callback.assert_not_called()
     else:
         callback.assert_called_once()
+
+
+async def test_consumption_request_uses_serial_and_preserves_zero(api):
+    """Fetch the right stove's dated history without mistaking zero use for missing data."""
+    # 1. The account is logged in and the service reports no use on the requested day.
+    api._token = "test-token"
+    api._session.request.return_value = response(
+        payload={
+            "Data": [{"Date": "20261112", "Consumption": 0}],
+            "Total": 0,
+            "VsPreviousInterval": -100,
+        }
+    )
+
+    # 2. Request the stove's history for the selected date.
+    history = await api.get_consumption_for_stove("SERIAL-001", date(2026, 11, 12))
+
+    # 3. The serial, date, and exact zero reading survive the real HTTP/parsing path.
+    request_arguments = api._session.request.call_args
+    assert request_arguments.args[0] == "GET"
+    assert request_arguments.args[1] == (
+        f"{CONSUMPTION_URL}/SERIAL-001/week/20261112"
+    )
+    assert request_arguments.kwargs["headers"]["auth-token"] == "test-token"
+    assert request_arguments.kwargs["data"] == "null"
+    assert history.consumption_for_date(date(2026, 11, 12)) == 0
+    assert history.consumption_for_date(date(2026, 11, 11)) is None
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_error"),
+    [(None, MaestroConnectionException), ({}, ValueError)],
+    ids=["request-failed", "invalid-history"],
+)
+async def test_consumption_classifies_failure_after_normal_request(
+    api, payload, expected_error
+):
+    """Keep request failures separate from malformed history without changing other endpoints."""
+    # 1. The shared request handler returns a failure or an invalid history response.
+    with patch.object(
+        api, "make_request", new_callable=AsyncMock, return_value=payload
+    ) as request:
+        # 2. Let the consumption endpoint interpret the result.
+        with pytest.raises(expected_error):
+            await api.get_consumption_for_stove("SERIAL-001", date(2026, 11, 12))
+
+    # 3. Consumption uses the same default request behavior as other readings.
+    request.assert_awaited_once_with(
+        "GET", f"{CONSUMPTION_URL}/SERIAL-001/week/20261112"
+    )
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 429, 503])
+async def test_consumption_http_failure_uses_existing_request_contract(api, status):
+    """Treat rejected history as unavailable while keeping the usual request retries."""
+    # 1. Every request is rejected, even if an expired token is renewed.
+    api._token = "test-token"
+    api._session.request.return_value = response(status=status)
+    api._session.post.return_value = response(payload={"Token": "renewed-token"})
+    with patch.object(api, "_backoff", new_callable=AsyncMock):
+        # 2. Ask for optional history through the real request handler.
+        with pytest.raises(
+            MaestroConnectionException, match="Failed to retrieve consumption history"
+        ):
+            await api.get_consumption_for_stove("private-serial", date(2026, 11, 12))
+
+    # 3. Existing retry rules apply; a rejected response does not imply no support.
+    expected_attempts = 3 if status in (401, 403, 503) else 1
+    assert api._session.request.call_count == expected_attempts
+
+
+@pytest.mark.parametrize("failure", [TimeoutError(), aiohttp.ClientError("offline")])
+async def test_consumption_network_failure_is_not_empty_history(api, failure):
+    """Report unreachable history as a failure, never as a successful zero-consumption day."""
+    # 1. Every attempt fails before an HTTP response is received.
+    api._token = "test-token"
+    api._session.request.return_value = response(error=failure)
+    with patch.object(api, "_backoff", new_callable=AsyncMock):
+        # 2. Retry within the existing request budget.
+        with pytest.raises(
+            MaestroConnectionException, match="Failed to retrieve consumption history"
+        ):
+            await api.get_consumption_for_stove("SERIAL-001", date(2026, 11, 12))
+
+    # 3. The failure is bounded, rather than retrying indefinitely.
+    assert api._session.request.call_count == 3
+
+
+async def test_consumption_login_failure_uses_existing_request_contract(api):
+    """Keep failed login retries unchanged and mark optional history unavailable."""
+    # 1. The account has no usable token and its credentials are rejected.
+    api._session.post.return_value = response(status=401)
+
+    # 2. Ask for consumption history using the real login path.
+    with patch.object(api, "_backoff", new_callable=AsyncMock) as backoff:
+        with pytest.raises(
+            MaestroConnectionException, match="Failed to retrieve consumption history"
+        ):
+            await api.get_consumption_for_stove("SERIAL-001", date(2026, 11, 12))
+
+    # 3. No history request is sent without a valid login.
+    api._session.request.assert_not_called()
+    assert api._session.post.call_count == 3
+    assert backoff.await_count == 3

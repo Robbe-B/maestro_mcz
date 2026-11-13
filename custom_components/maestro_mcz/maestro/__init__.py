@@ -21,7 +21,7 @@ from .controller.responses.model import (
 from .controller.responses.state import State
 from .controller.responses.status import Status
 from .controller.responses.stove_info import StoveInfo
-from .models.models import MczConfigItem
+from .models.models import MczConfigItem, MczStoveModelGeneration
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,6 +89,11 @@ class MaestroStove:
         return self._node.unique_code
 
     @property
+    def time_zone_iana(self) -> str | None:
+        """Return the cloud's timezone for calendar-based history."""
+        return self._node.time_zone_iana
+
+    @property
     def State(self) -> State | None:
         """Return the stove state."""
         return self._state
@@ -102,6 +107,24 @@ class MaestroStove:
     def Model(self) -> Model | None:
         """Return the stove model."""
         return self._model
+
+    @property
+    def model_generation(self) -> MczStoveModelGeneration:
+        """Infer the control family from the model's known ping commands."""
+        if self.Model is None:
+            return MczStoveModelGeneration.UNKNOWN
+
+        find_ping = (
+            self.get_sensor_configuration_by_model_configuration_name_and_sensor_name
+        )
+        if find_ping("PING STOVE", "m1_cod_for_spe_mqtt") is not None:
+            return MczStoveModelGeneration.M1
+
+        for group_name in ("cod_for_spe_mqtt", "PING STOVE"):
+            if find_ping(group_name, "cod_for_spe_mqtt") is not None:
+                return MczStoveModelGeneration.M2_PLUS
+
+        return MczStoveModelGeneration.UNKNOWN
 
     async def _do_ping_configuration(self, ping: SensorConfiguration) -> None:
         try:

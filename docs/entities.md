@@ -60,6 +60,20 @@ Numeric ranges and steps are read from the cloud model. Consult your stove's man
 
 Water and puffer readings are relevant only where the stove exposes them. Sensor creation depends on the returned data; the existence of an internal field or a sensor name in the code does not establish that your stove provides a meaningful reading.
 
+### Consumption history
+
+**Yesterday's consumption** shows the Maestro cloud's estimate in kWh. It appears only after the service returns a reading for yesterday, including a genuine zero. M1 stoves are not queried because their cloud history only returns zero.
+
+History is requested at startup and local midnight, separately from live stove updates. If yesterday's reading is missing or the request fails, it retries hourly until a reading is available, including zero. Once retrieved, the reading is kept until the next day without further scheduled requests. The sensor uses the stove's cloud-configured timezone, or Home Assistant's timezone if none is provided. Its attributes show the consumption date and the last successful retrieval time.
+
+The sensor can remain available while the stove is offline, provided its cloud history is accessible. It becomes unavailable if the history request fails or yesterday's reading is missing. At midnight, the previous day's value is no longer shown as yesterday; the cloud may take time to publish the next reading. Empty history is not treated as zero or as proof that the stove is unsupported.
+
+This is the app's estimated energy figure, not a measurement of electricity drawn by the stove. It is not a live meter and does not provide Energy dashboard integration or historical imports.
+
+Diagnostic replay uses the saved consumption value without contacting the cloud. Older reports without consumption data do not create a reading.
+
+If several replay files describe the same stove ID and name, the most recently modified file is used. Reports with different stove names keep their own saved readings.
+
 ## Connectivity and alarms
 
 **Cloud Connection Status** and **Device Connection Status** help distinguish the integration-to-cloud connection from the stove-to-cloud connection. See [how to interpret them](configuration.md#connectivity-and-limitations).
@@ -79,6 +93,8 @@ After changing the clock, check it in the official app or on the stove, especial
 The integration matches known feature definitions against cloud-provided model configuration and state. Different generations, firmware, operating modes, and accessories can expose different features.
 
 This means an entity may not be created, may be disabled by default, or may become unavailable in a particular mode. Those are different situations.
+
+The integration distinguishes M1 and M2+ control families using known ping commands in the stove's cloud configuration, not its product name or power controls. M2+ does not identify an exact M2 or M3 generation. Unrecognized ping configurations remain unknown. AIR, HYDRO, and CORE describe product categories, not controller generations.
 
 To inspect disabled entities, open **Settings > Devices & services > Entities**, filter by **Maestro MCZ**, and include disabled entities. Enable an entity only if you need it and it applies to your stove.
 

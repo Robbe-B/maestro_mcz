@@ -11,11 +11,11 @@ from homeassistant.helpers.entity import EntityCategory
 
 
 class MczStoveModelGeneration(Enum):
-    """Representation of a MCZ Stove Model Generation enum."""
+    """Control families distinguished by the integration."""
 
+    UNKNOWN = 0
     M1 = 1
-    M2 = 2
-    M3 = 3
+    M2_PLUS = 2
 
 
 @dataclass
@@ -512,7 +512,7 @@ supported_power_settings = [
         "fase_op",
         "sub_fase_op",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     PowerSettingMczConfigItem(
         "Power",
@@ -533,7 +533,7 @@ supported_climate_function_modes = [
         "mod_funz",
         "set_mod",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
         {"dynamic": "auto"},
     ),
     ClimateFunctionModeMczConfigItem(
@@ -554,7 +554,7 @@ supported_thermostats = [
         "set_amb1",
         "Set_amb_temp",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     ThermostatMczConfigItem(
         "Ambient Temperature",
@@ -570,7 +570,7 @@ supported_thermostats = [
         "set_amb2",
         "Set_amb_temp",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     ThermostatMczConfigItem(
         "Ambient Temperature 2",
@@ -586,7 +586,7 @@ supported_thermostats = [
         "set_amb3",
         "Set_amb_temp",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     ThermostatMczConfigItem(
         "Ambient Temperature 3",
@@ -605,7 +605,7 @@ supported_pots = [
         "set_pot_man",
         "Set_pot",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     PotMczConfigItem(
         "Manual Power",
@@ -631,7 +631,7 @@ supported_fans = [
         },
         "silent_enabled",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     FanMczConfigItem(
         "Fan 1",
@@ -661,7 +661,7 @@ supported_fans = [
         },
         "silent_enabled",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     FanMczConfigItem(
         "Fan 2",
@@ -691,7 +691,7 @@ supported_fans = [
         },
         "silent_enabled",
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     FanMczConfigItem(
         "Fan 3",
@@ -719,7 +719,7 @@ supported_switches = [
         "mdi:leaf",
         None,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     SwitchMczConfigItem(
         "Start / Stop",
@@ -739,7 +739,7 @@ supported_switches = [
         "mdi:timer",
         None,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     SwitchMczConfigItem(
         "Timer",
@@ -767,7 +767,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         None,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     NumberMczConfigItem(
         "Start / Stop - Delay in Ignition",
@@ -793,7 +793,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         None,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     NumberMczConfigItem(
         "Start / Stop - Delay in Shutdown",
@@ -819,7 +819,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     NumberMczConfigItem(
         "Start / Stop - Negative Hysteresis",
@@ -845,7 +845,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     NumberMczConfigItem(
         "Start / Stop - Positive Hysteresis",
@@ -872,7 +872,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     NumberMczConfigItem(
         "Ambient - Negative Hysteresis",
@@ -898,7 +898,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     NumberMczConfigItem(
         "Ambient - Positive Hysteresis",
@@ -925,7 +925,7 @@ supported_numbers = [
         EntityCategory.CONFIG,
         NumberDeviceClass.TEMPERATURE,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     NumberMczConfigItem(
         "Circulation Pump - On - Minimum Temperature",
@@ -951,7 +951,7 @@ supported_selectors = [
         "mdi:volume-high",
         EntityCategory.CONFIG,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
         {"0": "Silent", "1": "Normal", "2": "High"},
     ),
     SelectMczConfigItem(
@@ -992,7 +992,7 @@ supported_date_times = [
         "mdi:calendar-clock",
         EntityCategory.CONFIG,
         False,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     DateTimeMczConfigItem(
         "Date & Time",
@@ -1030,7 +1030,7 @@ supported_buttons = [
         "mdi:auto-fix",
         EntityCategory.DIAGNOSTIC,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     ButtonMczConfigItem(
         "Alarm Reset",
@@ -1068,7 +1068,7 @@ supported_time_sync_buttons = [
         "mdi:calendar-clock",
         EntityCategory.CONFIG,
         True,
-        MczStoveModelGeneration.M2,
+        MczStoveModelGeneration.M2_PLUS,
     ),
     TimeSyncButtonMczConfigItem(
         "Set System Date & Time",

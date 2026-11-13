@@ -1,5 +1,10 @@
 {
   "entity": {
+    "sensor": {
+      "consumption_yesterday": {
+        "default": "mdi:fire"
+      }
+    },
     "climate": {
       "main_climate": {
         "state_attributes": {

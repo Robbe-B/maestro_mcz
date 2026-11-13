@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import homeassistant.util.dt as dt_util
 
-from . import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.requests.activate_program import ProgramCommand
 from .maestro.controller.responses.model import SensorConfiguration

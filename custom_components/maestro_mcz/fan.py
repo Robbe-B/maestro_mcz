@@ -15,7 +15,7 @@ from homeassistant.util.percentage import (
     ranged_value_to_percentage,
 )
 
-from . import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import (
     SensorConfiguration,
