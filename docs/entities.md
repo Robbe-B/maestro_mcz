@@ -82,7 +82,9 @@ The **Alarm** binary sensor indicates an error state. **Last Alarm Code** provid
 
 **Pellet Level Low** turns on when the stove's pellet level probe reports that the hopper is running low and turns off when it reports enough pellets. It appears only on stoves that provide a probe reading. The MCZ app's warning may appear later; the two are not guaranteed to update together. A low-pellet reading does not by itself mean the stove has an alarm.
 
-The **Alarm Reset** button sends a reset command when the model exposes one. Resolve the cause and follow the manufacturer's instructions before resetting an alarm.
+The **Alarm Reset** button sends a remote reset request when the model exposes one; it cannot clear every alarm. Some alarms require physical intervention and a reset on the stove's own panel. The button cannot bypass that restriction.
+
+For example, MCZ manual guidance lists **A01, A02, A03, A05, and A21** as alarms that can only be reset from the stove's panel. The applicable codes may differ for your model. Resolve the cause and follow your stove's manual before attempting a reset or restart.
 
 ## Stove clock
 

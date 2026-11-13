@@ -10,6 +10,7 @@ import pytest
 from homeassistant.components.climate import HVACAction, HVACMode
 from homeassistant.components.fan import FanEntityFeature
 from homeassistant.const import UnitOfTemperature
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.util import dt as dt_util
 
 from custom_components.maestro_mcz import PLATFORMS
@@ -88,6 +89,69 @@ def test_all_platforms_discover_supported_entities_and_keep_legacy_ids(entities)
     for platform_entities in entities.values():
         for item in platform_entities:
             assert item.device_info["identifiers"] == {("maestro_mcz", "SERIAL-001")}
+
+
+@pytest.mark.parametrize("prop,value", [("state", "working"), ("mode", "manual")])
+async def test_operating_sensors_are_regular_entities(
+    hass, entry, coordinator, stove, prop, value
+):
+    """Show everyday operating readings as regular sensors without changing their IDs or values."""
+    # 1. Give the stove an operating reading to discover.
+    setattr(stove.Status, prop, value)
+    module = importlib.import_module("custom_components.maestro_mcz.sensor")
+    # 2. Discover the sensors through the Home Assistant platform.
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    discovered_sensors = add_entities.call_args.args[0]
+    operating_sensor = next(
+        sensor for sensor in discovered_sensors if sensor._prop == prop
+    )
+    # 3. Keep the reading enabled with its existing ID, outside diagnostics.
+    assert operating_sensor.entity_category is None
+    assert operating_sensor.unique_id == f"SERIAL-001-{prop}"
+    assert operating_sensor.entity_registry_enabled_default is True
+    assert operating_sensor.native_value == value
+
+
+@pytest.mark.parametrize("command_name", ["com_reset_allarm", "m1_com_reset_allarm"])
+async def test_alarm_reset_is_a_configuration_button(
+    hass, entry, coordinator, stove, controller, configuration, command_name
+):
+    """Put alarm reset under Configuration on both stove families without changing its command."""
+    # 1. Give the stove the alarm-reset command used by this family.
+    reset_group = next(
+        group
+        for group in stove.Model.model_configurations
+        if group.configuration_name == "Reset Allarme"
+    )
+    reset_group.configurations = [Configuration(configuration(command_name, "boolean"))]
+    if command_name == "m1_com_reset_allarm":
+        ping_group = stove.get_model_configuration_by_model_configuration_name(
+            "cod_for_spe_mqtt"
+        )
+        ping_group.configuration_name = "PING STOVE"
+        ping_sensor = ping_group.configurations[0]
+        ping_sensor.sensor_name = "m1_cod_for_spe_mqtt"
+        ping_sensor.mappings = {"C|RecuperoParametri": 0, "C|RecuperoInfo": 1}
+    module = importlib.import_module("custom_components.maestro_mcz.button")
+    # 2. Discover the reset button through the Home Assistant platform.
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    discovered_buttons = add_entities.call_args.args[0]
+    reset_button = next(
+        button for button in discovered_buttons if button._prop == command_name
+    )
+    # 3. Keep the button enabled with its existing ID and reset behavior.
+    assert reset_button.entity_category is EntityCategory.CONFIG
+    assert reset_button.unique_id == f"SERIAL-001-{command_name}"
+    assert reset_button.entity_registry_enabled_default is True
+    await reset_button.async_press()
+    command = last_sent_command(controller)
+    assert command.SensorId == f"id-{command_name}"
+    assert command.Value is True
+    activation = controller.activate_program_with_commands_for_stove.await_args
+    assert activation.args[2] == "config-Reset Allarme"
+    coordinator.update_data_after_set.assert_awaited_once()
 
 
 @pytest.mark.parametrize("platform", [str(platform) for platform in PLATFORMS])
