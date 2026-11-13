@@ -27,8 +27,8 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_has_entity_name = True
     _attr_hvac_mode: HVACMode | None = None
     _attr_hvac_action: HVACAction | None = None
-    _attr_current_temperature = None
-    _attr_target_temperature = None
+    _attr_native_current_temperature: float | None = None
+    _attr_native_target_temperature: float | None = None
     _attr_preset_mode = None
     _attr_translation_key: str = "main_climate"
 
@@ -117,14 +117,6 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         return self._attr_hvac_action
 
     @property
-    def current_temperature(self):
-        return self._attr_current_temperature
-
-    @property
-    def target_temperature(self):
-        return self._attr_target_temperature
-
-    @property
     def preset_mode(self):
         return self._attr_preset_mode
 
@@ -173,7 +165,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             self._attr_max_temp = float(
                 matching_thermostat_configuration.configuration.max
             )
-            self._attr_temperature_unit = UnitOfTemperature.CELSIUS
+            self._attr_native_temperature_unit = UnitOfTemperature.CELSIUS
             self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
 
     def _set_climate_function_mode_configuration(
@@ -364,19 +356,19 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
         # current temp
         if hasattr(self._stove.State, "temp_amb_install"):
-            self._attr_current_temperature = self._stove.State.temp_amb_install
+            self._attr_native_current_temperature = self._stove.State.temp_amb_install
 
         # target temp
         if self._supported_thermostat is not None and hasattr(
             self._stove.State,
             self._supported_thermostat.sensor_get_name,
         ):
-            self._attr_target_temperature = getattr(
+            self._attr_native_target_temperature = getattr(
                 self._stove.State,
                 self._supported_thermostat.sensor_get_name,
             )
         else:
-            self._attr_target_temperature = None
+            self._attr_native_target_temperature = None
 
         # preset modes
         if self._supported_climate_function_mode is not None and hasattr(

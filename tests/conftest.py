@@ -9,7 +9,7 @@ from copy import deepcopy
 from unittest.mock import AsyncMock
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maestro_mcz import MczAccountCoordinator
 from custom_components.maestro_mcz.const import DOMAIN
@@ -24,11 +24,6 @@ from custom_components.maestro_mcz.maestro.controller.responses.stove_info impor
     StoveInfo,
 )
 from custom_components.maestro_mcz.maestro.types.enums import SensorTypeEnum
-
-
-@pytest.fixture(autouse=True)
-def custom_integration(enable_custom_integrations):
-    """Make the custom integration available to the HA test harness."""
 
 
 @pytest.fixture

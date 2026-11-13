@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from homeassistant.components.climate import HVACAction, HVACMode
 from homeassistant.components.fan import FanEntityFeature
+from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 
 from custom_components.maestro_mcz import PLATFORMS
@@ -21,6 +22,7 @@ from custom_components.maestro_mcz.button import (
     MczButtonEntity,
     MczTimeSyncButtonEntity,
 )
+from custom_components.maestro_mcz.climate import MczClimateEntity
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Configuration,
     SensorConfiguration,
@@ -385,8 +387,8 @@ async def test_climate_targets_presets_and_toggle_guard(
     """Respect existing heating state and send only valid changes to temperature and mode."""
     # 1. Check the initial temperatures, available modes, and allowed range.
     item = entity(entities, "climate")
-    assert item.current_temperature == 20.5
-    assert item.target_temperature == 22
+    assert item.native_current_temperature == 20.5
+    assert item.native_target_temperature == 22
     assert item.hvac_modes == [HVACMode.OFF, HVACMode.HEAT]
     assert item.preset_modes == ["manual", "auto", "comfort"]
     assert item.min_temp == 5
@@ -410,6 +412,40 @@ async def test_climate_targets_presets_and_toggle_guard(
     stove.State.mode = "dynamic"
     item._handle_coordinator_update_internal()
     assert item.preset_mode == "auto"
+
+
+@pytest.mark.parametrize("current,target", [(18.5, 23.5), (0, 0), (None, None)])
+def test_climate_temperature_updates_use_core_api(entities, stove, current, target):
+    """Keep temperatures fresh in HA, including zero and unknown readings."""
+    # 1. Read the initial temperatures before the stove sends a changed report.
+    item = entity(entities, "climate")
+    assert item.native_current_temperature == 20.5
+    assert item.native_target_temperature == 22
+
+    # 2. Refresh the control with the new room temperature and heating target.
+    stove.State.temp_amb_install = current
+    stove.State.set_amb1 = target
+    item._handle_coordinator_update_internal()
+
+    # 3. HA must read the new values in Celsius, not cached values or a different unit.
+    assert item.native_current_temperature == current
+    assert item.native_target_temperature == target
+    assert item.native_temperature_unit == UnitOfTemperature.CELSIUS
+
+
+def test_climate_does_not_override_deprecated_temperature_properties():
+    """Let HA handle display units without deprecated temperature overrides."""
+    # 1. Inspect only the integration's own members, not Core's compatibility aliases.
+    own_members = vars(MczClimateEntity)
+
+    # 2. The integration must not define deprecated properties or store legacy values.
+    for property_name in (
+        "current_temperature",
+        "target_temperature",
+        "temperature_unit",
+    ):
+        assert property_name not in own_members
+        assert f"_attr_{property_name}" not in own_members
 
 
 async def test_climate_integer_power_mapping(entities, controller, configuration):
@@ -442,7 +478,7 @@ def test_climate_missing_values_clear_state(entities, stove):
     item._handle_coordinator_update_internal()
     assert item.hvac_mode is None
     assert item.hvac_action is None
-    assert item.target_temperature is None
+    assert item.native_target_temperature is None
     assert item.preset_mode is None
 
 
