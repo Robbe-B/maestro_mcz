@@ -25,6 +25,7 @@ from custom_components.maestro_mcz.button import (
 from custom_components.maestro_mcz.climate import MczClimateEntity
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Configuration,
+    ModelConfiguration,
     SensorConfiguration,
 )
 from custom_components.maestro_mcz.maestro.models import models
@@ -926,12 +927,29 @@ async def setup_binary_sensors(hass, entry):
     return add_entities.call_args.args[0]
 
 
+@pytest.fixture(params=["sens_liv_pellet", "m1_sens_liv_pellet"])
+def pellet_probe_configuration(stove, configuration, request):
+    """Describe the optional probe setting for each stove family, not a physical probe."""
+    probe_group = ModelConfiguration(
+        {
+            "ConfigurationName": "Sensore Livello Pellet",
+            "ConfigurationId": "config-pellet-probe",
+            "Timed": False,
+            "Limitations": None,
+            "Configurations": [configuration(request.param)],
+        }
+    )
+    stove.Model.model_configurations.append(probe_group)
+    return probe_group
+
+
 @pytest.mark.parametrize("probe_reading", [True, False])
 async def test_pellet_level_low_appears_only_when_stove_reports_its_probe(
-    hass, entry, coordinator, stove, probe_reading
+    hass, entry, coordinator, stove, pellet_probe_configuration, probe_reading
 ):
-    """Show the pellet warning only on stoves that send a probe reading, not on every stove."""
-    # 1. Our example stove sends no pellet probe reading.
+    """Show the pellet warning only when an enabled probe supplies a reading."""
+    # 1. The probe is enabled, but the stove has not sent a reading yet.
+    stove.Status.sens_liv_pellet = True
     assert stove.Status.sens_liv_pel is None
     controls_without_probe = await setup_binary_sensors(hass, entry)
     ids_without_probe = {control.unique_id for control in controls_without_probe}
@@ -946,6 +964,57 @@ async def test_pellet_level_low_appears_only_when_stove_reports_its_probe(
 
 
 @pytest.mark.parametrize(
+    "status_enabled,state_enabled,expected_sensor",
+    [
+        (False, False, False),
+        (False, True, False),
+        (None, False, False),
+        (None, None, False),
+        (True, False, True),
+        (None, True, True),
+    ],
+)
+async def test_pellet_probe_setting_controls_discovery(
+    hass,
+    entry,
+    coordinator,
+    stove,
+    pellet_probe_configuration,
+    status_enabled,
+    state_enabled,
+    expected_sensor,
+):
+    """Avoid false low-pellet warnings when a stove without an enabled probe still reports false."""
+    # 1. Like the supplied M1 and M2 reports, the stove sends a false probe reading.
+    stove.Status.sens_liv_pel = False
+    stove.Status.sens_liv_pellet = status_enabled
+    stove.State.sens_liv_pellet = state_enabled
+    # 2. Discover controls using status settings, falling back to state when missing.
+    controls = await setup_binary_sensors(hass, entry)
+    discovered_ids = {control.unique_id for control in controls}
+    # 3. Only a confirmed enabled probe gets a warning entity; the alarm stays intact.
+    has_pellet_sensor = "SERIAL-001-sens_liv_pel" in discovered_ids
+    assert has_pellet_sensor is expected_sensor
+    assert "SERIAL-001-is_in_error" in discovered_ids
+
+
+async def test_pellet_sensor_requires_a_supported_probe_configuration(
+    hass, entry, coordinator, stove, pellet_probe_configuration
+):
+    """Do not offer a pellet warning when the model has no matching probe configuration."""
+    # 1. Readings alone suggest a working probe, but its model configuration is absent.
+    stove.Status.sens_liv_pellet = True
+    stove.Status.sens_liv_pel = False
+    stove.Model.model_configurations.remove(pellet_probe_configuration)
+    # 2. Discover the stove's supported binary sensors.
+    controls = await setup_binary_sensors(hass, entry)
+    discovered_ids = {control.unique_id for control in controls}
+    # 3. Omit the unsupported pellet sensor without removing the normal alarm.
+    assert "SERIAL-001-sens_liv_pel" not in discovered_ids
+    assert "SERIAL-001-is_in_error" in discovered_ids
+
+
+@pytest.mark.parametrize(
     "probe_reading,expected_warning",
     [
         (True, False),  # enough pellets: no warning
@@ -954,10 +1023,17 @@ async def test_pellet_level_low_appears_only_when_stove_reports_its_probe(
     ],
 )
 async def test_pellet_level_low_turns_on_when_the_reserve_is_reached(
-    hass, entry, coordinator, stove, probe_reading, expected_warning
+    hass,
+    entry,
+    coordinator,
+    stove,
+    pellet_probe_configuration,
+    probe_reading,
+    expected_warning,
 ):
     """Turn the warning on exactly when the probe reports that pellets are running out."""
     # 1. Start with a stove that has a pellet level probe.
+    stove.Status.sens_liv_pellet = True
     stove.Status.sens_liv_pel = True
     controls = await setup_binary_sensors(hass, entry)
     pellet_warning = next(
@@ -968,3 +1044,26 @@ async def test_pellet_level_low_turns_on_when_the_reserve_is_reached(
     pellet_warning._handle_coordinator_update_internal()
     # 3. The warning follows the probe, inverted: False from the probe means "low".
     assert pellet_warning.is_on is expected_warning
+
+
+@pytest.mark.parametrize("enabled", [False, None])
+async def test_pellet_warning_clears_when_probe_is_no_longer_enabled(
+    hass, entry, coordinator, stove, pellet_probe_configuration, enabled
+):
+    """Stop showing a low-pellet warning if an existing probe is disabled or its setting is missing."""
+    # 1. An enabled probe reports low pellets.
+    stove.Status.sens_liv_pellet = True
+    stove.Status.sens_liv_pel = False
+    controls = await setup_binary_sensors(hass, entry)
+    pellet_warning = next(
+        control for control in controls if getattr(control, "_prop", None) == "sens_liv_pel"
+    )
+    assert pellet_warning.is_on is True
+    # 2. The enable setting disappears or is turned off, but the raw reading stays false.
+    stove.Status.sens_liv_pellet = enabled
+    pellet_warning._handle_coordinator_update_internal()
+    # 3. Show no reading until the stove confirms the probe is enabled again.
+    assert pellet_warning.is_on is None
+    stove.Status.sens_liv_pellet = True
+    pellet_warning._handle_coordinator_update_internal()
+    assert pellet_warning.is_on is True
