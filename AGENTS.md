@@ -24,6 +24,20 @@ Preserve valuable technical background in separate developer documentation or
 issue artifacts, not the README or user guides. Keep agent instructions in this
 file rather than technical analyses.
 
+# Home Assistant quality
+
+Aim for Platinum-quality Home Assistant changes. Consult the current
+[Integration Quality Scale](https://contributors.home-assistant.io/core/quality-scale/)
+when implementing or reviewing changes. Do not claim a tier unless the whole
+integration meets its requirements.
+
+# Imports
+
+Keep module dependencies acyclic. Import coordinators and their shared types
+from `coordinator.py`, not the integration's `__init__.py`. Keep shared constants
+in `const.py` so coordinators and platforms do not depend on setup or config-flow
+modules.
+
 # Test readability
 
 Write and maintain tests as clear scenarios that a nontechnical reader can

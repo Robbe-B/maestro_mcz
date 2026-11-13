@@ -6,11 +6,10 @@ import dataclasses
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from . import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 
 CONFIG_FIELDS_TO_REDACT = [CONF_USERNAME, CONF_PASSWORD]
 DATA_FIELDS_TO_REDACT = ["UniqueCode", "sm_sn", "ssid_wifi", "pwd_wifi", "mac_wifi"]
@@ -18,7 +17,7 @@ OPTION_FIELDS_TO_REDACT = []
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, config_entry: ConfigEntry
+    hass: HomeAssistant, config_entry: MczConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     coordinator: MczAccountCoordinator = config_entry.runtime_data
@@ -47,4 +46,15 @@ async def async_get_config_entry_diagnostics(
             },
             DATA_FIELDS_TO_REDACT,
         )
+        history = coordinator.consumption_coordinators.get(stove.UniqueCode)
+        if history is not None:
+            data = history.data
+            diagnostics_data["devices"][stove.Name]["consumption"] = {
+                "last_update_success": history.last_update_success,
+                "consumption_date": data.date.isoformat() if data is not None else None,
+                "value": data.value if data is not None else None,
+                "last_successful_update": (
+                    data.last_updated.isoformat() if data is not None else None
+                ),
+            }
     return diagnostics_data

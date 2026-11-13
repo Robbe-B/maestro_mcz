@@ -9,7 +9,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
 from .maestro.models import models

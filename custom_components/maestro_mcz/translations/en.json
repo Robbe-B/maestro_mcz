@@ -26,7 +26,31 @@
             }
         }
     },
+    "exceptions": {
+        "consumption_invalid_auth": {
+            "message": "Authentication failed while retrieving consumption history"
+        },
+        "consumption_cannot_connect": {
+            "message": "Could not retrieve consumption history: {error}"
+        },
+        "consumption_invalid_response": {
+            "message": "The Maestro service returned invalid consumption history"
+        }
+    },
     "entity": {
+      "sensor": {
+        "consumption_yesterday": {
+          "name": "Yesterday's consumption",
+          "state_attributes": {
+            "consumption_date": {
+              "name": "Consumption date"
+            },
+            "last_successful_update": {
+              "name": "Last successful update"
+            }
+          }
+        }
+      },
       "climate": {
         "main_climate": {
           "state_attributes": {

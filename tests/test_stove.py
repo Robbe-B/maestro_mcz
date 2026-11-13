@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 
-from custom_components.maestro_mcz import MczAccountCoordinator
+from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
 from custom_components.maestro_mcz.maestro import MaestroStove
 from custom_components.maestro_mcz.maestro.controller.const import (
     ACTIVATE_PROGRAM_URL,
@@ -856,7 +856,7 @@ def test_generation_discovery_and_fan_mode_grouping(stove):
         stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name
     )
     power_setting, _power_configuration = find_first_control(models.supported_power_settings)
-    assert power_setting.stove_model_generation is models.MczStoveModelGeneration.M2
+    assert power_setting.stove_model_generation is models.MczStoveModelGeneration.M2_PLUS
     assert find_first_control([]) is None
     assert find_all_controls([]) is None
     assert len(find_all_controls(models.supported_numbers)) == 1
@@ -894,6 +894,105 @@ def test_generation_one_configuration_aliases(stove):
     thermostat_setting, _thermostat_configuration = find_control(models.supported_thermostats)
     assert power_setting.stove_model_generation is models.MczStoveModelGeneration.M1
     assert thermostat_setting.stove_model_generation is models.MczStoveModelGeneration.M1
+
+
+@pytest.mark.parametrize(
+    "ping_group,ping_sensor,power_sensor,model_name,expected_family",
+    [
+        (
+            "PING STOVE", "m1_cod_for_spe_mqtt", "com_on_off",
+            "Newer-looking product", models.MczStoveModelGeneration.M1,
+        ),
+        (
+            "cod_for_spe_mqtt", "cod_for_spe_mqtt", "m1_stato_stufa",
+            "M1 example", models.MczStoveModelGeneration.M2_PLUS,
+        ),
+        (
+            "PING STOVE", "cod_for_spe_mqtt", "m1_stato_stufa",
+            "M3 example", models.MczStoveModelGeneration.M2_PLUS,
+        ),
+        (
+            None, None, "m1_stato_stufa",
+            "M1 example", models.MczStoveModelGeneration.UNKNOWN,
+        ),
+        (
+            None, None, "com_on_off",
+            "M2 example", models.MczStoveModelGeneration.UNKNOWN,
+        ),
+        (
+            "unrecognized", "cod_for_spe_mqtt", "com_on_off",
+            "M2 example", models.MczStoveModelGeneration.UNKNOWN,
+        ),
+        (
+            "PING STOVE", "unrecognized", "m1_stato_stufa",
+            "M1 example", models.MczStoveModelGeneration.UNKNOWN,
+        ),
+    ],
+)
+def test_model_generation_uses_only_ping_configuration(
+    stove, configuration, ping_group, ping_sensor, power_sensor, model_name,
+    expected_family
+):
+    """Use ping commands alone, even when power controls or product names disagree."""
+    # 1. Give the stove power controls and a name that need not match its ping.
+    stove.Model.model_name = model_name
+    power_configuration = stove.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        "Spegnimento", "com_on_off"
+    )
+    power_configuration.configuration.sensor_name = power_sensor
+    stove.Model.model_configurations = [
+        group for group in stove.Model.model_configurations
+        if group.configuration_name not in ("cod_for_spe_mqtt", "PING STOVE")
+    ]
+    if ping_group is not None:
+        mappings = (
+            {"C|RecuperoParametri": 0, "C|RecuperoInfo": 1}
+            if ping_sensor == "m1_cod_for_spe_mqtt"
+            else {"Ping": 1122}
+        )
+        stove.Model.model_configurations.append(
+            ModelConfiguration(
+                {
+                    "ConfigurationName": ping_group,
+                    "ConfigurationId": "config-generation-ping",
+                    "Timed": False,
+                    "Limitations": None,
+                    "Configurations": [configuration(ping_sensor, Mappings=mappings)],
+                }
+            )
+        )
+
+    # 2. Ask the stove for its centrally determined control family.
+    detected_family = stove.model_generation
+
+    # 3. Only a recognized ping identifies a family; power controls cannot fill gaps.
+    assert detected_family is expected_family
+
+
+def test_model_generation_before_model_is_loaded(controller):
+    """Keep an unloaded stove unknown instead of guessing or failing during setup."""
+    # 1. Create a stove before its controls have been retrieved.
+    stove_info = controller.retrieve_linked_stove_infos.return_value[0]
+    unloaded_stove = MaestroStove(controller, stove_info)
+
+    # 2. Detection is safe before initialization.
+    detected_family = unloaded_stove.model_generation
+
+    # 3. No model data means no known generation.
+    assert detected_family is models.MczStoveModelGeneration.UNKNOWN
+
+
+def test_model_generation_recognizes_m1_read_channel_without_power(stove, m1_ping):
+    """Recognize M1's read channel even when its power control is missing."""
+    # 1. Keep the M1 read channel but remove the known power control.
+    power_group = stove.get_model_configuration_by_model_configuration_name("Spegnimento")
+    stove.Model.model_configurations.remove(power_group)
+
+    # 2. Detect the family from the remaining known M1 marker.
+    detected_family = stove.model_generation
+
+    # 3. Missing power controls must not cause misleading M1 consumption requests.
+    assert detected_family is models.MczStoveModelGeneration.M1
 
 
 async def test_multiple_stoves_keep_identity_and_commands_separate(

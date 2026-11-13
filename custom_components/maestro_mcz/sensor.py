@@ -2,15 +2,69 @@
 
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import MczAccountCoordinator
+from .coordinator import (
+    MczAccountCoordinator,
+    MczConfigEntry,
+    MczConsumptionCoordinator,
+)
 from .maestro import MaestroStove
 from .maestro.models import models
+
+PARALLEL_UPDATES = 0
+
+
+class MczYesterdayConsumptionSensor(
+    CoordinatorEntity[MczConsumptionCoordinator], SensorEntity
+):
+    """Show a dated cloud estimate, not an accumulating energy meter."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "consumption_yesterday"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator: MczConsumptionCoordinator) -> None:
+        """Associate history with the same stove as its live controls."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.stove.UniqueCode}-consumption_yesterday"
+        self._attr_device_info = coordinator.stove.get_device_info()
+
+    @property
+    def available(self) -> bool:
+        """Require yesterday's history, but not a stove currently online."""
+        data = self.coordinator.data
+        return (
+            super().available
+            and data is not None
+            and data.date == self.coordinator.yesterday
+            and data.value is not None
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        """Never relabel an older day's estimate as yesterday."""
+        data = self.coordinator.data
+        if data is None or data.date != self.coordinator.yesterday:
+            return None
+        return data.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        """Keep the original period and successful retrieval time explicit."""
+        data = self.coordinator.data
+        if data is None:
+            return None
+        return {
+            "consumption_date": data.date.isoformat(),
+            "last_successful_update": data.last_updated.isoformat(),
+        }
 
 
 class MczSensorEntity(CoordinatorEntity, SensorEntity):
@@ -74,7 +128,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up sensor entities from a config entry."""
@@ -83,6 +137,33 @@ async def async_setup_entry(
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveSensorEntities(coordinator, stove))
     async_add_entities(entities)
+
+    discovered: set[str] = set()
+
+    @callback
+    def async_discover_consumption() -> None:
+        """Add a sensor when a stove first provides a valid yesterday reading."""
+        new_entities = []
+        for unique_code, history in coordinator.consumption_coordinators.items():
+            if (
+                unique_code not in discovered
+                and history.last_update_success
+                and history.data is not None
+                and history.data.date == history.yesterday
+                and history.data.value is not None
+            ):
+                discovered.add(unique_code)
+                new_entities.append(MczYesterdayConsumptionSensor(history))
+        if new_entities:
+            async_add_entities(new_entities)
+
+    for history in coordinator.consumption_coordinators.values():
+        entry.async_on_unload(history.async_add_listener(async_discover_consumption))
+        entry.async_create_background_task(
+            hass,
+            history.async_refresh(),
+            name=f"{history.name} initial refresh",
+        )
 
 
 def _getStoveSensorEntities(

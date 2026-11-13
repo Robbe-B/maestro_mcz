@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
 from .maestro.models import models
@@ -280,8 +280,8 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             )
 
             if stato_stufa is not None:
-                match self._supported_power_sensor.stove_model_generation:
-                    case models.MczStoveModelGeneration.M1:  # M1 models
+                match self._stove.model_generation:
+                    case models.MczStoveModelGeneration.M1:
                         match stato_stufa:
                             case -1:  # disconnected
                                 self._attr_hvac_action = HVACAction.OFF
@@ -310,10 +310,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                             case _:  # default (on)
                                 self._attr_hvac_action = HVACAction.HEATING
                                 self._attr_hvac_mode = HVACMode.HEAT
-                    case (
-                        models.MczStoveModelGeneration.M2
-                        | models.MczStoveModelGeneration.M3
-                    ):  # M2 and M3 models
+                    case models.MczStoveModelGeneration.M2_PLUS:
                         match stato_stufa:
                             case -1:  # disconnected
                                 self._attr_hvac_action = HVACAction.OFF
@@ -347,6 +344,9 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
                             case _:  # default (on)
                                 self._attr_hvac_action = HVACAction.HEATING
                                 self._attr_hvac_mode = HVACMode.HEAT
+                    case _:
+                        self._attr_hvac_action = None
+                        self._attr_hvac_mode = None
             else:
                 self._attr_hvac_action = HVACAction.OFF
                 self._attr_hvac_mode = HVACMode.OFF

@@ -1,6 +1,5 @@
 """Cloud entity discovery, state, availability, IDs and commands on all platforms."""
 
-from copy import deepcopy
 from datetime import datetime, timezone
 import importlib
 from types import SimpleNamespace
@@ -366,12 +365,17 @@ def test_climate_generation_state_machine(
     entities, stove, generation, state, phase, mode, action
 ):
     """Show the correct heating activity for each model, avoiding misleading on/off indications."""
-    # 1. Select a model generation and its reported operating state.
+    # 1. Describe the model's ping protocol and reported operating state.
     item = entity(entities, "climate")
-    item._supported_power_sensor = deepcopy(item._supported_power_sensor)
-    item._supported_power_sensor.stove_model_generation = (
-        models.MczStoveModelGeneration(generation)
-    )
+    stove.Model.model_name = f"M{generation} example"
+    if generation == 1:
+        ping_group = stove.get_model_configuration_by_model_configuration_name(
+            "cod_for_spe_mqtt"
+        )
+        ping_group.configuration_name = "PING STOVE"
+        ping_sensor = ping_group.configurations[0]
+        ping_sensor.sensor_name = "m1_cod_for_spe_mqtt"
+        ping_sensor.mappings = {"C|RecuperoParametri": 0, "C|RecuperoInfo": 1}
     stove.Status.stato_stufa = state
     stove.Status.fase_op = phase
     # 2. Translate that report into HA's heating mode and current activity.
@@ -379,6 +383,21 @@ def test_climate_generation_state_machine(
     # 3. Both the requested mode and actual activity must match the scenario.
     assert item.hvac_mode == mode
     assert item.hvac_action == action
+
+
+def test_climate_does_not_guess_an_unknown_control_family(entities, stove):
+    """Clear old heating activity when controls are no longer recognized."""
+    # 1. A previously recognized stove now exposes an unfamiliar control layout.
+    item = entity(entities, "climate")
+    assert item.hvac_action == HVACAction.HEATING
+    stove.Model.model_configurations.clear()
+
+    # 2. Process the same readings without a known interpretation.
+    item._handle_coordinator_update_internal()
+
+    # 3. Do not retain the old heating indication or guess a newer generation.
+    assert item.hvac_mode is None
+    assert item.hvac_action is None
 
 
 async def test_climate_targets_presets_and_toggle_guard(

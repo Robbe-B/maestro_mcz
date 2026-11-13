@@ -2,6 +2,7 @@
 
 import asyncio
 import dataclasses
+from datetime import date
 import json
 import logging
 import random
@@ -13,6 +14,7 @@ from .const import (
     ACTIVATE_PROGRAM_URL,
     APPLIANCE_URL,
     CONTENT_TYPE,
+    CONSUMPTION_URL,
     LOGIN_URL,
     PING_URL,
     STOVE_INFO_URL,
@@ -21,6 +23,7 @@ from .const import (
 )
 from .controller_interface import MaestroControllerInterface
 from .requests.activate_program import ActivateProgramRequest, ProgramCommand
+from .responses.consumption import ConsumptionHistory
 from .responses.model import Model
 from .responses.state import State
 from .responses.status import Status
@@ -229,6 +232,16 @@ class MaestroController(MaestroControllerInterface):
                 f"Failed to retrieve state for device '{device_name}'"
             )
         return State(response)
+
+    async def get_consumption_for_stove(
+        self, unique_code: str, anchor_date: date
+    ) -> ConsumptionHistory:
+        """Fetch dated history without treating an HTTP failure as unsupported."""
+        url = f"{CONSUMPTION_URL}/{unique_code}/week/{anchor_date:%Y%m%d}"
+        response = await self.make_request("GET", url)
+        if response is None:
+            raise MaestroConnectionException("Failed to retrieve consumption history")
+        return ConsumptionHistory.from_response(response)
 
     async def activate_program_with_commands_for_stove(
         self,

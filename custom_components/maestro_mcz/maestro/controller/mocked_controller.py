@@ -1,6 +1,7 @@
 """Representation of a MockedController."""
 
 import asyncio
+from datetime import date
 import json
 import logging
 import os
@@ -8,6 +9,7 @@ from pathlib import Path
 
 from .controller_interface import MaestroControllerInterface
 from .requests.activate_program import ProgramCommand
+from .responses.consumption import ConsumptionHistory
 from .responses.model import Model
 from .responses.state import State
 from .responses.status import Status
@@ -19,10 +21,9 @@ _LOGGER = logging.getLogger(__name__)
 class MockedController(MaestroControllerInterface):
     """Class of a MockedController."""
 
-    _mocked_stoves: dict[str, MockedStove] = {}
-
     def __init__(self, folder_path: str | None) -> None:
         """Initialize the MockedController."""
+        self._mocked_stoves: dict[tuple[str, str], MockedStove] = {}
         self._folder_path = folder_path
         self._username = "username"
         self._password = "password"
@@ -48,7 +49,7 @@ class MockedController(MaestroControllerInterface):
     async def retrieve_linked_stove_infos(self) -> list[StoveInfo]:
         """Simulates getting information about the stoves linked to the user account. (from json mock files)."""
         # fill the mocked controller with stove models from the json file(s)
-        stoves = []
+        self._mocked_stoves.clear()
         file_paths = await self.get_mocked_files()
         if file_paths is not None:
             for _file_path in file_paths:
@@ -79,17 +80,20 @@ class MockedController(MaestroControllerInterface):
                         state = State(stove_data["State"], True)
                         status = Status(stove_data["Status"], True)
                         status.sm_sn = maestro_stove_data.node.unique_code
-                        self._mocked_stoves[maestro_stove_data.node.id] = MockedStove(
-                            maestro_stove_data, model, state, status
+                        self._mocked_stoves[(node.id, node.name)] = MockedStove(
+                            maestro_stove_data,
+                            model,
+                            state,
+                            status,
+                            stove.get("consumption"),
                         )
-                        stoves.append(maestro_stove_data)
                 except Exception as error:  # noqa: BLE001
                     _LOGGER.error(
                         "Mocked controller failed for (%s) due to a unexpected error: %s",
                         _file_path,
                         error,
                     )
-        return stoves
+        return [stove.stove_info for stove in self._mocked_stoves.values()]
 
     async def get_mocked_files(self) -> list[str] | None:
         """Check if there are mocked files, if so returns it."""
@@ -104,7 +108,12 @@ class MockedController(MaestroControllerInterface):
                     full_path = Path(folder_path) / file
                     if full_path.is_file():
                         result.append(str(full_path))
-                return result
+                return await loop.run_in_executor(
+                    None,
+                    lambda: sorted(
+                        result, key=lambda path: (os.path.getmtime(path), path)
+                    ),
+                )
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("Failed to check mocked files: %s", e)
             return None
@@ -121,6 +130,7 @@ class MockedController(MaestroControllerInterface):
                 stove
                 for stove in self._mocked_stoves.values()
                 if stove.stove_info.node.model_id == model_id
+                and stove.stove_info.node.name == device_name
             ),
             None,
         )
@@ -132,7 +142,7 @@ class MockedController(MaestroControllerInterface):
         self, device_id: str, device_name: str
     ) -> Status:
         """Gets the stove status for a given device ID."""
-        stove = self._mocked_stoves.get(device_id)
+        stove = self._mocked_stoves.get((device_id, device_name))
         if stove:
             return stove.status
         return None
@@ -141,7 +151,7 @@ class MockedController(MaestroControllerInterface):
         self, device_id: str, device_name: str
     ) -> State:
         """Gets the stove state for a given device ID."""
-        stove = self._mocked_stoves.get(device_id)
+        stove = self._mocked_stoves.get((device_id, device_name))
         if stove:
             return stove.state
         return None
@@ -159,6 +169,34 @@ class MockedController(MaestroControllerInterface):
         if callback_on_success is not None:
             callback_on_success()
 
+    async def get_consumption_for_stove(
+        self, unique_code: str, anchor_date: date
+    ) -> ConsumptionHistory:
+        """Reuse the saved value for the requested replay day, without cloud requests."""
+        stove = next(
+            (
+                stove
+                for stove in self._mocked_stoves.values()
+                if stove.stove_info.node.unique_code == unique_code
+            ),
+            None,
+        )
+        if stove is None or stove.consumption is None:
+            return ConsumptionHistory(days=(), total=0, vs_previous_interval=None)
+        if not isinstance(stove.consumption, dict):
+            raise ValueError("Consumption diagnostics must be an object")
+        value = stove.consumption.get("value")
+        if value is None:
+            return ConsumptionHistory(days=(), total=0, vs_previous_interval=None)
+        return ConsumptionHistory.from_response(
+            {
+                "Data": [
+                    {"Date": anchor_date.strftime("%Y%m%d"), "Consumption": value}
+                ],
+                "Total": value,
+            }
+        )
+
 
 class MockedStove:
     """Class of a MockedStove."""
@@ -167,12 +205,19 @@ class MockedStove:
     model: Model = None
     state: State = None
     status: Status = None
+    consumption: object | None = None
 
     def __init__(
-        self, stove_info: StoveInfo, model: Model, state: State, status: Status
+        self,
+        stove_info: StoveInfo,
+        model: Model,
+        state: State,
+        status: Status,
+        consumption: object | None = None,
     ) -> None:
         """Initialize the MockedStove."""
         self.stove_info = stove_info
         self.model = model
         self.state = state
         self.status = status
+        self.consumption = consumption
