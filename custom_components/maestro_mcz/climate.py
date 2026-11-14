@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import re
+
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
@@ -20,6 +23,8 @@ from .maestro.controller.responses.model import SensorConfiguration
 from .maestro.models import models
 from .maestro.types.enums import SensorTypeEnum
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     """Representation of a MCZ climate entity."""
@@ -30,6 +35,7 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_native_current_temperature: float | None = None
     _attr_native_target_temperature: float | None = None
     _attr_preset_mode = None
+    _attr_preset_modes: list[str] | None = None
     _attr_translation_key: str = "main_climate"
 
     _supported_power_sensor: models.PowerSettingMczConfigItem | None = None
@@ -53,6 +59,9 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
+        self._legacy_preset_commands: dict[
+            str, tuple[SensorConfiguration, bool | int]
+        ] = {}
 
         # general
         self._attr_name = None
@@ -80,10 +89,16 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             self.entity_category = self._supported_thermostat.category
             self._set_thermostat_configuration(first_supported_thermostat[1])
 
-        # set preset/mode config
+        # Standard metadata defines the advertised presets and their readback names.
+        # Choosing a compatibility command must not hide those presets.
         first_supported_climate_function_mode = self._stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
             models.supported_climate_function_modes
         )
+        if self._uses_legacy_mode_commands():
+            legacy_mode = self._set_legacy_preset_commands()
+            # Only fall back to a two-preset list when no standard list exists.
+            if first_supported_climate_function_mode is None:
+                first_supported_climate_function_mode = legacy_mode
         if (
             first_supported_climate_function_mode is not None
             and first_supported_climate_function_mode[0] is not None
@@ -119,6 +134,108 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
     @property
     def preset_mode(self):
         return self._attr_preset_mode
+
+    def _uses_legacy_mode_commands(self) -> bool:
+        """Check command compatibility without inferring the stove's mode count."""
+        if self._stove.model_generation != models.MczStoveModelGeneration.M1:
+            return False
+
+        bootloader = getattr(self._stove.Status, "sm_vs_bootloader", None)
+        version = (
+            re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.[0-9]+)*", bootloader)
+            if isinstance(bootloader, str)
+            else None
+        )
+        if version is None:
+            # Unknown versions must not opt into an older command format.
+            _LOGGER.warning(
+                "Cannot determine bootloader version for '%s'; retaining standard mode commands",
+                self._stove.Name,
+            )
+            return False
+
+        # Compare numbers, not text: 1.10 is newer than 1.3. This threshold only
+        # selects command format; it does not prove that a stove has two modes.
+        return (int(version[1]), int(version[2])) < (1, 3)
+
+    def _get_legacy_mode_configuration(
+        self,
+        mode: models.ClimateFunctionModeMczConfigItem,
+        expected_type: SensorTypeEnum,
+    ) -> SensorConfiguration | None:
+        """Resolve a usable legacy control, or keep the standard command."""
+        match = self._stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+            [mode]
+        )
+        configuration = match[1] if match is not None else None
+        sensor = configuration.configuration if configuration is not None else None
+
+        # Both legacy controls need the same checks. A matching name is not
+        # enough: disabled controls, missing IDs or a wrong value type are unsafe.
+        if (
+            configuration is None
+            or sensor is None
+            or not sensor.enabled
+            or sensor.type != expected_type.value
+            or not sensor.sensor_id
+            or not configuration.configuration_id
+        ):
+            _LOGGER.warning(
+                "Legacy %s command is missing or invalid for '%s'; retaining standard mode commands",
+                mode.sensor_set_config_name,
+                self._stove.Name,
+            )
+            return None
+        return configuration
+
+    def _set_legacy_preset_commands(
+        self,
+    ) -> tuple[models.ClimateFunctionModeMczConfigItem, SensorConfiguration] | None:
+        """Build command overrides and return the optional two-mode fallback."""
+        mode = models.legacy_climate_function_modes[0]
+        mode_configuration = self._get_legacy_mode_configuration(
+            mode, SensorTypeEnum.BOOLEAN
+        )
+        if mode_configuration is not None:
+            # Manual/Auto need actual booleans, not the standard integer values.
+            self._legacy_preset_commands["manual"] = (mode_configuration, False)
+            self._legacy_preset_commands["auto"] = (mode_configuration, True)
+
+        recipe = models.legacy_climate_recipe_modes[0]
+        recipe_configuration = self._get_legacy_mode_configuration(
+            recipe, SensorTypeEnum.INT
+        )
+        if recipe_configuration is not None:
+            recipe_sensor = recipe_configuration.configuration
+            assert recipe_sensor is not None  # Validated by the shared lookup.
+            preset_names = recipe.api_mappings_key_rename or {}
+            for name in ("overnight", "comfort", "power"):
+                mappings = recipe_sensor.mappings
+                # Each recipe preset is independent. A bad or absent mapping
+                # must not disable the other presets or replace their commands.
+                if (
+                    recipe_sensor.variants is None
+                    or name not in recipe_sensor.variants
+                    or not isinstance(mappings, dict)
+                    or type(mappings.get(name)) is not int
+                ):
+                    _LOGGER.warning(
+                        "Legacy preset '%s' is missing or invalid for '%s'; retaining standard preset command",
+                        name,
+                        self._stove.Name,
+                    )
+                    continue
+                # Keep the model's values and IDs; only rename power to Turbo.
+                preset = preset_names.get(name, name)
+                self._legacy_preset_commands[preset] = (
+                    recipe_configuration,
+                    mappings[name],
+                )
+
+        # This fallback exposes Manual/Auto only if no standard mode list exists.
+        if mode_configuration is not None:
+            return mode, mode_configuration
+        return None
 
     def _set_power_configuration(
         self, matching_power_configuration: SensorConfiguration
@@ -176,6 +293,13 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         )
         if (
             matching_climate_function_mode_configuration.configuration.type
+            == SensorTypeEnum.BOOLEAN.value
+        ):
+            self._attr_preset_modes = ["manual", "auto"]
+            self._attr_preset_modes_mappings = {"manual": False, "auto": True}
+            self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
+        elif (
+            matching_climate_function_mode_configuration.configuration.type
             == SensorTypeEnum.INT.value
         ):
             self._attr_preset_modes = []
@@ -204,18 +328,29 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode):
         """Set the climate preset mode."""
-        if self._climate_function_mode_configuration is not None:
-            if (
-                self._attr_preset_modes_mappings is not None
-                and preset_mode in self._attr_preset_modes_mappings
-            ):
-                converted_preset_mode = self._attr_preset_modes_mappings[preset_mode]
-                await self._stove.activateProgram(
-                    self._climate_function_mode_configuration.configuration.sensor_id,
-                    self._climate_function_mode_configuration.configuration_id,
-                    converted_preset_mode,
-                )
-                await self.coordinator.update_data_after_set()
+        if self._climate_function_mode_configuration is None:
+            return
+        if (
+            self._attr_preset_modes_mappings is None
+            or preset_mode not in self._attr_preset_modes_mappings
+        ):
+            return
+
+        # Validate against the normal preset mappings first. Compatibility
+        # overrides change how a preset is sent, not which presets are offered.
+        mode_configuration, value = self._legacy_preset_commands.get(
+            preset_mode,
+            (
+                self._climate_function_mode_configuration,
+                self._attr_preset_modes_mappings[preset_mode],
+            ),
+        )
+        await self._stove.activateProgram(
+            mode_configuration.configuration.sensor_id,
+            mode_configuration.configuration_id,
+            value,
+        )
+        await self.coordinator.update_data_after_set()
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set the climate hvac mode."""
@@ -381,6 +516,8 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
             )
             if preset_mode_value_raw is not None:
                 preset_mode_value = str(preset_mode_value_raw)
+                # Rename dynamic to auto only for display. Keep the shared raw
+                # state unchanged because fan controls select commands by that mode.
                 if (
                     self._supported_climate_function_mode.api_mappings_key_rename
                     is not None

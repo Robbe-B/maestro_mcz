@@ -558,6 +558,30 @@ supported_climate_function_modes = [
     ),
 ]
 
+legacy_climate_function_modes = [
+    ClimateFunctionModeMczConfigItem(
+        "Mode",
+        "mode",
+        "m1_automode",
+        "Cambio_mod_2MOD",
+        True,
+        MczStoveModelGeneration.M1,
+        {"dynamic": "auto"},
+    ),
+]
+
+legacy_climate_recipe_modes = [
+    ClimateFunctionModeMczConfigItem(
+        "Mode",
+        "mode",
+        "m1_mod_lav_att",
+        "Ricetta Pellet",
+        True,
+        MczStoveModelGeneration.M1,
+        {"power": "turbo"},
+    ),
+]
+
 supported_thermostats = [
     ThermostatMczConfigItem(
         "Ambient Temperature",
