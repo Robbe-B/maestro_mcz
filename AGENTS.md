@@ -45,6 +45,17 @@ from `coordinator.py`, not the integration's `__init__.py`. Keep shared constant
 in `const.py` so coordinators and platforms do not depend on setup or config-flow
 modules.
 
+# Model architecture
+
+Within `custom_components\maestro_mcz\maestro`:
+
+- `models\models_types.py` declares configuration dataclasses, schema fields,
+  enums, and genuinely generic defaults.
+- `models\model_definitions.py` holds the supported and legacy feature catalogue,
+  concrete API field/control bindings, and feature-specific configuration.
+- `model_value_reader.py` reads the declared field from the selected cached
+  State/Status response; it does not fetch HTTP responses.
+
 # Test readability
 
 Write and maintain tests as clear scenarios that a nontechnical reader can

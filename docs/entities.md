@@ -32,7 +32,9 @@ Some older stoves may show extra presets they do not support. Use **Manual** or 
 
 ## Fans and manual power
 
-Up to three fan controls are implemented. Their speeds, presets, and availability depend on the stove's current operating mode and enabled model configuration.
+Up to three fan controls are implemented. Available speeds and presets depend on your stove. On air stoves, fan availability also depends on the current operating mode.
+
+On supported hydro stoves, **Room Fan** controls room ventilation without needing a climate preset. **Auto** and **Silent** are fan settings where supported.
 
 The **Manual Power** select is a separate control for the stove's manual power setting. It is not the same as a fan speed percentage, and its values are model-dependent.
 

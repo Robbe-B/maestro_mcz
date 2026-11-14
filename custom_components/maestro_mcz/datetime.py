@@ -15,7 +15,8 @@ from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.requests.activate_program import ProgramCommand
 from .maestro.controller.responses.model import SensorConfiguration
-from .maestro.models import models
+from .maestro.model_value_reader import get_response_value
+from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
@@ -27,7 +28,7 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
     _attr_am_pm = None
     _attr_weekday = None
 
-    _supported_date_time_sensor: models.DateTimeMczConfigItem | None = None
+    _supported_date_time_sensor: models_types.DateTimeMczConfigItem | None = None
     _date_time_configuration: SensorConfiguration | None = None
 
     _sensor_configuration_weekday: SensorConfiguration | None = None
@@ -43,7 +44,7 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_date_time: models.DateTimeMczConfigItem,
+        supported_date_time: models_types.DateTimeMczConfigItem,
         matching_date_time_configuration: SensorConfiguration,
     ) -> None:
         """Initialize the date/time entity."""
@@ -319,64 +320,88 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_weekday,
             ):
-                weekday = getattr(
+                weekday = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_weekday,
                 )
             if self._sensor_configuration_year is not None and hasattr(
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_year,
             ):
-                year = getattr(
+                year = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_year,
                 )
             if self._sensor_configuration_month is not None and hasattr(
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_month,
             ):
-                month = getattr(
+                month = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_month,
                 )
             if self._sensor_configuration_day is not None and hasattr(
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_day,
             ):
-                day = getattr(
+                day = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_day,
                 )
             if self._sensor_configuration_hour is not None and hasattr(
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_hour,
             ):
-                hour = getattr(
+                hour = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_hour,
                 )
             if self._sensor_configuration_minute is not None and hasattr(
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_minute,
             ):
-                minute = getattr(
+                minute = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_minute,
                 )
             if self._sensor_configuration_second is not None and hasattr(
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_second,
             ):
-                second = getattr(
+                second = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_second,
                 )
             if self._sensor_configuration_am_pm is not None and hasattr(
                 self._stove.Status,
                 self._supported_date_time_sensor.sensor_get_name_am_pm,
             ):
-                am_pm = getattr(
+                am_pm = get_response_value(
+                    self._supported_date_time_sensor,
+                    self._stove.State,
                     self._stove.Status,
+                    self._stove.model_generation,
                     self._supported_date_time_sensor.sensor_get_name_am_pm,
                 )
 
@@ -439,7 +464,7 @@ def _getStoveDateTimeEntities(
     """Get the date time entities to create for this stove."""
     entities = []
     supported_date_times = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        models.supported_date_times
+        model_definitions.supported_date_times
     )
     if supported_date_times is not None:
         entities.extend(

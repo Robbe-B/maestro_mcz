@@ -21,10 +21,27 @@ from .controller.responses.model import (
 from .controller.responses.state import State
 from .controller.responses.status import Status
 from .controller.responses.stove_info import StoveInfo
-from .models.models import MczConfigItem, MczStoveModelGeneration
+from .models.models_types import (
+    FanMczConfigItem,
+    MczConfigItem,
+    MczStoveModelGeneration,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
+    """Try declared names against the model, independently of the detected family."""
+    if (
+        definition.sensor_set_name_m1 is not None
+        or definition.sensor_set_name_m2 is not None
+    ):
+        # Keep the original M2-before-M1 priority without changing the shared definition.
+        names = (definition.sensor_set_name_m2, definition.sensor_set_name_m1)
+    else:
+        names = (definition.sensor_set_name,)
+    return tuple(name for name in names if name is not None)
 
 
 class MaestroStove:
@@ -110,9 +127,11 @@ class MaestroStove:
 
     @property
     def model_generation(self) -> MczStoveModelGeneration:
-        """Infer the control family from the model's known ping commands."""
+        """Recognize M1's ping command, otherwise use M2+."""
+        # Catalogue generation labels describe feature definitions, not stove identity.
+        # Detect the stove through ping only; matching a feature must not reclassify it.
         if self.Model is None:
-            return MczStoveModelGeneration.UNKNOWN
+            return MczStoveModelGeneration.M2_PLUS
 
         find_ping = (
             self.get_sensor_configuration_by_model_configuration_name_and_sensor_name
@@ -120,11 +139,7 @@ class MaestroStove:
         if find_ping("PING STOVE", "m1_cod_for_spe_mqtt") is not None:
             return MczStoveModelGeneration.M1
 
-        for group_name in ("cod_for_spe_mqtt", "PING STOVE"):
-            if find_ping(group_name, "cod_for_spe_mqtt") is not None:
-                return MczStoveModelGeneration.M2_PLUS
-
-        return MczStoveModelGeneration.UNKNOWN
+        return MczStoveModelGeneration.M2_PLUS
 
     async def _do_ping_configuration(self, ping: SensorConfiguration) -> None:
         try:
@@ -327,11 +342,12 @@ class MaestroStove:
         """Get the first sensor configuration matching by the name of the model configuration and sensor name."""
         for x in mcz_config_items_list_to_match:
             if x.sensor_set_config_name is not None:
-                matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                    x.sensor_set_config_name, x.sensor_set_name
-                )
-                if matching_configuration is not None:
-                    return (x, matching_configuration)
+                for sensor_name in _get_control_names(x):
+                    matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                        x.sensor_set_config_name, sensor_name
+                    )
+                    if matching_configuration is not None:
+                        return (x, matching_configuration)
         return None
 
     def get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
@@ -341,11 +357,12 @@ class MaestroStove:
         temp_list = []
         for x in mcz_config_items_list_to_match:
             if x.sensor_set_config_name is not None:
-                matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                    x.sensor_set_config_name, x.sensor_set_name
-                )
-                if matching_configuration is not None:
-                    temp_list.append((x, matching_configuration))
+                for sensor_name in _get_control_names(x):
+                    matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                        x.sensor_set_config_name, sensor_name
+                    )
+                    if matching_configuration is not None:
+                        temp_list.append((x, matching_configuration))
         if temp_list:
             return temp_list
         return None
@@ -356,22 +373,32 @@ class MaestroStove:
         """Get the all sensor configurations matching for the matching mode by the name of the model configuration and sensor name."""
         temp_list = []
         for x in mcz_config_items_list_to_match:
-            if x.mode_to_configuration_name_mapping is not None:
+            for sensor_name in _get_control_names(x):
+                mode_groups = x.mode_to_configuration_name_mapping
+                if isinstance(x, FanMczConfigItem):
+                    family_groups = None
+                    if sensor_name == x.sensor_set_name_m1:
+                        family_groups = x.mode_to_configuration_name_mapping_m1
+                    elif sensor_name == x.sensor_set_name_m2:
+                        family_groups = x.mode_to_configuration_name_mapping_m2
+                    if family_groups is not None:
+                        mode_groups = family_groups
+                if mode_groups is None:
+                    continue
                 temp_mode_configurations: dict[str, SensorConfiguration] = {}
-                for mode in x.mode_to_configuration_name_mapping:
+                for mode in mode_groups:
                     matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                        x.mode_to_configuration_name_mapping[mode], x.sensor_set_name
+                        mode_groups[mode], sensor_name
                     )
                     if matching_configuration is not None:
                         temp_mode_configurations[mode] = matching_configuration
-
-            if (
-                temp_mode_configurations is not None
-                and len(temp_mode_configurations) > 0
-            ):
-                temp_list.append(
-                    (x, SensorConfigurationMultipleModes(temp_mode_configurations))
-                )
+                if temp_mode_configurations:
+                    temp_list.append(
+                        (
+                            x,
+                            SensorConfigurationMultipleModes(temp_mode_configurations),
+                        )
+                    )
         if temp_list:
             return temp_list
         return None

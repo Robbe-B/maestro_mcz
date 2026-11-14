@@ -12,7 +12,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
-from .maestro.models import models
+from .maestro.model_value_reader import get_response_value
+from .maestro.models import model_definitions, models_types
 
 
 class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
@@ -28,7 +29,7 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_switch: models.SwitchMczConfigItem,
+        supported_switch: models_types.SwitchMczConfigItem,
         matching_switch_configuration: SensorConfiguration,
     ):
         """Initialize the switch entity."""
@@ -40,6 +41,7 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         self._attr_icon = supported_switch.icon
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_switch.sensor_get_name
+        self._supported_switch = supported_switch
         self.entity_registry_enabled_default = supported_switch.enabled_by_default
         self.entity_category = supported_switch.category
         self._switch_configuration = matching_switch_configuration
@@ -85,12 +87,12 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        if hasattr(self._stove.Status, self._prop):
-            self._attr_is_on = getattr(self._stove.Status, self._prop)
-        elif hasattr(self._stove.State, self._prop):
-            self._attr_is_on = getattr(self._stove.State, self._prop)
-        else:
-            self._attr_is_on = None
+        self._attr_is_on = get_response_value(
+            self._supported_switch,
+            self._stove.State,
+            self._stove.Status,
+            self._stove.model_generation,
+        )
 
 
 async def async_setup_entry(
@@ -113,7 +115,7 @@ def _getStoveSwitchEntities(
     """Get the switch entities to create for this stove."""
     entities = []
     supported_switches = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        models.supported_switches
+        model_definitions.supported_switches
     )
     if supported_switches is not None:
         entities.extend(

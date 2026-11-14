@@ -14,7 +14,8 @@ from .coordinator import (
     MczConsumptionCoordinator,
 )
 from .maestro import MaestroStove
-from .maestro.models import models
+from .maestro.model_value_reader import get_response_value
+from .maestro.models import model_definitions, models_types
 
 PARALLEL_UPDATES = 0
 
@@ -77,7 +78,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_sensor: models.SensorMczConfigItem,
+        supported_sensor: models_types.SensorMczConfigItem,
     ) -> None:
         """Initialize the sensor entity."""
         super().__init__(coordinator)
@@ -92,6 +93,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self._attr_icon = supported_sensor.icon
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_sensor.sensor_get_name
+        self._supported_sensor = supported_sensor
         self.entity_registry_enabled_default = supported_sensor.enabled_by_default
         self.entity_category = supported_sensor.category
         self._api_value_renames = supported_sensor.api_value_renames
@@ -116,9 +118,12 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        value = getattr(self._stove.Status, self._prop, None)
-        if value is None:
-            value = getattr(self._stove.State, self._prop, None)
+        value = get_response_value(
+            self._supported_sensor,
+            self._stove.State,
+            self._stove.Status,
+            self._stove.model_generation,
+        )
 
         if self._api_value_renames is not None and value in self._api_value_renames:
             self._attr_native_value = self._api_value_renames[value]
@@ -174,22 +179,12 @@ def _getStoveSensorEntities(
     entities = []
     supported_sensors = filter(
         lambda supported_sensor: (
-            any(
-                (
-                    supported_sensor.sensor_get_name == sensor_name_status
-                    and getattr(stove.Status, sensor_name_status) is not None
-                )
-                for sensor_name_status in dir(stove.Status)
+            get_response_value(
+                supported_sensor, stove.State, stove.Status, stove.model_generation
             )
-            or any(
-                (
-                    supported_sensor.sensor_get_name == sensor_name_state
-                    and getattr(stove.State, sensor_name_state) is not None
-                )
-                for sensor_name_state in dir(stove.State)
-            )
+            is not None
         ),
-        iter(models.supported_sensors),
+        iter(model_definitions.supported_sensors),
     )
 
     entities.extend(
