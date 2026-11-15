@@ -32,7 +32,7 @@ Existing saved options can override the default. The options form constrains val
 
 A shorter interval increases cloud requests; it does not make the stove respond instantly. Start with your version's default and increase it if you do not need frequent updates.
 
-The optional [consumption history sensor](entities.md#consumption-history) refreshes at startup and local midnight, retrying hourly while yesterday's reading is missing or a request fails. Changing the live polling interval does not affect these requests.
+The optional [consumption history sensor](entities.md#consumption-history) refreshes at startup and at 00:01 in the stove's timezone, retrying hourly while yesterday's reading is missing or a request fails. Changing the live polling interval does not affect these requests.
 
 ## Updates and response time
 
