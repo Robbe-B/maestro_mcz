@@ -10,7 +10,7 @@ from homeassistant.helpers.entity import EntityCategory
 
 
 class MczStoveModelGeneration(Enum):
-    """Control families distinguished by the integration."""
+    """Stove generations distinguished by the integration."""
 
     M1 = 1
     M2_PLUS = 2

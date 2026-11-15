@@ -231,9 +231,7 @@ def _getStoveBinarySensorEntities(
             definition.sensor_set_name_m1 is not None
             or definition.sensor_set_name_m2 is not None
         ):
-            matches = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-                [definition]
-            )
+            matches = stove.get_supported_sensor_configurations([definition])
             definitions.extend(config for config, _ in matches or [])
         else:
             definitions.append(definition)

@@ -22,7 +22,6 @@ from .controller.responses.state import State
 from .controller.responses.status import Status
 from .controller.responses.stove_info import StoveInfo
 from .models.models_types import (
-    FanMczConfigItem,
     MczConfigItem,
     MczStoveModelGeneration,
 )
@@ -31,8 +30,8 @@ from .models.models_types import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
-    """Try declared names against the model, independently of the detected family."""
+def get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
+    """Try declared names against the model, independently of the detected generation."""
     if (
         definition.sensor_set_name_m1 is not None
         or definition.sensor_set_name_m2 is not None
@@ -342,12 +341,11 @@ class MaestroStove:
         """Get the first sensor configuration matching by the name of the model configuration and sensor name."""
         for x in mcz_config_items_list_to_match:
             if x.sensor_set_config_name is not None:
-                for sensor_name in _get_control_names(x):
-                    matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                        x.sensor_set_config_name, sensor_name
-                    )
-                    if matching_configuration is not None:
-                        return (x, matching_configuration)
+                matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                    x.sensor_set_config_name, x.sensor_set_name
+                )
+                if matching_configuration is not None:
+                    return (x, matching_configuration)
         return None
 
     def get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
@@ -357,12 +355,11 @@ class MaestroStove:
         temp_list = []
         for x in mcz_config_items_list_to_match:
             if x.sensor_set_config_name is not None:
-                for sensor_name in _get_control_names(x):
-                    matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                        x.sensor_set_config_name, sensor_name
-                    )
-                    if matching_configuration is not None:
-                        temp_list.append((x, matching_configuration))
+                matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                    x.sensor_set_config_name, x.sensor_set_name
+                )
+                if matching_configuration is not None:
+                    temp_list.append((x, matching_configuration))
         if temp_list:
             return temp_list
         return None
@@ -373,32 +370,47 @@ class MaestroStove:
         """Get the all sensor configurations matching for the matching mode by the name of the model configuration and sensor name."""
         temp_list = []
         for x in mcz_config_items_list_to_match:
-            for sensor_name in _get_control_names(x):
-                mode_groups = x.mode_to_configuration_name_mapping
-                if isinstance(x, FanMczConfigItem):
-                    family_groups = None
-                    if sensor_name == x.sensor_set_name_m1:
-                        family_groups = x.mode_to_configuration_name_mapping_m1
-                    elif sensor_name == x.sensor_set_name_m2:
-                        family_groups = x.mode_to_configuration_name_mapping_m2
-                    if family_groups is not None:
-                        mode_groups = family_groups
-                if mode_groups is None:
-                    continue
-                temp_mode_configurations: dict[str, SensorConfiguration] = {}
-                for mode in mode_groups:
+            temp_mode_configurations: dict[str, SensorConfiguration] = {}
+            if x.mode_to_configuration_name_mapping is not None:
+                for mode in x.mode_to_configuration_name_mapping:
                     matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                        mode_groups[mode], sensor_name
+                        x.mode_to_configuration_name_mapping[mode], x.sensor_set_name
                     )
                     if matching_configuration is not None:
                         temp_mode_configurations[mode] = matching_configuration
-                if temp_mode_configurations:
-                    temp_list.append(
-                        (
-                            x,
-                            SensorConfigurationMultipleModes(temp_mode_configurations),
-                        )
-                    )
+            if (
+                temp_mode_configurations is not None
+                and len(temp_mode_configurations) > 0
+            ):
+                temp_list.append(
+                    (x, SensorConfigurationMultipleModes(temp_mode_configurations))
+                )
         if temp_list:
             return temp_list
+        return None
+
+    def get_supported_sensor_configurations(
+        self, definitions: list[MczConfigItem]
+    ) -> list[tuple[MczConfigItem, SensorConfiguration]] | None:
+        """Select declared generation-specific commands, then match their advertised names."""
+        matches = []
+        for definition in definitions:
+            if definition.sensor_set_config_name is None:
+                continue
+            for sensor_name in get_control_names(definition):
+                configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                    definition.sensor_set_config_name, sensor_name
+                )
+                if configuration is not None:
+                    matches.append((definition, configuration))
+        return matches or None
+
+    def get_first_supported_sensor_configuration(
+        self, definitions: list[MczConfigItem]
+    ) -> tuple[MczConfigItem, SensorConfiguration] | None:
+        """Find the first supported generation-specific command in catalogue order."""
+        for definition in definitions:
+            matches = self.get_supported_sensor_configurations([definition])
+            if matches:
+                return matches[0]
         return None

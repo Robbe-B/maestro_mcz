@@ -114,7 +114,7 @@ def _getStoveSwitchEntities(
 ) -> list[CoordinatorEntity]:
     """Get the switch entities to create for this stove."""
     entities = []
-    supported_switches = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
+    supported_switches = stove.get_supported_sensor_configurations(
         model_definitions.supported_switches
     )
     if supported_switches is not None:

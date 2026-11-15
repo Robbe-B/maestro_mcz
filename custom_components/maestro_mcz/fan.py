@@ -16,7 +16,7 @@ from homeassistant.util.percentage import (
 )
 
 from .coordinator import MczAccountCoordinator
-from .maestro import MaestroStove
+from .maestro import MaestroStove, get_control_names
 from .maestro.controller.responses.model import (
     SensorConfiguration,
     SensorConfigurationMultipleModes,
@@ -361,6 +361,40 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
+def get_supported_fan_configurations(
+    stove: MaestroStove, fans: list[models_types.FanMczConfigItem]
+) -> (
+    list[tuple[models_types.FanMczConfigItem, SensorConfigurationMultipleModes]] | None
+):
+    """Select each fan's generation-specific mode groups before model matching."""
+    matches = []
+    for fan in fans:
+        for sensor_name in get_control_names(fan):
+            mode_groups = fan.mode_to_configuration_name_mapping
+            if sensor_name == fan.sensor_set_name_m2:
+                generation_groups = fan.mode_to_configuration_name_mapping_m2
+            elif sensor_name == fan.sensor_set_name_m1:
+                generation_groups = fan.mode_to_configuration_name_mapping_m1
+            else:
+                generation_groups = None
+            if generation_groups is not None:
+                mode_groups = generation_groups
+            if mode_groups is None:
+                continue
+            mode_configurations: dict[str, SensorConfiguration] = {}
+            for mode, group in mode_groups.items():
+                configuration = stove.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                    group, sensor_name
+                )
+                if configuration is not None:
+                    mode_configurations[mode] = configuration
+            if mode_configurations:
+                matches.append(
+                    (fan, SensorConfigurationMultipleModes(mode_configurations))
+                )
+    return matches or None
+
+
 def _getStoveFanEntities(
     coordinator: MczAccountCoordinator, stove: MaestroStove
 ) -> list[CoordinatorEntity]:
@@ -369,15 +403,14 @@ def _getStoveFanEntities(
     fixed_fans = {
         fan.sensor_get_name: (fan, configuration)
         for fan, configuration in (
-            stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-                model_definitions.supported_fans
-            )
+            stove.get_supported_sensor_configurations(model_definitions.supported_fans)
             or []
         )
         if configuration.configuration is not None
         and configuration.configuration.enabled
     }
-    supported_fans = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
+    supported_fans = get_supported_fan_configurations(
+        stove,
         [
             fan
             for fan in model_definitions.supported_fans
@@ -387,7 +420,7 @@ def _getStoveFanEntities(
                 or fan.mode_to_configuration_name_mapping_m2 is not None
             )
             and fan.sensor_get_name not in fixed_fans
-        ]
+        ],
     )
 
     if supported_fans is not None:

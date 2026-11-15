@@ -24,7 +24,10 @@ from custom_components.maestro_mcz.button import (
     MczTimeSyncButtonEntity,
 )
 from custom_components.maestro_mcz.climate import MczClimateEntity
-from custom_components.maestro_mcz.fan import MczFanEntity
+from custom_components.maestro_mcz.fan import (
+    MczFanEntity,
+    get_supported_fan_configurations,
+)
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Configuration,
     ModelConfiguration,
@@ -113,7 +116,7 @@ async def test_shared_climate_definition_uses_matched_command_names(
 ):
     """Use each stove's display names without rewriting settings shared with other stoves."""
     # 1. Both generations share names unless the older control explicitly overrides them.
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    power = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
     definition = models_types.ClimateFunctionModeMczConfigItem(
@@ -383,8 +386,8 @@ async def test_operating_sensors_are_regular_entities(
 async def test_alarm_reset_is_a_configuration_button(
     hass, entry, coordinator, stove, controller, configuration, command_name
 ):
-    """Put alarm reset under Configuration on both stove families without changing its command."""
-    # 1. Give the stove the alarm-reset command used by this family.
+    """Put alarm reset under Configuration on both stove generations without changing its command."""
+    # 1. Give the stove the alarm-reset command used by this generation.
     reset_group = next(
         group
         for group in stove.Model.model_configurations
@@ -632,7 +635,7 @@ def test_unconfigured_response_name_is_not_guessed():
 async def test_current_control_and_information_temperatures_have_distinct_sources(
     hass, entry, coordinator, hydro_stove, value
 ):
-    """Use current readings for heating and the audited family source for information."""
+    """Use current readings for heating and the generation-specific source for information."""
     # 1. Discover controls while both endpoint replies contain different temperatures.
     hydro_stove.State.temp_amb_install = 17
     hydro_stove.Status.temp_amb_install = 20
@@ -736,7 +739,7 @@ def test_probe_and_maintenance_do_not_substitute_another_response(generation):
         if item.sensor_get_name == "ore_prox_manut"
     )
 
-    # 2. Read each existing entity's declared family policy.
+    # 2. Read each existing entity's declared generation-specific policy.
     probe_value = get_response_value(probe, state, status, generation)
     maintenance_value = get_response_value(maintenance, state, status, generation)
 
@@ -902,9 +905,7 @@ async def test_three_fan_capture_targets_do_not_advertise_extra_thermostats(
         for item in model_definitions.supported_thermostats
         if item.sensor_get_name in {"set_amb2", "set_amb3"}
     ]
-    matching_extra_targets = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        extra_targets
-    )
+    matching_extra_targets = stove.get_supported_sensor_configurations(extra_targets)
 
     # 3. The configured thermostat remains target 1; reported values are not capabilities.
     assert len(climates) == 1
@@ -957,7 +958,7 @@ async def test_original_m1_hydro_boiler_descriptor_routes_room_fan(
         )
     ]
 
-    # 2. Discover the fixed fan from its actual sensor and group, not inferred ping family.
+    # 2. Discover the fixed fan from its actual sensor and group, not inferred generation.
     module = importlib.import_module("custom_components.maestro_mcz.fan")
     add_entities = Mock()
     await module.async_setup_entry(hass, entry, add_entities)
@@ -1075,7 +1076,7 @@ async def test_pump_activation_temperature_readback(
     state_value,
     expected,
 ):
-    """Read each family's pump setting from Status and never substitute information data."""
+    """Read each generation's pump setting from Status and never substitute information data."""
     # 1. The stove exposes its pump threshold as an adjustable number.
     expected_generation = models_types.MczStoveModelGeneration.M2_PLUS
     if sensor_name == "m1_temp_min_circ_on":
@@ -1321,7 +1322,7 @@ async def test_m1_mode_commands_follow_bootloader(
     # 1. Standard and older controls exist, and the cloud advertises five modes.
     stove = m1_mode_stove
     stove.Status.sm_vs_bootloader = bootloader
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    power = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
 
@@ -1377,11 +1378,12 @@ async def test_legacy_mode_switch_preserves_mode_based_fans(
     """Keep fan commands attached to the reported mode when an older stove switches to automatic."""
     # 1. An older stove starts in manual mode with its ordinary M1 fan controls.
     stove = m1_mode_stove
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    power = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
     climate = MczClimateEntity(coordinator, stove.UniqueCode, *power)
-    fan_configuration = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
+    fan_configuration = get_supported_fan_configurations(
+        stove,
         [
             fan
             for fan in model_definitions.supported_fans
@@ -1390,7 +1392,7 @@ async def test_legacy_mode_switch_preserves_mode_based_fans(
                 or fan.mode_to_configuration_name_mapping_m1 is not None
                 or fan.mode_to_configuration_name_mapping_m2 is not None
             )
-        ]
+        ],
     )[0]
     fan = MczFanEntity(coordinator, stove.UniqueCode, *fan_configuration)
     await fan.async_set_percentage(50)
@@ -1442,7 +1444,7 @@ async def test_legacy_mode_without_valid_command_keeps_standard_commands(
         legacy_group.configurations[0].sensor_id = None
     else:
         legacy_group.configuration_id = None
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    power = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
 
@@ -1512,7 +1514,7 @@ async def test_legacy_recipe_without_valid_command_keeps_standard_commands(
         recipe_sensor.variants = None
     else:
         recipe_sensor.variants.remove("comfort")
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    power = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
 
@@ -1550,7 +1552,7 @@ async def test_legacy_recipe_uses_model_mapping_values(
         "Ricetta Pellet"
     )
     recipe_group.configurations[0].mappings["comfort"] = 23
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    power = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
 
@@ -1583,7 +1585,7 @@ async def test_legacy_only_mode_configuration(
         "Cambio_mod_2MOD"
     )
     legacy_group.configurations[0].enabled = legacy_enabled
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    power = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
 
@@ -2244,7 +2246,7 @@ async def setup_binary_sensors(hass, entry):
 
 @pytest.fixture(params=["sens_liv_pellet", "m1_sens_liv_pellet"])
 def pellet_probe_configuration(stove, configuration, request):
-    """Describe the optional probe setting for each stove family, not a physical probe."""
+    """Describe the optional probe setting for each stove generation, not a physical probe."""
     probe_group = ModelConfiguration(
         {
             "ConfigurationName": "Sensore Livello Pellet",

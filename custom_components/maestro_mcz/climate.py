@@ -76,8 +76,10 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
         self._set_power_configuration(matching_power_configuration)
 
         # set thermostat config
-        first_supported_thermostat = self._stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-            model_definitions.supported_thermostats
+        first_supported_thermostat = (
+            self._stove.get_first_supported_sensor_configuration(
+                model_definitions.supported_thermostats
+            )
         )
         if (
             first_supported_thermostat is not None
@@ -93,8 +95,10 @@ class MczClimateEntity(CoordinatorEntity, ClimateEntity):
 
         # Standard metadata defines the advertised presets and their readback names.
         # Choosing a compatibility command must not hide those presets.
-        first_supported_climate_function_mode = self._stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-            model_definitions.supported_climate_function_modes
+        first_supported_climate_function_mode = (
+            self._stove.get_first_supported_sensor_configuration(
+                model_definitions.supported_climate_function_modes
+            )
         )
         if self._uses_legacy_mode_commands():
             legacy_mode = self._set_legacy_preset_commands()
@@ -578,7 +582,7 @@ def _getStoveClimateEntities(
 ) -> list[CoordinatorEntity]:
     """Get the climate entities to create for this stove."""
     entities = []
-    first_supported_power_sensor = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+    first_supported_power_sensor = stove.get_first_supported_sensor_configuration(
         model_definitions.supported_power_settings
     )
     if (

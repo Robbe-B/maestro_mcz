@@ -176,7 +176,7 @@ def _getStoveSelectEntities(
 ) -> list[CoordinatorEntity]:
     """Get the select entities to create for this stove."""
     entities = []
-    supported_pots = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
+    supported_pots = stove.get_supported_sensor_configurations(
         model_definitions.supported_pots
     )
     if supported_pots is not None:
@@ -188,7 +188,7 @@ def _getStoveSelectEntities(
             if supported_pot[0] is not None and supported_pot[1] is not None
         )
 
-    supported_selectors = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
+    supported_selectors = stove.get_supported_sensor_configurations(
         model_definitions.supported_selectors
     )
     if supported_selectors is not None:

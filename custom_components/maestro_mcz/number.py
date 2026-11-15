@@ -128,7 +128,7 @@ def _getStoveNumberEntities(
 ) -> list[CoordinatorEntity]:
     """Get the number entities to create for this stove."""
     entities = []
-    supported_numbers = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
+    supported_numbers = stove.get_supported_sensor_configurations(
         model_definitions.supported_numbers
     )
     if supported_numbers is not None:

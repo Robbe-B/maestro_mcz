@@ -210,7 +210,7 @@ def _getStoveButtonEntities(
     """Get the button entities to create for this stove."""
     entities = []
     # buttons
-    supported_buttons = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
+    supported_buttons = stove.get_supported_sensor_configurations(
         model_definitions.supported_buttons
     )
     if supported_buttons is not None:

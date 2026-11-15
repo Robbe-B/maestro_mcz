@@ -102,7 +102,7 @@ The integration matches known feature definitions against cloud-provided model c
 
 This means an entity may not be created, may be disabled by default, or may become unavailable in a particular mode. Those are different situations.
 
-The integration distinguishes M1 and M2+ control families using known ping commands in the stove's cloud configuration, not its product name or power controls. M2+ does not identify an exact M2 or M3 generation. Unrecognized ping configurations remain unknown. AIR, HYDRO, and CORE describe product categories, not controller generations.
+The integration recognizes M1 and otherwise uses M2+ as the default generation. M2+ covers newer controllers without distinguishing M2 from M3. AIR, HYDRO, and CORE describe product categories, not controller generations.
 
 To inspect disabled entities, open **Settings > Devices & services > Entities**, filter by **Maestro MCZ**, and include disabled entities. Enable an entity only if you need it and it applies to your stove.
 
