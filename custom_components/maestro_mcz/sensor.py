@@ -12,12 +12,61 @@ from .coordinator import (
     MczAccountCoordinator,
     MczConfigEntry,
     MczConsumptionCoordinator,
+    MczCountersCoordinator,
 )
 from .maestro import MaestroStove
-from .maestro.model_value_reader import get_response_value
-from .maestro.models import model_definitions, models_types
+from .maestro.model_value_reader import get_counter_value, get_response_value
+from .maestro.models import counter_definitions, model_definitions, models_types
 
 PARALLEL_UPDATES = 0
+
+
+class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
+    """Expose cloud lifetime statistics without depending on live connectivity."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: MczCountersCoordinator,
+        supported_counter: models_types.CounterMczConfigItem,
+    ) -> None:
+        """Associate each supported counter with its existing stove device."""
+        super().__init__(coordinator)
+        self._supported_counter = supported_counter
+        self._attr_translation_key = supported_counter.translation_key
+        if supported_counter.translation_key is None:
+            self._attr_name = supported_counter.user_friendly_name
+        self._attr_native_unit_of_measurement = supported_counter.unit
+        self._attr_suggested_display_precision = supported_counter.display_precision
+        self._attr_device_class = supported_counter.device_class
+        self._attr_state_class = supported_counter.state_class
+        self._attr_icon = supported_counter.icon
+        self._attr_entity_category = supported_counter.category
+        self._attr_entity_registry_enabled_default = (
+            supported_counter.enabled_by_default
+        )
+        self._attr_unique_id = (
+            f"{coordinator.stove.UniqueCode}-{supported_counter.sensor_get_name}"
+        )
+        self._attr_device_info = coordinator.stove.get_device_info()
+
+    @property
+    def native_value(self) -> int | float | None:
+        """Read the counter using its definition, just like live model readings."""
+        data = self.coordinator.data
+        if data is None:
+            return None
+        return get_counter_value(
+            self._supported_counter,
+            data.values,
+            self.coordinator.stove.model_generation,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Treat a missing counter as unavailable, never as a zero reading."""
+        return super().available and self.native_value is not None
 
 
 class MczYesterdayConsumptionSensor(
@@ -168,6 +217,40 @@ async def async_setup_entry(
             hass,
             history.async_refresh(),
             name=f"{history.name} initial refresh",
+        )
+
+    discovered_counters: set[tuple[str, str]] = set()
+
+    @callback
+    def async_discover_counters() -> None:
+        """Discover individual counters when they first provide a usable value."""
+        new_entities = []
+        for unique_code, counters in coordinator.counters_coordinators.items():
+            if not counters.last_update_success or counters.data is None:
+                continue
+            for definition in counter_definitions.supported_counters:
+                identity = (unique_code, definition.sensor_get_name)
+                if identity in discovered_counters:
+                    continue
+                if (
+                    get_counter_value(
+                        definition,
+                        counters.data.values,
+                        counters.stove.model_generation,
+                    )
+                    is not None
+                ):
+                    discovered_counters.add(identity)
+                    new_entities.append(MczCounterSensor(counters, definition))
+        if new_entities:
+            async_add_entities(new_entities)
+
+    for counters in coordinator.counters_coordinators.values():
+        entry.async_on_unload(counters.async_add_listener(async_discover_counters))
+        entry.async_create_background_task(
+            hass,
+            counters.async_refresh(),
+            name=f"{counters.name} initial refresh",
         )
 
 

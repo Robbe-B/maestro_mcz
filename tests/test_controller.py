@@ -1,7 +1,7 @@
 """Cloud wire protocol, authentication, retries, and command regression tests."""
 
-from datetime import date
 import json
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
 import aiohttp
@@ -10,8 +10,8 @@ import pytest
 from custom_components.maestro_mcz.maestro.controller.const import (
     ACTIVATE_PROGRAM_URL,
     APPLIANCE_URL,
-    CONTENT_TYPE,
     CONSUMPTION_URL,
+    CONTENT_TYPE,
     LOGIN_URL,
     PING_URL,
     STOVE_INFO_URL,
@@ -26,6 +26,7 @@ from custom_components.maestro_mcz.maestro.controller.maestro_controller import 
 from custom_components.maestro_mcz.maestro.controller.requests.activate_program import (
     ProgramCommand,
 )
+from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
 from custom_components.maestro_mcz.maestro.controller.responses.model import Model
 from custom_components.maestro_mcz.maestro.controller.responses.state import State
 from custom_components.maestro_mcz.maestro.controller.responses.status import Status
@@ -314,6 +315,14 @@ async def test_account_filters_devices_without_serial(api, stove_info_payload):
             None,
             Model,
         ),
+        (
+            "get_counters_for_stove",
+            ("device-1", "Living Room"),
+            "GET",
+            f"{APPLIANCE_URL}/device-1/Counters",
+            {"num_acc": 0},
+            Counters,
+        ),
     ],
 )
 async def test_endpoint_routing_and_failure(
@@ -330,6 +339,7 @@ async def test_endpoint_routing_and_failure(
         # 2. Call that operation and check both its result and destination.
         result = await requested_operation(*args)
         assert isinstance(result, result_type)
+        request.assert_awaited_once()
         sent_request = request.await_args
         assert sent_request.args[0] == verb
         # Existing methods pass the URL either by name or as the second argument.
@@ -342,6 +352,18 @@ async def test_endpoint_routing_and_failure(
         request.return_value = None
         with pytest.raises(MaestroConnectionException, match="Living Room"):
             await requested_operation(*args)
+
+
+@pytest.mark.parametrize("payload", [[], {"num_acc": "bad"}])
+async def test_counters_reject_malformed_responses(api, payload):
+    """Expose invalid statistics rather than inventing a usable counter reading."""
+    # 1. The endpoint responds, but its data cannot represent valid counters.
+    with patch.object(
+        api, "make_request", new_callable=AsyncMock, return_value=payload
+    ):
+        # 2. Request counters using the real controller and response parser.
+        with pytest.raises((TypeError, ValueError)):
+            await api.get_counters_for_stove("device-1", "Living Room")
 
 
 @pytest.mark.parametrize("success", [None, {}, {"accepted": True}])

@@ -639,3 +639,11 @@ class SensorMczConfigItem(MczConfigItem):
         self.enabled_by_default = enabled_by_default
         self.api_value_renames = api_value_renames
         self.value_response_source = value_response_source
+
+
+@dataclass(kw_only=True)
+class CounterMczConfigItem(SensorMczConfigItem):
+    """Describe a counter using ordered response fields and their unit divisors."""
+
+    value_sources: dict[str, int | dict[MczStoveModelGeneration, int]]
+    translation_key: str | None = None

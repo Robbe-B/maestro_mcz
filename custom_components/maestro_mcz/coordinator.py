@@ -1,11 +1,11 @@
-"""Coordinators for live stove data and dated consumption history."""
+"""Independent coordinators for live data, consumption history, and statistics."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, tzinfo
-import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
@@ -21,9 +21,11 @@ from .maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
+from .maestro.controller.responses.counters import Counters
 
 _LOGGER = logging.getLogger(__name__)
 CONSUMPTION_RETRY_INTERVAL = timedelta(hours=1)
+COUNTERS_UPDATE_INTERVAL = timedelta(hours=1)
 
 type MczConfigEntry = ConfigEntry[MczAccountCoordinator]
 
@@ -54,6 +56,7 @@ class MczAccountCoordinator(DataUpdateCoordinator):
         )
         self._stoves = {stove.UniqueCode: stove for stove in stoves} if stoves else None
         self.consumption_coordinators: dict[str, MczConsumptionCoordinator] = {}
+        self.counters_coordinators: dict[str, MczCountersCoordinator] = {}
 
     async def _async_setup(self):
         """Set up the coordinator."""
@@ -98,6 +101,60 @@ class MczAccountCoordinator(DataUpdateCoordinator):
     def stoves(self) -> dict[str, MaestroStove]:
         """Return the stoves."""
         return self._stoves
+
+
+@dataclass(frozen=True)
+class CountersData:
+    """A successful statistics response and its retrieval time."""
+
+    values: Counters
+    last_updated: datetime
+
+
+class MczCountersCoordinator(DataUpdateCoordinator[CountersData]):
+    """Poll slow-changing lifetime counters without delaying live stove controls."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: MczConfigEntry,
+        controller: MaestroControllerInterface,
+        stove: MaestroStove,
+    ) -> None:
+        """Use an hourly schedule separate from the live polling option."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=config_entry,
+            name=f"{stove.Name} counters",
+            update_interval=COUNTERS_UPDATE_INTERVAL,
+        )
+        self._controller = controller
+        self.stove = stove
+
+    async def _async_update_data(self) -> CountersData:
+        """Keep optional statistics failures separate from account controls."""
+        try:
+            counters = await self._controller.get_counters_for_stove(
+                self.stove.Id, self.stove.Name
+            )
+        except MaestroAuthenticationException as err:
+            raise ConfigEntryAuthFailed(
+                translation_domain=DOMAIN,
+                translation_key="counters_invalid_auth",
+            ) from err
+        except MaestroConnectionException as err:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="counters_cannot_connect",
+                translation_placeholders={"error": str(err)},
+            ) from err
+        except (TypeError, ValueError) as err:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="counters_invalid_response",
+            ) from err
+        return CountersData(values=counters, last_updated=dt_util.utcnow())
 
 
 @dataclass(frozen=True)

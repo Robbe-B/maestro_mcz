@@ -57,4 +57,14 @@ async def async_get_config_entry_diagnostics(
                     data.last_updated.isoformat() if data is not None else None
                 ),
             }
+        counters = coordinator.counters_coordinators.get(stove.UniqueCode)
+        if counters is not None:
+            data = counters.data
+            diagnostics_data["devices"][stove.Name]["counters"] = {
+                "last_update_success": counters.last_update_success,
+                "values": dataclasses.asdict(data.values) if data is not None else None,
+                "last_successful_update": (
+                    data.last_updated.isoformat() if data is not None else None
+                ),
+            }
     return diagnostics_data

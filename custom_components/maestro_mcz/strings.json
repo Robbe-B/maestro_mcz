@@ -27,6 +27,15 @@
     }
   },
   "exceptions": {
+    "counters_invalid_auth": {
+      "message": "Authentication failed while retrieving stove statistics"
+    },
+    "counters_cannot_connect": {
+      "message": "Could not retrieve stove statistics: {error}"
+    },
+    "counters_invalid_response": {
+      "message": "The Maestro service returned invalid stove statistics"
+    },
     "consumption_invalid_auth": {
       "message": "Authentication failed while retrieving consumption history"
     },
@@ -39,6 +48,27 @@
   },
   "entity": {
     "sensor": {
+      "ignition_count": {
+        "name": "Ignition count"
+      },
+      "total_operating_time": {
+        "name": "Total operating time"
+      },
+      "operating_time_power_1": {
+        "name": "Operating time at power 1"
+      },
+      "operating_time_power_2": {
+        "name": "Operating time at power 2"
+      },
+      "operating_time_power_3": {
+        "name": "Operating time at power 3"
+      },
+      "operating_time_power_4": {
+        "name": "Operating time at power 4"
+      },
+      "operating_time_power_5": {
+        "name": "Operating time at power 5"
+      },
       "consumption_yesterday": {
         "name": "Yesterday's consumption",
         "state_attributes": {

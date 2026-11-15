@@ -27,6 +27,15 @@
       }
   },
   "exceptions": {
+    "counters_invalid_auth": {
+      "message": "Authenticatie mislukt bij het ophalen van de kachelstatistieken"
+    },
+    "counters_cannot_connect": {
+      "message": "De kachelstatistieken konden niet worden opgehaald: {error}"
+    },
+    "counters_invalid_response": {
+      "message": "De Maestro-dienst heeft ongeldige kachelstatistieken teruggestuurd"
+    },
     "consumption_invalid_auth": {
       "message": "Authenticatie mislukt bij het ophalen van de verbruiksgeschiedenis"
     },
@@ -39,6 +48,27 @@
   },
   "entity": {
     "sensor": {
+      "ignition_count": {
+        "name": "Aantal ontstekingen"
+      },
+      "total_operating_time": {
+        "name": "Totale bedrijfstijd"
+      },
+      "operating_time_power_1": {
+        "name": "Bedrijfstijd op vermogen 1"
+      },
+      "operating_time_power_2": {
+        "name": "Bedrijfstijd op vermogen 2"
+      },
+      "operating_time_power_3": {
+        "name": "Bedrijfstijd op vermogen 3"
+      },
+      "operating_time_power_4": {
+        "name": "Bedrijfstijd op vermogen 4"
+      },
+      "operating_time_power_5": {
+        "name": "Bedrijfstijd op vermogen 5"
+      },
       "consumption_yesterday": {
         "name": "Verbruik gisteren",
         "state_attributes": {

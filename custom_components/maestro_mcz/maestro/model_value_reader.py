@@ -1,8 +1,10 @@
-"""Read model-declared fields from cached State/Status responses, without HTTP."""
+"""Read definition-declared fields from cached API responses, without HTTP."""
 
+from .controller.responses.counters import Counters
 from .controller.responses.state import State
 from .controller.responses.status import Status
 from .models.models_types import (
+    CounterMczConfigItem,
     MczConfigItem,
     MczResponseSource,
     MczStoveModelGeneration,
@@ -39,3 +41,18 @@ def get_response_value(
             else MczStoveModelGeneration.M2_PLUS
         ]
     return read_response_value(source, state, status, name)
+
+
+def get_counter_value(
+    config: CounterMczConfigItem,
+    counters: Counters | None,
+    model_generation: MczStoveModelGeneration,
+) -> int | float | None:
+    """Read the first available declared field and apply its configured unit divisor."""
+    for name, divisor in config.value_sources.items():
+        value = getattr(counters, name, None)
+        if value is not None:
+            if isinstance(divisor, dict):
+                divisor = divisor[model_generation]
+            return value if divisor == 1 else value / divisor
+    return None
