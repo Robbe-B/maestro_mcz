@@ -16,6 +16,7 @@ from .coordinator import (
     MczAccountCoordinator,
     MczConfigEntry,
     MczConsumptionCoordinator,
+    MczCountersCoordinator,
 )
 from .maestro import MaestroStove
 from .maestro.controller.controller_interface import MaestroControllerInterface
@@ -70,11 +71,10 @@ async def async_setup_entry(
 ) -> bool:
     """Set up maestro_mcz from a config entry."""
 
-    # 1. Check if we have a mocked folder
+    # 1. Read the optional folder containing saved diagnostics.
     mocked_folder = entry.data.get(MOCKED_FOLDER, None)
 
-    # 2. Create the api / controller to use for the coordinator
-    #    if mocked_folder is not None it means we want to use mocked data instead of connecting to the real API
+    # 2. Use the cloud controller, or replay saved diagnostics when configured.
     if mocked_folder is None:
         session = async_get_clientsession(hass)
         maestroapi: MaestroControllerInterface = MaestroController(
@@ -85,7 +85,7 @@ async def async_setup_entry(
     else:
         maestroapi: MaestroControllerInterface = MockedController(mocked_folder)
 
-    # 3. Get all stoves stove linked to the account
+    # 3. Retrieve the stoves linked to this account.
     try:
         stove_infos = await maestroapi.retrieve_linked_stove_infos()
     except MaestroAuthenticationException as exception:
@@ -95,7 +95,7 @@ async def async_setup_entry(
         _LOGGER.error("Connection failed: %s", exception)
         return False
 
-    # 4. Create a coordinator for the account
+    # 4. Create the account coordinator and its stove instances.
     coordinator: MczAccountCoordinator = MczAccountCoordinator(
         hass,
         entry,
@@ -104,23 +104,32 @@ async def async_setup_entry(
         if stove_infos
         else None,
     )
+
+    # 5. Initialize stove models and fetch the first live readings.
+    #    The models must be loaded before checking their generation below.
     await coordinator.async_config_entry_first_refresh()
 
-    # 5. Store the coordinator in the entry so that they can be accessed by the platforms
+    # 6. Expose the account coordinator to the entity platforms.
     entry.runtime_data = coordinator
 
-    # 6. Create consumption coordinators, excluding M1's unsupported history
+    # 7. Create per-stove statistics coordinators without fetching their data yet.
     for stove in coordinator.stoves.values():
+        # 7.1. Create a counters coordinator for both M1 and M2+ stoves.
+        coordinator.counters_coordinators[stove.UniqueCode] = MczCountersCoordinator(
+            hass, entry, maestroapi, stove
+        )
+        # 7.2. Create a consumption coordinator for M2+ only; skip it for M1.
         if stove.model_generation is MczStoveModelGeneration.M1:
             continue
         coordinator.consumption_coordinators[stove.UniqueCode] = (
             MczConsumptionCoordinator(hass, entry, maestroapi, stove)
         )
 
-    # 7. Add an update listener to handle options updates
+    # 8. Register the listener that reloads this entry when its options change.
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    # 8. Set up all platforms
+    # 9. Set up the entity platforms.
+    #    Sensor setup starts the statistics coordinators' refreshes in the background.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

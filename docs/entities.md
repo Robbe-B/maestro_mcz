@@ -64,6 +64,16 @@ Numeric ranges and steps are read from the cloud model. Consult your stove's man
 
 Water and puffer readings are relevant only where the stove exposes them. Sensor creation depends on the returned data; the existence of an internal field or a sensor name in the code does not establish that your stove provides a meaningful reading.
 
+### Lifetime statistics
+
+Where supported, **Ignition count**, **Total operating time**, and **Operating time at power 1** through **5** show the stove's accumulated counters. Operating times are displayed in whole hours; more precise readings are kept for history. These sensors appear under the stove's diagnostic entities only after the cloud supplies a reading; a missing reading is not treated as zero.
+
+Statistics are requested at startup and hourly, separately from live controls. Changing the live polling interval does not change this hourly schedule. Disabling polling in Home Assistant also stops scheduled statistics updates. A statistics failure does not interrupt heating controls, and saved cloud counters can remain readable while the physical stove is offline.
+
+M1 and M2+ stoves report operating times differently; the integration converts them to the same unit.
+
+**Next Maintenance** remains the existing sensor and follows live stove updates, not the hourly statistics schedule. It is not duplicated. Diagnostic replay preserves saved statistics; older reports without them do not create readings.
+
 ### Consumption history
 
 **Yesterday's consumption** shows the Maestro cloud's estimate in kWh. It appears only after the service returns a reading for yesterday, including a genuine zero. M1 stoves are not queried because their cloud history only returns zero.

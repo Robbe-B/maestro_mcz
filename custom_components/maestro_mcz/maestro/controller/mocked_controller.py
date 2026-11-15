@@ -1,15 +1,16 @@
 """Representation of a MockedController."""
 
 import asyncio
-from datetime import date
 import json
 import logging
 import os
+from datetime import date
 from pathlib import Path
 
 from .controller_interface import MaestroControllerInterface
 from .requests.activate_program import ProgramCommand
 from .responses.consumption import ConsumptionHistory
+from .responses.counters import Counters
 from .responses.model import Model
 from .responses.state import State
 from .responses.status import Status
@@ -86,6 +87,7 @@ class MockedController(MaestroControllerInterface):
                             state,
                             status,
                             stove.get("consumption"),
+                            stove.get("counters"),
                         )
                 except Exception as error:  # noqa: BLE001
                     _LOGGER.error(
@@ -197,6 +199,18 @@ class MockedController(MaestroControllerInterface):
             }
         )
 
+    async def get_counters_for_stove(
+        self, device_id: str, device_name: str
+    ) -> Counters:
+        """Replay saved counters; older reports have no statistics readings."""
+        stove = self._mocked_stoves.get((device_id, device_name))
+        if stove is None or stove.counters is None:
+            return Counters({})
+        if not isinstance(stove.counters, dict):
+            raise TypeError("Counters diagnostics must be an object")
+        values = stove.counters.get("values")
+        return Counters(values if values is not None else {})
+
 
 class MockedStove:
     """Class of a MockedStove."""
@@ -206,6 +220,7 @@ class MockedStove:
     state: State = None
     status: Status = None
     consumption: object | None = None
+    counters: object | None = None
 
     def __init__(
         self,
@@ -214,6 +229,7 @@ class MockedStove:
         state: State,
         status: Status,
         consumption: object | None = None,
+        counters: object | None = None,
     ) -> None:
         """Initialize the MockedStove."""
         self.stove_info = stove_info
@@ -221,3 +237,4 @@ class MockedStove:
         self.state = state
         self.status = status
         self.consumption = consumption
+        self.counters = counters

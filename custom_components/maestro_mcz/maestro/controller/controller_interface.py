@@ -4,6 +4,7 @@ from datetime import date
 
 from .requests.activate_program import ProgramCommand
 from .responses.consumption import ConsumptionHistory
+from .responses.counters import Counters
 from .responses.model import Model
 from .responses.state import State
 from .responses.status import Status
@@ -57,6 +58,12 @@ class MaestroControllerInterface:
         self, unique_code: str, anchor_date: date
     ) -> ConsumptionHistory:
         """Get the week containing the requested date, if the service provides it."""
+        raise NotImplementedError
+
+    async def get_counters_for_stove(
+        self, device_id: str, device_name: str
+    ) -> Counters:
+        """Get lifetime statistics independently of the live stove readings."""
         raise NotImplementedError
 
     async def activate_program_with_commands_for_stove(

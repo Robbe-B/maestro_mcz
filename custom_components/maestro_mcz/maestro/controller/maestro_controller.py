@@ -2,10 +2,10 @@
 
 import asyncio
 import dataclasses
-from datetime import date
 import json
 import logging
 import random
+from datetime import date
 from typing import Any
 
 import aiohttp
@@ -13,8 +13,8 @@ import aiohttp
 from .const import (
     ACTIVATE_PROGRAM_URL,
     APPLIANCE_URL,
-    CONTENT_TYPE,
     CONSUMPTION_URL,
+    CONTENT_TYPE,
     LOGIN_URL,
     PING_URL,
     STOVE_INFO_URL,
@@ -24,6 +24,7 @@ from .const import (
 from .controller_interface import MaestroControllerInterface
 from .requests.activate_program import ActivateProgramRequest, ProgramCommand
 from .responses.consumption import ConsumptionHistory
+from .responses.counters import Counters
 from .responses.model import Model
 from .responses.state import State
 from .responses.status import Status
@@ -242,6 +243,19 @@ class MaestroController(MaestroControllerInterface):
         if response is None:
             raise MaestroConnectionException("Failed to retrieve consumption history")
         return ConsumptionHistory.from_response(response)
+
+    async def get_counters_for_stove(
+        self, device_id: str, device_name: str
+    ) -> Counters:
+        """Retrieve lifetime statistics without pinging or sending commands."""
+        response = await self.make_request(
+            "GET", f"{APPLIANCE_URL}/{device_id}/Counters"
+        )
+        if response is None:
+            raise MaestroConnectionException(
+                f"Failed to retrieve counters for device '{device_name}'"
+            )
+        return Counters(response)
 
     async def activate_program_with_commands_for_stove(
         self,

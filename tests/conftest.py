@@ -20,6 +20,7 @@ from custom_components.maestro_mcz.maestro.controller.maestro_controller import 
 from custom_components.maestro_mcz.maestro.controller.responses.consumption import (
     ConsumptionHistory,
 )
+from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
 from custom_components.maestro_mcz.maestro.controller.responses.model import Model
 from custom_components.maestro_mcz.maestro.controller.responses.state import State
 from custom_components.maestro_mcz.maestro.controller.responses.status import Status
@@ -173,6 +174,7 @@ def controller(stove_info_payload, model_payload):
     mocked_controller.get_consumption_for_stove.return_value = ConsumptionHistory(
         days=(), total=0, vs_previous_interval=None
     )
+    mocked_controller.get_counters_for_stove.return_value = Counters({})
     mocked_controller.retrieve_linked_stove_infos.return_value = [
         StoveInfo(deepcopy(stove_info_payload))
     ]
