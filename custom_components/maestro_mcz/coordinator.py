@@ -186,7 +186,7 @@ class MczConsumptionCoordinator(DataUpdateCoordinator[ConsumptionData]):
     def _schedule_midnight(self) -> None:
         """Expire yesterday's snapshot when the stove's calendar day changes."""
         next_day = dt_util.now(self._time_zone).date() + timedelta(days=1)
-        midnight = datetime.combine(next_day, time.min, self._time_zone)
+        midnight = datetime.combine(next_day, time(0, 1), self._time_zone)
         self._unsub_midnight = async_track_point_in_utc_time(
             self.hass, self._async_midnight, dt_util.as_utc(midnight)
         )

@@ -284,10 +284,10 @@ async def test_zero_history_is_available_while_stove_is_offline(
 
 
 @pytest.mark.parametrize("polling_disabled", [False, True])
-async def test_midnight_expires_old_day_without_guessing_next_value(
+async def test_daily_refresh_expires_old_day_without_guessing_next_value(
     hass, entry, consumption_factory, controller, freezer, polling_disabled
 ):
-    """Stop calling an old reading yesterday at local midnight, even with polling disabled."""
+    """Notify sensors at 00:01 without inventing a reading, even with polling disabled."""
     # 1. The stove is one minute from midnight and yesterday's estimate is known.
     freezer.move_to("2026-11-13T22:59:00+00:00")
     history = consumption_factory("Europe/Brussels")
@@ -308,7 +308,19 @@ async def test_midnight_expires_old_day_without_guessing_next_value(
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    # 3. The old value is expired immediately; automatic refresh respects HA's option.
+    # 3. Neither the daily notification nor its history request runs before 00:01.
+    assert not changed.called
+    assert controller.get_consumption_for_stove.await_count == 1
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert not changed.called
+    assert controller.get_consumption_for_stove.await_count == 1
+
+    # 4. At 00:01 the old reading expires; only enabled polling requests history.
+    freezer.tick(timedelta(seconds=1))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert not sensor.available
     assert sensor.native_value is None
     assert changed.called
@@ -319,7 +331,7 @@ async def test_midnight_expires_old_day_without_guessing_next_value(
             "SERIAL-001", date(2026, 11, 13)
         )
 
-    # 4. The next hourly retry retrieves the newly published day unless polling is disabled.
+    # 5. The next hourly retry retrieves the newly published day unless polling is disabled.
     controller.get_consumption_for_stove.return_value = history_for(
         date(2026, 11, 13), 0
     )
@@ -331,7 +343,7 @@ async def test_midnight_expires_old_day_without_guessing_next_value(
     assert sensor.available is not polling_disabled
     assert sensor.native_value == (None if polling_disabled else 0)
 
-    # 5. Once that day's reading is known, further hourly requests stop.
+    # 6. Once that day's reading is known, further hourly requests stop.
     freezer.tick(timedelta(hours=1, seconds=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -555,6 +567,10 @@ async def test_m1_stoves_are_never_queried_for_consumption(
     expected_requests = 1 if include_newer_stove else 0
     assert controller.get_consumption_for_stove.await_count == expected_requests
     freezer.move_to("2026-11-14T00:00:00+00:00")
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert controller.get_consumption_for_stove.await_count == expected_requests
+    freezer.tick(timedelta(minutes=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
     expected_requests = 2 if include_newer_stove else 0
