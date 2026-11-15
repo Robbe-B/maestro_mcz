@@ -13,7 +13,7 @@ from .coordinator import MczAccountCoordinator
 from .datetime import MczDateTimeEntity
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
-from .maestro.models import models
+from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
@@ -27,7 +27,7 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_button: models.ButtonMczConfigItem,
+        supported_button: models_types.ButtonMczConfigItem,
         matching_button_configuration: SensorConfiguration,
     ) -> None:
         """Initialize the button entity."""
@@ -35,10 +35,20 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
         self._attr_name = supported_button.user_friendly_name
-        self._attr_unique_id = f"{stove_unique_code}-{supported_button.sensor_set_name}"
+        control_name = matching_button_configuration.configuration.sensor_name
+        # Keep the catalogue spelling in entity IDs even if the model uses other casing.
+        for name in (
+            supported_button.sensor_set_name_m2,
+            supported_button.sensor_set_name_m1,
+            supported_button.sensor_set_name,
+        ):
+            if name is not None and name.casefold() == control_name.casefold():
+                control_name = name
+                break
+        self._attr_unique_id = f"{stove_unique_code}-{control_name}"
         self._attr_icon = supported_button.icon
         self._attr_device_info = self._stove.get_device_info()
-        self._prop = supported_button.sensor_set_name
+        self._prop = control_name
         self.entity_registry_enabled_default = supported_button.enabled_by_default
         self.entity_category = supported_button.category
 
@@ -117,7 +127,7 @@ class MczTimeSyncButtonEntity(CoordinatorEntity, ButtonEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_time_sync_button: models.TimeSyncButtonMczConfigItem,
+        supported_time_sync_button: models_types.TimeSyncButtonMczConfigItem,
         matching_time_sync_button_configuration: SensorConfiguration,
     ) -> None:
         """Initialize the time sync button entity."""
@@ -200,8 +210,8 @@ def _getStoveButtonEntities(
     """Get the button entities to create for this stove."""
     entities = []
     # buttons
-    supported_buttons = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        models.supported_buttons
+    supported_buttons = stove.get_supported_sensor_configurations(
+        model_definitions.supported_buttons
     )
     if supported_buttons is not None:
         entities.extend(
@@ -214,7 +224,7 @@ def _getStoveButtonEntities(
 
     # time sync buttons
     supported_time_sync_buttons = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        models.supported_time_sync_buttons
+        model_definitions.supported_time_sync_buttons
     )
     if supported_time_sync_buttons is not None:
         entities.extend(

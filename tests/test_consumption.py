@@ -378,7 +378,7 @@ async def test_unknown_snapshot_and_shutdown_do_not_invent_or_poll(
 async def test_real_platform_discovers_history_later_and_keeps_one_entity(
     hass, entry, controller, freezer, model_name, power_sensor, has_ping
 ):
-    """Discover history for known and unknown layouts without trusting product names."""
+    """Discover history with or without a ping while defaulting missing pings to newer controls."""
     # 1. Known newer pings or missing pings may both offer valid history.
     freezer.move_to("2026-11-13T12:00:00+00:00")
     model = controller.get_stove_model_for_stove.return_value
@@ -435,8 +435,7 @@ async def test_real_platform_discovers_history_later_and_keeps_one_entity(
     assert hass.states.get(entity_id).state == "unavailable"
     climate_entity_id = registry.async_get_entity_id("climate", DOMAIN, "SERIAL-001")
     if power_sensor == "com_on_off":
-        expected_climate_state = "heat" if has_ping else "unknown"
-        assert hass.states.get(climate_entity_id).state == expected_climate_state
+        assert hass.states.get(climate_entity_id).state == "heat"
     else:
         assert climate_entity_id is None
     controller.get_consumption_for_stove.side_effect = None

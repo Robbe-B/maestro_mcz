@@ -14,11 +14,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
-from .maestro.models import models
+from .maestro.model_value_reader import get_response_value
+from .maestro.models import model_definitions, models_types
 
 
 def _binary_sensor_enabled(
-    stove: MaestroStove, supported_binary_sensor: models.BinarySensorMczConfigItem
+    stove: MaestroStove, supported_binary_sensor: models_types.BinarySensorMczConfigItem
 ) -> bool:
     """Check optional model configuration and its reported enable setting."""
     if (
@@ -34,9 +35,13 @@ def _binary_sensor_enabled(
     enabled_sensor = supported_binary_sensor.enabled_sensor_get_name
     if enabled_sensor is None:
         return True
-    enabled = getattr(stove.Status, enabled_sensor, None)
-    if enabled is None:
-        enabled = getattr(stove.State, enabled_sensor, None)
+    enabled = get_response_value(
+        supported_binary_sensor,
+        stove.State,
+        stove.Status,
+        stove.model_generation,
+        enabled_sensor,
+    )
     return enabled is True
 
 
@@ -50,7 +55,7 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_binary_sensor: models.BinarySensorMczConfigItem,
+        supported_binary_sensor: models_types.BinarySensorMczConfigItem,
     ) -> None:
         """Initialize the binary sensor entity."""
         super().__init__(coordinator)
@@ -91,9 +96,12 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        value = getattr(self._stove.Status, self._prop, None)
-        if value is None:
-            value = getattr(self._stove.State, self._prop, None)
+        value = get_response_value(
+            self._supported_binary_sensor,
+            self._stove.State,
+            self._stove.Status,
+            self._stove.model_generation,
+        )
         if not _binary_sensor_enabled(self._stove, self._supported_binary_sensor):
             value = None
         if value is not None and self._inverted:
@@ -217,6 +225,16 @@ def _getStoveBinarySensorEntities(
 ) -> list[CoordinatorEntity]:
     """Get the binary sensor entities to create for this stove."""
     entities = []
+    definitions = []
+    for definition in model_definitions.supported_binary_sensors:
+        if (
+            definition.sensor_set_name_m1 is not None
+            or definition.sensor_set_name_m2 is not None
+        ):
+            matches = stove.get_supported_sensor_configurations([definition])
+            definitions.extend(config for config, _ in matches or [])
+        else:
+            definitions.append(definition)
     supported_binary_sensors = filter(
         lambda supported_binary_sensor: (
             _binary_sensor_enabled(stove, supported_binary_sensor)
@@ -226,11 +244,16 @@ def _getStoveBinarySensorEntities(
                     for binary_sensor_name in dir(stove.State)
                 )
                 # Status fields are declared for every stove; require a reading.
-                or getattr(stove.Status, supported_binary_sensor.sensor_get_name, None)
+                or get_response_value(
+                    supported_binary_sensor,
+                    stove.State,
+                    stove.Status,
+                    stove.model_generation,
+                )
                 is not None
             )
         ),
-        iter(models.supported_binary_sensors),
+        iter(definitions),
     )
 
     if supported_binary_sensors is not None:

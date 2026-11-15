@@ -25,7 +25,7 @@ from .maestro.controller.maestro_controller import (
     MaestroController,
 )
 from .maestro.controller.mocked_controller import MockedController
-from .maestro.models.models import MczStoveModelGeneration
+from .maestro.models.models_types import MczStoveModelGeneration
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,

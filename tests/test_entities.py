@@ -1,7 +1,8 @@
 """Cloud entity discovery, state, availability, IDs and commands on all platforms."""
 
-from datetime import datetime, timezone
 import importlib
+from dataclasses import asdict
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
@@ -23,13 +24,146 @@ from custom_components.maestro_mcz.button import (
     MczTimeSyncButtonEntity,
 )
 from custom_components.maestro_mcz.climate import MczClimateEntity
-from custom_components.maestro_mcz.fan import MczFanEntity
+from custom_components.maestro_mcz.fan import (
+    MczFanEntity,
+    get_supported_fan_configurations,
+)
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Configuration,
     ModelConfiguration,
     SensorConfiguration,
 )
-from custom_components.maestro_mcz.maestro.models import models
+from custom_components.maestro_mcz.maestro.controller.responses.state import State
+from custom_components.maestro_mcz.maestro.controller.responses.status import Status
+from custom_components.maestro_mcz.maestro.model_value_reader import (
+    get_response_value,
+    read_response_value,
+)
+from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
+from custom_components.maestro_mcz.maestro.types.enums import SensorTypeEnum
+
+
+@pytest.mark.parametrize("uppercase", [False, True])
+async def test_both_advertised_button_bindings_preserve_ids_and_commands(
+    hass, entry, coordinator, stove, configuration, controller, uppercase
+):
+    """Keep both advertised reset controls distinct, even with the default generation."""
+    # 1. A model without a ping advertises both concrete reset command names.
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Reset Allarme",
+                "ConfigurationId": "reset-group",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [
+                    configuration(
+                        name,
+                        SensorTypeEnum.BOOLEAN.value,
+                        SensorName=name.upper() if uppercase else name,
+                    )
+                    for name in ["m1_com_reset_allarm", "com_reset_allarm"]
+                ],
+            }
+        )
+    ]
+    assert stove.model_generation is models_types.MczStoveModelGeneration.M2_PLUS
+
+    # 2. Discover buttons from the one shared definition, then press each one.
+    module = importlib.import_module("custom_components.maestro_mcz.button")
+    added = Mock()
+    await module.async_setup_entry(hass, entry, added)
+    buttons = [
+        entity for entity in added.call_args.args[0] if entity.name == "Alarm Reset"
+    ]
+    commands = []
+    for button in buttons:
+        controller.activate_program_with_commands_for_stove.reset_mock()
+        await button.async_press()
+        activation = controller.activate_program_with_commands_for_stove.await_args
+        command = activation.args[4][0]
+        commands.append((activation.args[2], command.SensorId, command.Value))
+
+    # 3. Preserve M2-first ordering, concrete unique IDs and both exact command routes.
+    assert [button.unique_id for button in buttons] == [
+        f"{stove.UniqueCode}-com_reset_allarm",
+        f"{stove.UniqueCode}-m1_com_reset_allarm",
+    ]
+    assert commands == [
+        ("reset-group", "id-com_reset_allarm", True),
+        ("reset-group", "id-m1_com_reset_allarm", True),
+    ]
+
+
+@pytest.mark.parametrize(
+    "control_name,older_names,expected",
+    [
+        ("newer", None, "auto"),
+        ("older", None, "auto"),
+        ("older", {}, "dynamic"),
+        ("OLDER", {"dynamic": "turbo"}, "turbo"),
+    ],
+)
+async def test_shared_climate_definition_uses_matched_command_names(
+    coordinator,
+    stove,
+    configuration,
+    controller,
+    monkeypatch,
+    control_name,
+    older_names,
+    expected,
+):
+    """Use each stove's display names without rewriting settings shared with other stoves."""
+    # 1. Both generations share names unless the older control explicitly overrides them.
+    power = stove.get_first_supported_sensor_configuration(
+        model_definitions.supported_power_settings
+    )
+    definition = models_types.ClimateFunctionModeMczConfigItem(
+        "Mode",
+        "mod_lav_att",
+        None,
+        "set_mod",
+        True,
+        api_mappings_key_rename={"dynamic": "auto"},
+        sensor_set_name_m1="older",
+        sensor_set_name_m2="newer",
+        api_mappings_key_rename_m1=older_names,
+    )
+    original_definition = asdict(definition)
+    monkeypatch.setattr(
+        model_definitions, "supported_climate_function_modes", [definition]
+    )
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": "set_mod",
+                "ConfigurationId": "mode-group",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [
+                    configuration(
+                        control_name,
+                        Variants=["manual", "dynamic"],
+                        Mappings={"manual": 0, "dynamic": 1},
+                    )
+                ],
+            }
+        )
+    ]
+    stove.Status.mod_lav_att = "dynamic"
+
+    # 2. Create the heating control and select the mode shown to this stove's user.
+    climate = MczClimateEntity(coordinator, stove.UniqueCode, *power)
+    await climate.async_set_preset_mode(expected)
+    command = last_sent_command(controller)
+
+    # 3. Labels, reading and command agree, while the shared declaration is unchanged.
+    assert climate.preset_modes == ["manual", expected]
+    assert climate.preset_mode == expected
+    assert command.SensorId == f"id-{control_name}"
+    assert command.Value == 1
+    assert asdict(definition) == original_definition
 
 
 @pytest.fixture
@@ -124,6 +258,75 @@ def m1_mode_stove(stove, configuration):
     return stove
 
 
+@pytest.fixture(
+    params=[
+        models_types.MczStoveModelGeneration.M1,
+        models_types.MczStoveModelGeneration.M2_PLUS,
+    ],
+    ids=["older", "newer"],
+)
+def hydro_stove(stove, configuration, request):
+    """Describe a hydro stove whose room fan appears in several control groups.
+
+    The direct room-fan group lacks presets, while the boiler group exposes
+    Auto and Silent. Distinct command IDs reveal which group receives changes.
+    """
+    fan_sensor_name = "set_vent_v1"
+    if request.param is models_types.MczStoveModelGeneration.M1:
+        fan_sensor_name = "m1_set_vent_v1"
+    stove.Model.model_name = "Synthetic Hydro Stove - 1 Fan"
+    stove.State.mode = None
+    stove.Status.mod_lav_att = None
+    stove.State.conf_imp = 1
+    stove.Model.model_configurations = [
+        group
+        for group in stove.Model.model_configurations
+        if group.configuration_name not in {"Manuale", "Auto", "set_mod"}
+    ]
+    for group_name in (
+        "PUFFER",
+        "BOILER",
+        "ACQUA_SANITARIA",
+        "CALDAIA_STUFA",
+        "set_vent_room",
+    ):
+        variants = ["auto", "silent"]
+        mappings = {"auto": 6, "silent": -1}
+        if group_name == "set_vent_room":
+            variants = []
+            mappings = {}
+        stove.Model.model_configurations.append(
+            ModelConfiguration(
+                {
+                    "ConfigurationName": group_name,
+                    "ConfigurationId": f"config-{group_name}",
+                    "Timed": False,
+                    "Limitations": None,
+                    "Configurations": [
+                        configuration(
+                            fan_sensor_name,
+                            SensorId=f"fan-sensor-{group_name}",
+                            Min="0",
+                            Max="5",
+                            Variants=variants,
+                            Mappings=mappings,
+                        )
+                    ],
+                }
+            )
+        )
+    return stove
+
+
+@pytest.fixture
+async def hydro_fans(hass, entry, coordinator, hydro_stove):
+    """Discover hydro ventilation through the real Home Assistant fan platform."""
+    module = importlib.import_module("custom_components.maestro_mcz.fan")
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    return add_entities.call_args.args[0]
+
+
 def test_all_platforms_discover_supported_entities_and_keep_legacy_ids(entities):
     """Keep supported controls and their existing IDs so users do not lose saved automations."""
     # 1. List the controls expected from our example stove.
@@ -162,8 +365,8 @@ async def test_operating_sensors_are_regular_entities(
     hass, entry, coordinator, stove, prop, value
 ):
     """Show everyday operating readings as regular sensors without changing their IDs or values."""
-    # 1. Give the stove an operating reading to discover.
-    setattr(stove.Status, prop, value)
+    # 1. Give the information response an operating reading to discover.
+    setattr(stove.State, prop, value)
     module = importlib.import_module("custom_components.maestro_mcz.sensor")
     # 2. Discover the sensors through the Home Assistant platform.
     add_entities = Mock()
@@ -183,8 +386,8 @@ async def test_operating_sensors_are_regular_entities(
 async def test_alarm_reset_is_a_configuration_button(
     hass, entry, coordinator, stove, controller, configuration, command_name
 ):
-    """Put alarm reset under Configuration on both stove families without changing its command."""
-    # 1. Give the stove the alarm-reset command used by this family.
+    """Put alarm reset under Configuration on both stove generations without changing its command."""
+    # 1. Give the stove the alarm-reset command used by this generation.
     reset_group = next(
         group
         for group in stove.Model.model_configurations
@@ -316,26 +519,474 @@ def test_connectivity_diagnostics_are_independent(entities, coordinator, stove):
         ("binary_sensor", "is_in_error", "is_on", False),
     ],
 )
-def test_state_precedence_fallback_and_missing(
+def test_declared_response_and_missing_values(
     entities, stove, platform, prop, value_property, value
 ):
-    """Prefer status readings, fall back to state readings, and never invent missing values."""
-    # 1. Give status and state different values for the same stove field.
+    """Use each control's declared response, preserving zero and False without guessing."""
+    # 1. Give the preferred response a reading and the other response a different one.
     item = next(
-        control for control in entities[platform] if getattr(control, "_prop", None) == prop
+        control
+        for control in entities[platform]
+        if getattr(control, "_prop", None) == prop
     )
-    stove._status = SimpleNamespace(**{prop: value})
-    stove._state = SimpleNamespace(**{prop: "fallback"})
+    primary = "_state" if platform == "sensor" else "_status"
+    secondary = "_status" if platform == "sensor" else "_state"
+    setattr(stove, primary, SimpleNamespace(**{prop: value}))
+    setattr(stove, secondary, SimpleNamespace(**{prop: "other response"}))
     item._handle_coordinator_update_internal()
     assert getattr(item, value_property) == value
-    # 2. Without a status reading, use the available state reading.
-    stove._status = SimpleNamespace()
-    item._handle_coordinator_update_internal()
-    assert getattr(item, value_property) == "fallback"
-    # 3. Without either reading, show no value instead of an old or guessed value.
-    stove._state = SimpleNamespace()
+    # 2. A missing preferred reading must not substitute an unrelated response.
+    setattr(stove, primary, SimpleNamespace())
     item._handle_coordinator_update_internal()
     assert getattr(item, value_property) is None
+    # 3. Without either reading, show no value instead of an old or guessed value.
+    setattr(stove, secondary, SimpleNamespace())
+    item._handle_coordinator_update_internal()
+    assert getattr(item, value_property) is None
+
+
+@pytest.mark.parametrize(
+    "source,state_value,status_value,expected",
+    [
+        (models_types.MczResponseSource.STATUS, 12, 0, 0),
+        (models_types.MczResponseSource.STATE, 0, 12, 0),
+        (models_types.MczResponseSource.STATUS, True, False, False),
+        (models_types.MczResponseSource.STATE, False, True, False),
+        (models_types.MczResponseSource.STATUS, None, None, None),
+        (models_types.MczResponseSource.STATUS, 12, None, None),
+        (models_types.MczResponseSource.STATE, None, 12, None),
+    ],
+)
+def test_response_source_preserves_values_without_fallback(
+    source, state_value, status_value, expected
+):
+    """Read only the chosen response, preserving zero, false and missing readings."""
+    # 1. Parse simultaneous endpoint replies with deliberately different readings.
+    sensor_name = "att_eco" if isinstance(status_value, bool) else "set_amb1"
+    state = State({sensor_name: state_value})
+    status = Status({sensor_name: status_value})
+
+    # 2. Read the setting from the one declared response.
+    reading = read_response_value(source, state, status, sensor_name)
+
+    # 3. Preserve the chosen value rather than substituting a truthy alternative.
+    assert reading == expected
+    assert type(reading) is type(expected)
+
+
+@pytest.mark.parametrize("source", list(models_types.MczResponseSource))
+def test_response_policy_handles_absent_endpoint_caches(source):
+    """An absent response must not produce a made-up setting or a stale reading."""
+    # 1. Neither endpoint has supplied a response.
+    state = None
+    status = None
+
+    # 2. Read the setting with each supported source policy.
+    reading = read_response_value(source, state, status, "set_vent_v1")
+
+    # 3. Missing caches remain unknown rather than becoming display strings.
+    assert reading is None
+
+
+@pytest.mark.parametrize(
+    "status_present,status_value,state_value,expected",
+    [(False, None, 0, None), (True, None, 2, None), (True, False, 2, False)],
+)
+def test_older_tones_do_not_stringify_null_or_use_another_response(
+    status_present, status_value, state_value, expected
+):
+    """Leave missing tones unknown rather than showing another reply or the word None."""
+    # 1. Supply synthetic replies for a control whose app counterpart is not verified.
+    state = SimpleNamespace(toni_buzz=state_value)
+    status = SimpleNamespace()
+    if status_present:
+        status.toni_buzz = status_value
+    tones = next(
+        item
+        for item in model_definitions.supported_selectors
+        if item.sensor_get_name == "toni_buzz"
+    )
+
+    # 2. Resolve the control's single declared response.
+    reading = get_response_value(
+        tones, state, status, models_types.MczStoveModelGeneration.M1
+    )
+
+    # 3. Keep False as a reading, while absent and null values stay unknown.
+    assert reading == expected
+    assert type(reading) is type(expected)
+
+
+def test_unconfigured_response_name_is_not_guessed():
+    """Reject an incomplete control definition instead of displaying another setting."""
+    # 1. A definition has no response property to identify its reading.
+    control = models_types.MczConfigItem(
+        "Incomplete control", models_types.MczStoveModelGeneration.M1
+    )
+    state = State({"set_amb1": 18})
+    status = Status({"set_amb1": 22})
+
+    # 2. Reading it must report the configuration error rather than inventing a source.
+    with pytest.raises(ValueError, match="requires a sensor name"):
+        get_response_value(control, state, status)
+
+
+@pytest.mark.parametrize("value", [0, None])
+async def test_current_control_and_information_temperatures_have_distinct_sources(
+    hass, entry, coordinator, hydro_stove, value
+):
+    """Use current readings for heating and the generation-specific source for information."""
+    # 1. Discover controls while both endpoint replies contain different temperatures.
+    hydro_stove.State.temp_amb_install = 17
+    hydro_stove.Status.temp_amb_install = 20
+    sensor_module = importlib.import_module("custom_components.maestro_mcz.sensor")
+    climate_module = importlib.import_module("custom_components.maestro_mcz.climate")
+    add_sensors = Mock()
+    add_climates = Mock()
+    await sensor_module.async_setup_entry(hass, entry, add_sensors)
+    await climate_module.async_setup_entry(hass, entry, add_climates)
+    ambient = next(
+        sensor
+        for sensor in add_sensors.call_args.args[0]
+        if sensor._prop == "temp_amb_install"
+    )
+    heating = add_climates.call_args.args[0][0]
+
+    # 2. Update the current reading and target, leaving the information reply distinct.
+    hydro_stove.Status.temp_amb_install = value
+    hydro_stove.Status.set_amb1 = 25
+    hydro_stove.State.set_amb1 = 29
+    ambient._handle_coordinator_update_internal()
+    heating._handle_coordinator_update_internal()
+
+    # 3. Heating uses Status; the older information view does too, unlike the newer one.
+    expected_information = 17
+    if hydro_stove.model_generation is models_types.MczStoveModelGeneration.M1:
+        expected_information = value
+    assert ambient.native_value == expected_information
+    assert heating.native_current_temperature == value
+    assert heating.native_target_temperature == 25
+
+
+@pytest.mark.parametrize("mode_field", ["mod_lav_att", "configured_mode"])
+def test_fan_uses_status_mode_without_rewriting_information_or_original_helper(
+    entities, stove, monkeypatch, mode_field
+):
+    """Use the fan's configured mode field without mutating the separate information reply."""
+    # 1. Only the configured field reports Manual; other replies are unfamiliar.
+    fan = entity(entities, "fan")
+    monkeypatch.setattr(fan._supported_fan, "mode_sensor_get_name", mode_field)
+    stove.State.mode = "unrecognized"
+    stove.Status.mod_lav_att = "unrecognized"
+    setattr(stove.Status, mode_field, "manual")
+
+    # 2. Refresh through the audited caller, retaining the original helper unchanged.
+    with patch.object(fan, "async_write_ha_state"):
+        fan._handle_coordinator_update()
+
+    # 3. Use Manual's settings without rewriting State or changing the helper's result.
+    assert fan.available
+    assert fan.speed_count == 5
+    assert stove.State.mode == "unrecognized"
+    assert fan._get_configuration_for_current_stove_mode() is None
+
+    # 4. Missing current mode does not substitute the information response.
+    setattr(stove.Status, mode_field, None)
+    stove.State.mode = "manual"
+    with patch.object(fan, "async_write_ha_state"):
+        fan._handle_coordinator_update()
+    assert not fan.available
+    assert fan._get_configuration_for_current_stove_mode() is not None
+
+
+def test_fan_missing_reading_and_silent_flag_do_not_use_information_fallback(
+    entities, stove
+):
+    """Do not mistake missing fan data for an enabled fan or another reply's silent setting."""
+    # 1. Information disagrees with the current response about silence and speed.
+    fan = entity(entities, "fan")
+    stove.State.silent_enabled = True
+    stove.State.set_vent_v1 = 5
+    stove.Status.silent_enabled = False
+    stove.Status.set_vent_v1 = 0
+
+    # 2. Refresh the fan using current control data.
+    fan._handle_coordinator_update_internal()
+
+    # 3. False and zero remain genuine readings rather than falling through.
+    assert fan.available
+    assert fan.is_on is False
+    stove.Status.set_vent_v1 = None
+    fan._handle_coordinator_update_internal()
+    assert fan.is_on is False
+    assert fan.preset_mode is None
+
+
+@pytest.mark.parametrize("generation", list(models_types.MczStoveModelGeneration))
+def test_probe_and_maintenance_do_not_substitute_another_response(generation):
+    """Keep missing selected readings unknown instead of using another response's values."""
+    # 1. Only the other response supplies these synthetic information readings.
+    state = SimpleNamespace(sondaWifi=0, ore_prox_manut=0)
+    status = SimpleNamespace(sondaWifi=None, ore_prox_manut=None)
+    probe = next(
+        item
+        for item in model_definitions.supported_sensors
+        if item.sensor_get_name == "sondaWifi"
+    )
+    maintenance = next(
+        item
+        for item in model_definitions.supported_sensors
+        if item.sensor_get_name == "ore_prox_manut"
+    )
+
+    # 2. Read each existing entity's declared generation-specific policy.
+    probe_value = get_response_value(probe, state, status, generation)
+    maintenance_value = get_response_value(maintenance, state, status, generation)
+
+    # 3. An empty selected response does not fall back to the other response.
+    assert probe_value is None
+    assert maintenance_value is None
+    # 4. Genuine selected zero readings remain visible.
+    status.sondaWifi = 0
+    status.ore_prox_manut = 0
+    assert get_response_value(probe, state, status, generation) == 0
+    assert get_response_value(maintenance, state, status, generation) == 0
+
+
+@pytest.mark.parametrize(
+    "generation,status_values,state_values,expected_readings",
+    [
+        (
+            models_types.MczStoveModelGeneration.M1,
+            {
+                "mod_lav_att": "manual",
+                "set_amb1": 22,
+                "set_amb2": None,
+                "set_amb3": None,
+                "set_vent_v1": "auto",
+                "temp_min_circ_on": None,
+                "toni_buzz": 0,
+                "sondaWifi": 255,
+                "ore_prox_manut": 937,
+                "temp_caldaia": None,
+                "temp_puffer": None,
+            },
+            {"mod_lav_att": "manual", "set_amb1": 22, "last_alarm": None},
+            {
+                "last_alarm": None,
+                "sondaWifi": 255,
+                "ore_prox_manut": 937,
+                "temp_caldaia": None,
+                "temp_puffer": None,
+            },
+        ),
+        (
+            models_types.MczStoveModelGeneration.M2_PLUS,
+            {
+                "mod_lav_att": None,
+                "set_amb1": 25,
+                "set_amb2": None,
+                "set_amb3": None,
+                "set_vent_v1": 5,
+                "temp_min_circ_on": 45,
+                "toni_buzz": 2,
+                "sondaWifi": None,
+                "ore_prox_manut": 1302,
+                "temp_caldaia": 34.7,
+                "temp_puffer": 0,
+            },
+            {
+                "mod_lav_att": None,
+                "set_amb1": 25,
+                "last_alarm": "A99",
+                "temp_caldaia": 34.7,
+                "temp_puffer": 0,
+            },
+            {
+                "last_alarm": "A99",
+                "sondaWifi": None,
+                "ore_prox_manut": 1302,
+                "temp_caldaia": 34.7,
+                "temp_puffer": 0,
+            },
+        ),
+    ],
+    ids=["older-air-diagnostic", "newer-hydro-diagnostic"],
+)
+def test_diagnostic_readings_use_their_declared_response(
+    generation, status_values, state_values, expected_readings
+):
+    """Keep the supplied diagnostic readings intact without treating null fields as values."""
+    # 1. Reconstruct a small non-identifying subset of the paired diagnostic replies.
+    # The diagnostic's normalized State mode is represented by its original wire name.
+    state = State(state_values)
+    status = Status(status_values)
+
+    # 2. Read existing controls using their declared response, not field presence alone.
+    for sensor_name, expected in expected_readings.items():
+        sensor = next(
+            item
+            for item in model_definitions.supported_sensors
+            if item.sensor_get_name == sensor_name
+        )
+        reading = get_response_value(sensor, state, status, generation)
+        assert reading == expected
+    tones = next(
+        item
+        for item in model_definitions.supported_selectors
+        if item.sensor_get_name == "toni_buzz"
+    )
+    pump = next(
+        item
+        for item in model_definitions.supported_numbers
+        if item.sensor_get_name == "temp_min_circ_on"
+    )
+
+    # 3. Keep the older zero tones and newer pump value; older absent pump stays unknown.
+    assert (
+        get_response_value(tones, state, status, generation)
+        == status_values["toni_buzz"]
+    )
+    assert (
+        get_response_value(pump, state, status, generation)
+        == status_values["temp_min_circ_on"]
+    )
+    assert state.unknown_fields is None
+    assert status.unknown_fields is None
+
+
+@pytest.mark.parametrize(
+    "generation",
+    [
+        models_types.MczStoveModelGeneration.M1,
+        models_types.MczStoveModelGeneration.M2_PLUS,
+    ],
+)
+@pytest.mark.parametrize("sensor_name", ["set_amb2", "set_amb3"])
+def test_additional_thermostat_targets_do_not_use_saved_information_values(
+    generation, sensor_name
+):
+    """Keep unused targets unknown until current data supplies a real reading."""
+    # 1. Both diagnostics have null current targets and no corresponding State fields.
+    status = Status({sensor_name: None})
+    state = State({sensor_name: 28}, True)
+    thermostat = next(
+        item
+        for item in model_definitions.supported_thermostats
+        if item.sensor_get_name == sensor_name
+    )
+
+    # 2. An old saved information value cannot substitute for the absent current target.
+    assert get_response_value(thermostat, state, status, generation) is None
+
+    # 3. A synthetic future current reading, including zero, uses the declared field.
+    setattr(status, sensor_name, 0)
+    assert get_response_value(thermostat, state, status, generation) == 0
+
+
+async def test_three_fan_capture_targets_do_not_advertise_extra_thermostats(
+    hass, entry, coordinator, stove
+):
+    """Do not infer adjustable extra thermostats from reported default temperatures alone."""
+    # 1. Original three-fan captures report 20 for extra targets but configure only target 1.
+    stove.Model.model_name = "Air Stove - 3 Fan"
+    stove.Status.set_amb2 = 20
+    stove.Status.set_amb3 = 20
+    assert not hasattr(stove.State, "set_amb2")
+    assert not hasattr(stove.State, "set_amb3")
+
+    # 2. Discover climate using the existing enabled model descriptors.
+    module = importlib.import_module("custom_components.maestro_mcz.climate")
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    climates = add_entities.call_args.args[0]
+    extra_targets = [
+        item
+        for item in model_definitions.supported_thermostats
+        if item.sensor_get_name in {"set_amb2", "set_amb3"}
+    ]
+    matching_extra_targets = stove.get_supported_sensor_configurations(extra_targets)
+
+    # 3. The configured thermostat remains target 1; reported values are not capabilities.
+    assert len(climates) == 1
+    assert climates[0]._supported_thermostat.sensor_get_name == "set_amb1"
+    assert matching_extra_targets is None
+
+
+@pytest.mark.parametrize(
+    "fan_value,silent_enabled,available",
+    [("auto", False, True), (1, True, False)],
+    ids=["reported-auto", "whole-stove-silent"],
+)
+async def test_original_m1_hydro_boiler_descriptor_routes_room_fan(
+    hass,
+    entry,
+    coordinator,
+    stove,
+    configuration,
+    controller,
+    fan_value,
+    silent_enabled,
+    available,
+):
+    """Use the captured older boiler fan descriptor without inventing mode or ping metadata."""
+    # 1. Both original older hydro models have this descriptor and no populated stove ping.
+    stove.Model.model_name = "Hydro Stove - 1 Fan"
+    stove.Status.sm_vs_bootloader = "1.3"
+    stove.Status.mod_lav_att = None
+    stove.State.mode = None
+    stove.Status.set_vent_v1 = fan_value
+    stove.Status.silent_enabled = silent_enabled
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": "BOILER",
+                "ConfigurationId": "captured-boiler-test",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [
+                    configuration(
+                        "m1_set_vent_v1",
+                        Enabled=True,
+                        Min="0",
+                        Max="5",
+                        Variants=["auto", "silent"],
+                        Mappings={"auto": 6, "silent": -1},
+                    )
+                ],
+            }
+        )
+    ]
+
+    # 2. Discover the fixed fan from its actual sensor and group, not inferred generation.
+    module = importlib.import_module("custom_components.maestro_mcz.fan")
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    fans = add_entities.call_args.args[0]
+    assert stove.model_generation is models_types.MczStoveModelGeneration.M2_PLUS
+    assert len(fans) == 1
+    room_fan = fans[0]
+
+    # 3. Preserve advertised bounds/presets, and respect the separate whole-stove silent flag.
+    assert (
+        room_fan._fixed_fan_configuration.configuration.sensor_name == "m1_set_vent_v1"
+    )
+    assert room_fan.name == "Room Fan"
+    assert room_fan.speed_count == 5
+    assert room_fan.preset_modes == ["auto", "silent"]
+    assert room_fan.available is available
+    if available:
+        assert room_fan.preset_mode == "auto"
+        # 4. Send the advertised preset name through the existing path, not a guessed numeric command.
+        await room_fan.async_set_preset_mode("silent")
+        command = last_sent_command(controller)
+        activation = controller.activate_program_with_commands_for_stove.await_args
+        assert command.SensorId == "id-m1_set_vent_v1"
+        assert command.Value == "silent"
+        assert (
+            room_fan._current_fan_configuration.configuration.mappings["silent"] == -1
+        )
+        assert activation.args[2] == "captured-boiler-test"
 
 
 @pytest.mark.parametrize(
@@ -384,6 +1035,90 @@ async def test_number_double_command_and_bounds(entities, controller):
     await item.async_set_native_value(17.5)
     command = last_sent_command(controller)
     assert command.Value == 17.5
+
+
+@pytest.mark.parametrize(
+    "sensor_name",
+    ["m1_temp_min_circ_on", "temp_min_circ_on"],
+    ids=["older", "newer"],
+)
+@pytest.mark.parametrize(
+    "status_payload,state_value,expected",
+    [
+        (None, 45, None),
+        ({}, 45, None),
+        ({"temp_min_circ_on": None}, 45, None),
+        ({"temp_min_circ_on": 55}, 45, 55),
+        ({"temp_min_circ_on": 0}, 45, 0),
+        ({}, 0, None),
+        ({}, None, None),
+        (None, None, None),
+    ],
+    ids=[
+        "missing-status",
+        "missing-status-reading",
+        "null-status-reading",
+        "status-priority",
+        "zero-status-priority",
+        "zero-state-does-not-substitute",
+        "neither-reading",
+        "neither-response-reading",
+    ],
+)
+async def test_pump_activation_temperature_readback(
+    hass,
+    entry,
+    coordinator,
+    stove,
+    configuration,
+    sensor_name,
+    status_payload,
+    state_value,
+    expected,
+):
+    """Read each generation's pump setting from Status and never substitute information data."""
+    # 1. The stove exposes its pump threshold as an adjustable number.
+    expected_generation = models_types.MczStoveModelGeneration.M2_PLUS
+    if sensor_name == "m1_temp_min_circ_on":
+        expected_generation = models_types.MczStoveModelGeneration.M1
+        ping = next(
+            group
+            for group in stove.Model.model_configurations
+            if group.configuration_name == "cod_for_spe_mqtt"
+        )
+        ping.configuration_name = "PING STOVE"
+        ping.configurations[0].sensor_name = "m1_cod_for_spe_mqtt"
+    stove.Status.temp_min_circ_on = 60
+    stove.Model.model_configurations.append(
+        ModelConfiguration(
+            {
+                "ConfigurationName": "temp_avanzate",
+                "ConfigurationId": "config-pump-temperature",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration(sensor_name, Min="0", Max="80")],
+            }
+        )
+    )
+    module = importlib.import_module("custom_components.maestro_mcz.number")
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    discovered_numbers = add_entities.call_args.args[0]
+    pump_temperature = next(
+        number for number in discovered_numbers if number._prop == "temp_min_circ_on"
+    )
+    assert stove.model_generation is expected_generation
+    assert pump_temperature.native_value == 60
+    # 2. Parse the cloud readings and refresh the displayed pump threshold.
+    stove._status = Status(status_payload) if status_payload is not None else None
+    stove._state = State({"temp_min_circ_on": state_value})
+    pump_temperature._handle_coordinator_update_internal()
+    # 3. Keep a genuine Status zero, but clear a missing current reading.
+    assert pump_temperature.native_value == expected
+    # 4. Even an old saved State reading must not restore the unsupported fallback.
+    stove._state = State({"temp_min_circ_on": state_value}, True)
+    pump_temperature._handle_coordinator_update_internal()
+    assert pump_temperature.native_value == expected
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -515,19 +1250,20 @@ def test_climate_generation_state_machine(
     assert item.hvac_action == action
 
 
-def test_climate_does_not_guess_an_unknown_control_family(entities, stove):
-    """Clear old heating activity when controls are no longer recognized."""
+def test_climate_uses_default_generation_without_ping_controls(entities, stove):
+    """Continue interpreting newer-model readings when no identifying controls are available."""
     # 1. A previously recognized stove now exposes an unfamiliar control layout.
     item = entity(entities, "climate")
     assert item.hvac_action == HVACAction.HEATING
     stove.Model.model_configurations.clear()
 
-    # 2. Process the same readings without a known interpretation.
+    # 2. Process the same readings using the default generation.
     item._handle_coordinator_update_internal()
 
-    # 3. Do not retain the old heating indication or guess a newer generation.
-    assert item.hvac_mode is None
-    assert item.hvac_action is None
+    # 3. Missing ping information still uses the M2+ heating interpretation.
+    assert stove.model_generation is models_types.MczStoveModelGeneration.M2_PLUS
+    assert item.hvac_mode == HVACMode.HEAT
+    assert item.hvac_action == HVACAction.HEATING
 
 
 async def test_climate_targets_presets_and_toggle_guard(
@@ -559,6 +1295,7 @@ async def test_climate_targets_presets_and_toggle_guard(
     await item.async_set_preset_mode("invalid")
     assert controller.activate_program_with_commands_for_stove.await_count == previous_command_count
     stove.State.mode = "dynamic"
+    stove.Status.mod_lav_att = "dynamic"
     item._handle_coordinator_update_internal()
     assert item.preset_mode == "auto"
 
@@ -585,8 +1322,8 @@ async def test_m1_mode_commands_follow_bootloader(
     # 1. Standard and older controls exist, and the cloud advertises five modes.
     stove = m1_mode_stove
     stove.Status.sm_vs_bootloader = bootloader
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        models.supported_power_settings
+    power = stove.get_first_supported_sensor_configuration(
+        model_definitions.supported_power_settings
     )
 
     # 2. Create the heating control and switch in both directions.
@@ -626,6 +1363,7 @@ async def test_m1_mode_commands_follow_bootloader(
         expected_configuration = "legacy-recipe-config" if legacy else "config-set_mod"
         assert activation.args[2] == expected_configuration
         stove.State.mode = reported_mode
+        stove.Status.mod_lav_att = reported_mode
         item._handle_coordinator_update_internal()
         assert item.preset_mode == preset
         assert stove.State.mode == reported_mode
@@ -640,12 +1378,21 @@ async def test_legacy_mode_switch_preserves_mode_based_fans(
     """Keep fan commands attached to the reported mode when an older stove switches to automatic."""
     # 1. An older stove starts in manual mode with its ordinary M1 fan controls.
     stove = m1_mode_stove
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        models.supported_power_settings
+    power = stove.get_first_supported_sensor_configuration(
+        model_definitions.supported_power_settings
     )
     climate = MczClimateEntity(coordinator, stove.UniqueCode, *power)
-    fan_configuration = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
-        models.supported_fans
+    fan_configuration = get_supported_fan_configurations(
+        stove,
+        [
+            fan
+            for fan in model_definitions.supported_fans
+            if (
+                fan.mode_to_configuration_name_mapping is not None
+                or fan.mode_to_configuration_name_mapping_m1 is not None
+                or fan.mode_to_configuration_name_mapping_m2 is not None
+            )
+        ],
     )[0]
     fan = MczFanEntity(coordinator, stove.UniqueCode, *fan_configuration)
     await fan.async_set_percentage(50)
@@ -656,6 +1403,7 @@ async def test_legacy_mode_switch_preserves_mode_based_fans(
     await climate.async_set_preset_mode("auto")
     assert last_sent_command(controller).Value is True
     stove.State.mode = "dynamic"
+    stove.Status.mod_lav_att = "dynamic"
     climate._handle_coordinator_update_internal()
     fan._update_features_based_on_current_stove_mode()
     fan._handle_coordinator_update_internal()
@@ -696,8 +1444,8 @@ async def test_legacy_mode_without_valid_command_keeps_standard_commands(
         legacy_group.configurations[0].sensor_id = None
     else:
         legacy_group.configuration_id = None
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        models.supported_power_settings
+    power = stove.get_first_supported_sensor_configuration(
+        model_definitions.supported_power_settings
     )
 
     # 2. Create the heating control and switch between automatic and manual.
@@ -766,8 +1514,8 @@ async def test_legacy_recipe_without_valid_command_keeps_standard_commands(
         recipe_sensor.variants = None
     else:
         recipe_sensor.variants.remove("comfort")
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        models.supported_power_settings
+    power = stove.get_first_supported_sensor_configuration(
+        model_definitions.supported_power_settings
     )
 
     # 2. Request a preset whose older command is unavailable or invalid.
@@ -804,8 +1552,8 @@ async def test_legacy_recipe_uses_model_mapping_values(
         "Ricetta Pellet"
     )
     recipe_group.configurations[0].mappings["comfort"] = 23
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        models.supported_power_settings
+    power = stove.get_first_supported_sensor_configuration(
+        model_definitions.supported_power_settings
     )
 
     # 2. Create the heating control and choose Comfort.
@@ -837,8 +1585,8 @@ async def test_legacy_only_mode_configuration(
         "Cambio_mod_2MOD"
     )
     legacy_group.configurations[0].enabled = legacy_enabled
-    power = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        models.supported_power_settings
+    power = stove.get_first_supported_sensor_configuration(
+        model_definitions.supported_power_settings
     )
 
     # 2. Create the heating control and request each basic mode.
@@ -872,8 +1620,10 @@ def test_climate_temperature_updates_use_core_api(entities, stove, current, targ
     assert item.native_target_temperature == 22
 
     # 2. Refresh the control with the new room temperature and heating target.
-    stove.State.temp_amb_install = current
-    stove.State.set_amb1 = target
+    stove.Status.temp_amb_install = current
+    stove.Status.set_amb1 = target
+    stove.State.temp_amb_install = 10
+    stove.State.set_amb1 = 15
     item._handle_coordinator_update_internal()
 
     # 3. HA must read the new values in Celsius, not cached values or a different unit.
@@ -929,6 +1679,11 @@ def test_climate_missing_values_clear_state(entities, stove):
     assert item.hvac_action is None
     assert item.native_target_temperature is None
     assert item.preset_mode is None
+    # 3. Losing the thermostat definition also clears its previously shown target.
+    item._attr_native_target_temperature = 22
+    item._supported_thermostat = None
+    item._handle_coordinator_update_internal()
+    assert item.native_target_temperature is None
 
 
 @pytest.mark.parametrize(
@@ -997,18 +1752,205 @@ def test_fan_mode_changes_and_silent_disable_availability(entities, stove):
     # 3. Automatic or unknown operating modes must not invent manual fan controls.
     stove.Status.silent_enabled = False
     stove.State.mode = "auto"
+    stove.Status.mod_lav_att = "auto"
     item._update_features_based_on_current_stove_mode()
     item._handle_coordinator_update_internal()
     assert not item.available
     assert item.speed_count == 0
     stove.State.mode = "unknown"
+    stove.Status.mod_lav_att = "unknown"
     item._update_features_based_on_current_stove_mode()
     assert item._current_fan_configuration is None
     # 4. Returning to manual mode restores the supported control.
     stove.State.mode = "manual"
+    stove.Status.mod_lav_att = "manual"
     item._update_features_based_on_current_stove_mode()
     item._handle_coordinator_update_internal()
     assert item.available
+
+
+@pytest.mark.parametrize("mode", [None, "manual", "auto", "unknown"])
+def test_hydro_room_fan_does_not_require_an_operating_mode(
+    hydro_fans, hydro_stove, mode
+):
+    """Keep one hydro room-fan control usable without relying on air-stove presets."""
+    # 1. A hydro stove starts without a reported operating mode.
+    assert len(hydro_fans) == 1
+    room_fan = hydro_fans[0]
+    assert room_fan.available is True
+    assert room_fan.name == "Room Fan"
+    assert room_fan.unique_id == "SERIAL-001-set_vent_v1"
+    # 2. Change the reported mode without changing the stove's fan controls.
+    hydro_stove.State.mode = mode
+    hydro_stove.Status.mod_lav_att = mode
+    room_fan._update_features_based_on_current_stove_mode()
+    room_fan._handle_coordinator_update_internal()
+    # 3. The same boiler-backed fan retains its speeds and fan presets.
+    assert room_fan.available is True
+    assert room_fan.speed_count == 5
+    assert room_fan.preset_modes == ["auto", "silent"]
+    assert room_fan.supported_features & FanEntityFeature.SET_SPEED
+    assert room_fan.supported_features & FanEntityFeature.PRESET_MODE
+    assert room_fan._current_fan_configuration.configuration_id == "config-BOILER"
+
+
+async def test_hydro_room_fan_speed_and_power_commands(hydro_fans, controller):
+    """Send hydro speed and off requests to the boiler control, not another fan group."""
+    # 1. Turning on without a speed requests the highest supported level.
+    room_fan = hydro_fans[0]
+    await room_fan.async_turn_on()
+    on_command = last_sent_command(controller)
+    assert on_command.Value == 5
+    assert on_command.SensorId == "fan-sensor-BOILER"
+    on_activation = controller.activate_program_with_commands_for_stove.await_args
+    assert on_activation.args[2] == "config-BOILER"
+    # 2. A lower percentage uses the same control and its numeric speed range.
+    await room_fan.async_set_percentage(40)
+    speed_command = last_sent_command(controller)
+    assert speed_command.Value == 2
+    assert speed_command.SensorId == "fan-sensor-BOILER"
+    speed_activation = controller.activate_program_with_commands_for_stove.await_args
+    assert speed_activation.args[2] == "config-BOILER"
+    # 3. Turning the room fan off sends zero to that same control.
+    await room_fan.async_turn_off()
+    off_command = last_sent_command(controller)
+    assert off_command.Value == 0
+    assert off_command.SensorId == "fan-sensor-BOILER"
+    off_activation = controller.activate_program_with_commands_for_stove.await_args
+    assert off_activation.args[2] == "config-BOILER"
+
+
+@pytest.mark.parametrize("preset", ["auto", "silent"])
+async def test_hydro_room_fan_preset_commands(
+    hydro_fans, controller, coordinator, preset
+):
+    """Preserve the hydro fan's Auto and Silent options when sending a change."""
+    # 1. The stove exposes fan presets even though it has no climate presets.
+    room_fan = hydro_fans[0]
+    assert room_fan.preset_modes == ["auto", "silent"]
+    # 2. Select a supported fan preset.
+    await room_fan.async_set_preset_mode(preset)
+    # 3. Send the preset through the boiler group and request fresh readings.
+    command = last_sent_command(controller)
+    assert command.SensorId == "fan-sensor-BOILER"
+    assert command.Value == preset
+    activation = controller.activate_program_with_commands_for_stove.await_args
+    assert activation.args[2] == "config-BOILER"
+    coordinator.update_data_after_set.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "value,on,percentage,preset",
+    [
+        (0, False, None, None),
+        (3, True, 60, None),
+        (6, True, None, "auto"),
+        (-1, True, None, "silent"),
+    ],
+)
+def test_hydro_room_fan_readings(
+    hydro_fans, hydro_stove, value, on, percentage, preset
+):
+    """Display hydro fan levels and special settings without inventing a speed."""
+    # 1. The room-fan control is present without an operating mode.
+    room_fan = hydro_fans[0]
+    # 2. Refresh after the stove reports a new room-fan setting.
+    hydro_stove.Status.set_vent_v1 = value
+    room_fan._handle_coordinator_update_internal()
+    # 3. Auto and Silent are shown as presets, not ordinary speed percentages.
+    assert room_fan.is_on is on
+    assert room_fan.percentage == percentage
+    assert room_fan.preset_mode == preset
+
+
+@pytest.mark.parametrize("missing_capability", ["group", "sensor", "disabled"])
+async def test_hydro_room_fan_requires_enabled_boiler_control(
+    hass, entry, coordinator, hydro_stove, missing_capability
+):
+    """Do not invent a hydro room fan from another group when its boiler control is absent."""
+    # 1. Remove or disable the boiler fan while leaving the other groups intact.
+    boiler_group = hydro_stove.get_model_configuration_by_model_configuration_name(
+        "BOILER"
+    )
+    if missing_capability == "group":
+        hydro_stove.Model.model_configurations.remove(boiler_group)
+    elif missing_capability == "sensor":
+        boiler_group.configurations.clear()
+    else:
+        boiler_group.configurations[0].enabled = False
+    # 2. Discover the stove's available fan controls.
+    module = importlib.import_module("custom_components.maestro_mcz.fan")
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    # 3. Other hydro groups must not create a guessed fan or lose its presets.
+    assert add_entities.call_args.args[0] == []
+
+
+@pytest.mark.parametrize("boiler_enabled", [True, False])
+async def test_hydro_room_fan_shares_one_id_with_mode_based_ventilation(
+    hass, entry, coordinator, hydro_stove, configuration, controller, boiler_enabled
+):
+    """Keep one fan control when boiler and operating-mode groups describe the same fan."""
+    # 1. The stove exposes the same room fan through boiler and manual controls.
+    boiler_group = hydro_stove.get_model_configuration_by_model_configuration_name(
+        "BOILER"
+    )
+    boiler_sensor = boiler_group.configurations[0]
+    boiler_sensor.enabled = boiler_enabled
+    hydro_stove.Model.model_configurations.append(
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Manuale",
+                "ConfigurationId": "config-Manuale",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [
+                    configuration(
+                        boiler_sensor.sensor_name,
+                        SensorId="fan-sensor-Manuale",
+                    )
+                ],
+            }
+        )
+    )
+    hydro_stove.State.mode = "manual"
+    hydro_stove.Status.mod_lav_att = "manual"
+    # 2. Discover ventilation and send a speed request through the single control.
+    module = importlib.import_module("custom_components.maestro_mcz.fan")
+    add_entities = Mock()
+    await module.async_setup_entry(hass, entry, add_entities)
+    discovered_fans = add_entities.call_args.args[0]
+    assert len(discovered_fans) == 1
+    room_fan = discovered_fans[0]
+    await room_fan.async_set_percentage(40)
+    # 3. Prefer enabled boiler ventilation; otherwise retain the ordinary air-fan control.
+    assert room_fan.unique_id == "SERIAL-001-set_vent_v1"
+    expected_name = "Room Fan" if boiler_enabled else "Fan 1"
+    expected_group = "BOILER" if boiler_enabled else "Manuale"
+    assert room_fan.name == expected_name
+    command = last_sent_command(controller)
+    activation = controller.activate_program_with_commands_for_stove.await_args
+    assert command.SensorId == f"fan-sensor-{expected_group}"
+    assert activation.args[2] == f"config-{expected_group}"
+    assert command.Value == 2
+
+
+def test_hydro_room_fan_becomes_unavailable_when_disabled(hydro_fans, hydro_stove):
+    """Respect disabled hydro ventilation even when its fixed control remains discoverable."""
+    # 1. The room fan starts enabled and connected.
+    room_fan = hydro_fans[0]
+    assert room_fan.available is True
+    boiler_group = hydro_stove.get_model_configuration_by_model_configuration_name(
+        "BOILER"
+    )
+    # 2. The stove disables its boiler fan control.
+    boiler_group.configurations[0].enabled = False
+    room_fan._update_features_based_on_current_stove_mode()
+    room_fan._handle_coordinator_update_internal()
+    # 3. Home Assistant no longer offers speed or preset adjustments.
+    assert room_fan.available is False
+    assert room_fan.speed_count == 0
+    assert room_fan.preset_modes is None
 
 
 def test_date_time_reading_and_invalid_date(entities, stove):
@@ -1141,7 +2083,10 @@ async def test_generation_one_date_time_optional_components(
         )
     )
     item = MczDateTimeEntity(
-        coordinator, stove.UniqueCode, models.supported_date_times[1], date_config
+        coordinator,
+        stove.UniqueCode,
+        model_definitions.supported_date_times[1],
+        date_config,
     )
     # 2. Reading the clock should leave unsupported parts empty.
     assert item.native_value.second == 0
@@ -1177,37 +2122,41 @@ async def test_date_time_missing_fields_and_configuration(entities, stove, contr
     controller.activate_program_with_commands_for_stove.assert_not_awaited()
 
 
-def test_fan_string_preset_state_fallback_and_missing_value(entities, stove):
-    """Read a fan preset from fallback data, but clear it when that reading disappears."""
-    # 1. Remove status data and put a preset in the alternate state response.
+def test_fan_string_preset_uses_current_response_and_clears_missing_value(
+    entities, stove
+):
+    """Read a current fan preset and clear it without using a different response."""
+    # 1. Put different presets in current and information replies.
     item = entity(entities, "fan")
     item._current_fan_configuration.configuration.mappings = {"auto": 6}
-    stove._status = SimpleNamespace()
+    stove._status = SimpleNamespace(set_vent_v1="auto")
     stove.State.silent_enabled = False
-    stove.State.set_vent_v1 = "auto"
+    stove.State.set_vent_v1 = "silent"
     item._handle_coordinator_update_internal()
     assert item.available
     assert item.is_on
     assert item.preset_mode == "auto"
     assert item.percentage is None
     # 2. Remove the fan reading; the previous preset must not remain on screen.
-    stove._state = SimpleNamespace(mode="manual")
+    stove._status = SimpleNamespace()
     item._handle_coordinator_update_internal()
     assert item.is_on is False
     assert item.preset_mode is None
     assert item.percentage is None
 
 
-def test_selector_state_fallback_and_missing_value(entities, stove):
-    """Use fallback power readings and clear a dropdown choice when no valid reading exists."""
-    # 1. Supply a power level only in the alternate state response.
-    item = next(selector for selector in entities["select"] if selector._prop == "set_pot_man")
-    stove._status = SimpleNamespace()
-    stove._state = SimpleNamespace(set_pot_man=4)
+def test_selector_uses_current_response_and_clears_missing_value(entities, stove):
+    """Read current power and clear its choice without substituting information data."""
+    # 1. Supply different power levels in the two responses.
+    item = next(
+        selector for selector in entities["select"] if selector._prop == "set_pot_man"
+    )
+    stove._status = SimpleNamespace(set_pot_man=4)
+    stove._state = SimpleNamespace(set_pot_man=5)
     item._handle_coordinator_update_internal()
     assert item.current_option == "4"
     # 2. Remove that reading, then also try an unsupported value type.
-    stove._state = SimpleNamespace()
+    stove._status = SimpleNamespace()
     item._handle_coordinator_update_internal()
     assert item.current_option is None
     item._selector_configuration.configuration.type = "string"
@@ -1261,22 +2210,25 @@ async def test_controls_without_configuration_do_not_send_commands(
 
 
 @pytest.mark.parametrize(
-    "platform,prop,value_property,expected",
+    "platform,prop,value_property,state_value,expected",
     [
-        ("sensor", "temp_amb_install", "native_value", 20.5),
-        ("binary_sensor", "is_in_error", "is_on", False),
+        ("sensor", "temp_amb_install", "native_value", 20.5, 20.5),
+        ("binary_sensor", "is_in_error", "is_on", False, None),
     ],
 )
-def test_sensor_falls_back_to_state_when_status_is_null(
-    entities, stove, platform, prop, value_property, expected
+def test_sensor_declared_source_when_status_is_null(
+    entities, stove, platform, prop, value_property, state_value, expected
 ):
-    """Use a genuine alternate reading when status explicitly reports no value."""
+    """Keep information readings separate from current alarm data when Status is empty."""
     # 1. The status field is empty while the state field contains a reading.
-    assert getattr(stove.Status, prop) is None
-    assert getattr(stove.State, prop) == expected
+    setattr(stove.Status, prop, None)
+    assert getattr(stove.State, prop) == state_value
     item = next(
-        control for control in entities[platform] if getattr(control, "_prop", None) == prop
+        control
+        for control in entities[platform]
+        if getattr(control, "_prop", None) == prop
     )
+    item._handle_coordinator_update_internal()
     assert getattr(item, value_property) == expected
     # 2. If the alternate reading also disappears, the displayed value must clear.
     setattr(stove.State, prop, None)
@@ -1294,7 +2246,7 @@ async def setup_binary_sensors(hass, entry):
 
 @pytest.fixture(params=["sens_liv_pellet", "m1_sens_liv_pellet"])
 def pellet_probe_configuration(stove, configuration, request):
-    """Describe the optional probe setting for each stove family, not a physical probe."""
+    """Describe the optional probe setting for each stove generation, not a physical probe."""
     probe_group = ModelConfiguration(
         {
             "ConfigurationName": "Sensore Livello Pellet",
@@ -1336,7 +2288,7 @@ async def test_pellet_level_low_appears_only_when_stove_reports_its_probe(
         (None, False, False),
         (None, None, False),
         (True, False, True),
-        (None, True, True),
+        (None, True, False),
     ],
 )
 async def test_pellet_probe_setting_controls_discovery(
@@ -1354,7 +2306,7 @@ async def test_pellet_probe_setting_controls_discovery(
     stove.Status.sens_liv_pel = False
     stove.Status.sens_liv_pellet = status_enabled
     stove.State.sens_liv_pellet = state_enabled
-    # 2. Discover controls using status settings, falling back to state when missing.
+    # 2. Discover controls only when the current response confirms an enabled probe.
     controls = await setup_binary_sensors(hass, entry)
     discovered_ids = {control.unique_id for control in controls}
     # 3. Only a confirmed enabled probe gets a warning entity; the alarm stays intact.

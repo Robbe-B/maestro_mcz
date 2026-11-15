@@ -16,7 +16,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
-from .maestro.models import models
+from .maestro.model_value_reader import get_response_value
+from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
@@ -31,7 +32,7 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_number: models.NumberMczConfigItem,
+        supported_number: models_types.NumberMczConfigItem,
         matching_number_configuration: SensorConfiguration,
     ) -> None:
         """Initialize the number entity."""
@@ -46,6 +47,7 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
         self._attr_device_info = self._stove.get_device_info()
         self._attr_mode = supported_number.mode
         self._prop = supported_number.sensor_get_name
+        self._supported_number = supported_number
         self.entity_registry_enabled_default = supported_number.enabled_by_default
         self.entity_category = supported_number.category
         self._number_configuration = matching_number_configuration
@@ -99,12 +101,12 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        if hasattr(self._stove.Status, self._prop):
-            self._attr_native_value = getattr(self._stove.Status, self._prop)
-        elif hasattr(self._stove.State, self._prop):
-            self._attr_native_value = getattr(self._stove.State, self._prop)
-        else:
-            self._attr_native_value = None
+        self._attr_native_value = get_response_value(
+            self._supported_number,
+            self._stove.State,
+            self._stove.Status,
+            self._stove.model_generation,
+        )
 
 
 async def async_setup_entry(
@@ -126,8 +128,8 @@ def _getStoveNumberEntities(
 ) -> list[CoordinatorEntity]:
     """Get the number entities to create for this stove."""
     entities = []
-    supported_numbers = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        models.supported_numbers
+    supported_numbers = stove.get_supported_sensor_configurations(
+        model_definitions.supported_numbers
     )
     if supported_numbers is not None:
         entities.extend(

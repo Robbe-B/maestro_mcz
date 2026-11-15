@@ -1,11 +1,13 @@
 """Protect stove identity, configuration discovery, refresh, and command routing."""
 
 from copy import deepcopy
+from dataclasses import asdict, fields
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 
 from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
+from custom_components.maestro_mcz.fan import get_supported_fan_configurations
 from custom_components.maestro_mcz.maestro import MaestroStove
 from custom_components.maestro_mcz.maestro.controller.const import (
     ACTIVATE_PROGRAM_URL,
@@ -20,7 +22,424 @@ from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Model,
     ModelConfiguration,
 )
-from custom_components.maestro_mcz.maestro.models import models
+from custom_components.maestro_mcz.maestro.model_value_reader import get_response_value
+from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
+
+
+@pytest.mark.parametrize("unit,inverted", [(None, False), ("s", True)])
+def test_model_schema_preserves_units_and_alarm_inversion(unit, inverted):
+    """Keep units and alarm inversion in configuration records so settings are not lost."""
+    # 1. Configure a delay's unit and whether an alarm's meaning is reversed.
+    number = models_types.NumberMczConfigItem(
+        "Delay",
+        "rit_usc_standby",
+        "rit_usc_standby",
+        "Wait Standby",
+        "auto",
+        "mdi:timer",
+        unit,
+        None,
+        None,
+        True,
+        models_types.MczStoveModelGeneration.M2_PLUS,
+    )
+    alarm = models_types.BinarySensorMczConfigItem(
+        "Alarm", "is_in_error", "mdi:alert", None, None, True, inverted=inverted
+    )
+
+    # 2. Inspect the declared fields and record both configurations.
+    number_fields = {field.name: field for field in fields(number)}
+    alarm_fields = {field.name: field for field in fields(alarm)}
+    number_record = asdict(number)
+    alarm_record = asdict(alarm)
+
+    # 3. Both options belong to the schema, with neutral defaults and supplied values.
+    assert number_fields["unit"].type == str | None
+    assert number_fields["unit"].default is None
+    assert alarm_fields["inverted"].type is bool
+    assert alarm_fields["inverted"].default is False
+    assert number_record["unit"] == unit
+    assert alarm_record["inverted"] is inverted
+
+
+def test_generic_matching_uses_common_fields_without_generation_selection(
+    stove, configuration
+):
+    """Generic matching must use the supplied fields, not infer a generation or fan-specific map."""
+    # 1. Common and generation-specific commands exist, with different groups for M1 and M2+.
+    definition = models_types.FanMczConfigItem(
+        "Fan",
+        "set_vent_v1",
+        "shared",
+        {"manual": "Common"},
+        None,
+        True,
+        None,
+        "mod_lav_att",
+        sensor_set_config_name="Common",
+        sensor_set_name_m1="older",
+        sensor_set_name_m2="newer",
+        mode_to_configuration_name_mapping_m1={"dynamic": "Older"},
+        mode_to_configuration_name_mapping_m2={"auto": "Newer"},
+    )
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": group,
+                "ConfigurationId": group,
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration(name) for name in names],
+            }
+        )
+        for group, names in [
+            ("Common", ["shared", "older", "newer"]),
+            ("Older", ["older"]),
+            ("Newer", ["newer"]),
+        ]
+    ]
+    original_definition = asdict(definition)
+
+    # 2. Call the generic methods directly without generation-specific selection.
+    first = stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
+        [definition]
+    )
+    matches = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
+        [definition]
+    )
+    modes = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
+        [definition]
+    )
+
+    # 3. Only the common control and common mode map are used; the definition stays intact.
+    assert first[0] is definition
+    assert first[1].configuration.sensor_name == "shared"
+    assert [control.configuration.sensor_name for _, control in matches] == ["shared"]
+    assert list(modes[0][1].mode_configurations) == ["manual"]
+    assert (
+        modes[0][1].mode_configurations["manual"].configuration.sensor_name == "shared"
+    )
+    assert asdict(definition) == original_definition
+
+
+@pytest.mark.parametrize("missing_first", [False, True])
+def test_generic_mode_matching_skips_definitions_without_modes(
+    stove, configuration, missing_first
+):
+    """Definitions without modes must not reuse another control's matches or break discovery."""
+    # 1. Only one of two definitions has a mode map, in either catalogue order.
+    definition = models_types.MczConfigItem("Control", None)
+    definition.sensor_set_name = "selected"
+    definition.mode_to_configuration_name_mapping = {"manual": "Common"}
+    missing = models_types.MczConfigItem("No modes", None)
+    definitions = [missing, definition] if missing_first else [definition, missing]
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Common",
+                "ConfigurationId": "common-group",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration("selected")],
+            }
+        )
+    ]
+    original_definition = asdict(definition)
+
+    # 2. Match the list through the original generic method.
+    modes = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
+        definitions
+    )
+
+    # 3. Only the definition with modes matches, and neither declaration is modified.
+    assert len(modes) == 1
+    assert modes[0][0] is definition
+    assert list(modes[0][1].mode_configurations) == ["manual"]
+    assert (
+        modes[0][1].mode_configurations["manual"].configuration.sensor_name
+        == "selected"
+    )
+    assert asdict(definition) == original_definition
+
+
+@pytest.mark.parametrize(
+    "common,m1,m2,advertised,expected",
+    [
+        ("shared", None, None, ["shared"], ["shared"]),
+        (None, "older", None, ["older"], ["older"]),
+        (None, None, "newer", ["newer"], ["newer"]),
+        (None, "older", "newer", ["older", "newer"], ["newer", "older"]),
+        (None, "older", "newer", ["older"], ["older"]),
+        (None, "older", "newer", ["unrelated"], []),
+        ("shared", "older", None, ["shared"], []),
+    ],
+    ids=[
+        "common",
+        "m1-only",
+        "m2-only",
+        "both",
+        "only-m1-advertised",
+        "neither-advertised",
+        "no-common-command-fallback",
+    ],
+)
+def test_optional_control_bindings_follow_advertised_commands(
+    stove, configuration, common, m1, m2, advertised, expected
+):
+    """Offer only configured controls, even when the stove uses the default generation."""
+    # 1. Declare any combination of bindings on a model with no ping information.
+    definition = models_types.SelectMczConfigItem(
+        "Tones",
+        "toni_buzz",
+        common,
+        "Toni",
+        "mdi:volume-high",
+        None,
+        True,
+        value_mappings={"0": "Silent"},
+        sensor_set_name_m1=m1,
+        sensor_set_name_m2=m2,
+    )
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Toni",
+                "ConfigurationId": "tones-group",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration(name) for name in advertised],
+            }
+        )
+    ]
+    assert stove.model_generation is models_types.MczStoveModelGeneration.M2_PLUS
+    original_definition = asdict(definition)
+
+    # 2. Match all advertised bindings and the first preferred binding separately.
+    matches = stove.get_supported_sensor_configurations([definition]) or []
+    first = stove.get_first_supported_sensor_configuration([definition])
+    matched_names = [matched.configuration.sensor_name for _, matched in matches]
+
+    # 3. Both controls retain the previous order; absent controls are never invented.
+    assert matched_names == expected
+    if expected:
+        assert first[0] is definition
+        assert first[1].configuration.sensor_id == f"id-{expected[0]}"
+    else:
+        assert first is None
+    for config, matched in matches:
+        assert isinstance(config, models_types.SelectMczConfigItem)
+        assert config is definition
+        assert config.value_mappings == {"0": "Silent"}
+    assert asdict(definition) == original_definition
+    repeated = stove.get_supported_sensor_configurations([definition]) or []
+    assert [matched.configuration.sensor_name for _, matched in repeated] == expected
+    assert all(config is definition for config, _ in repeated)
+
+
+def test_generation_fan_groups_and_mode_names_remain_independent(stove, configuration):
+    """Keep each generation's fan groups and mode names without changing their priority."""
+    # 1. Both generations advertise different automatic modes and share the manual group.
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": name,
+                "ConfigurationId": f"group-{name}",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration(sensor) for sensor in sensors],
+            }
+        )
+        for name, sensors in [
+            ("Manuale", ["set_vent_v1", "m1_set_vent_v1"]),
+            ("Auto", ["set_vent_v1"]),
+            ("Dynamic", ["m1_set_vent_v1"]),
+            ("set_mod", ["mod_funz", "m1_mod_lav_att"]),
+        ]
+    ]
+    original_fan = asdict(model_definitions.supported_fans[0])
+    original_mode = asdict(model_definitions.supported_climate_function_modes[0])
+
+    # 2. Resolve fan groups and climate renames using the advertised control names.
+    fan_matches = get_supported_fan_configurations(
+        stove, model_definitions.supported_fans
+    )
+    mode_matches = stove.get_supported_sensor_configurations(
+        model_definitions.supported_climate_function_modes
+    )
+
+    # 3. Each command keeps its own mode groups without rewriting the shared settings.
+    assert len(fan_matches) == 2
+    newer_fan, newer_groups = fan_matches[0]
+    older_fan, older_groups = fan_matches[1]
+    assert newer_fan is model_definitions.supported_fans[0]
+    assert older_fan is newer_fan
+    assert (
+        newer_groups.mode_configurations["manual"].configuration.sensor_name
+        == "set_vent_v1"
+    )
+    assert (
+        older_groups.mode_configurations["manual"].configuration.sensor_name
+        == "m1_set_vent_v1"
+    )
+    assert list(newer_groups.mode_configurations) == ["manual", "auto"]
+    assert list(older_groups.mode_configurations) == ["manual", "dynamic"]
+    assert mode_matches[0][1].configuration.sensor_name == "mod_funz"
+    assert mode_matches[1][1].configuration.sensor_name == "m1_mod_lav_att"
+    assert asdict(model_definitions.supported_fans[0]) == original_fan
+    assert (
+        asdict(model_definitions.supported_climate_function_modes[0]) == original_mode
+    )
+
+
+def test_generation_bindings_inherit_common_mappings_and_can_override_with_empty(
+    stove, configuration
+):
+    """Both commands can use common fan groups without rewriting their declared overrides."""
+    # 1. A shared mode map applies to both bindings, while the older rename is empty.
+    fan = models_types.FanMczConfigItem(
+        "Shared fan",
+        "set_vent_v1",
+        None,
+        {"manual": "Manuale"},
+        None,
+        True,
+        None,
+        "mod_lav_att",
+        sensor_set_name_m1="older",
+        sensor_set_name_m2="newer",
+    )
+    mode = models_types.ClimateFunctionModeMczConfigItem(
+        "Mode",
+        "mod_lav_att",
+        None,
+        "Manuale",
+        True,
+        api_mappings_key_rename={"dynamic": "auto"},
+        sensor_set_name_m1="older",
+        sensor_set_name_m2="newer",
+        api_mappings_key_rename_m1={},
+    )
+    original_mode = asdict(mode)
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Manuale",
+                "ConfigurationId": "manual-group",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration("older"), configuration("newer")],
+            }
+        )
+    ]
+
+    # 2. Discover both bindings without a generation hint.
+    fans = get_supported_fan_configurations(stove, [fan])
+    modes = stove.get_supported_sensor_configurations([mode])
+
+    # 3. Shared fan groups stay available and climate overrides remain on the declaration.
+    assert [list(groups.mode_configurations) for _, groups in fans] == [
+        ["manual"],
+        ["manual"],
+    ]
+    assert modes[0][0] is mode
+    assert modes[1][0] is mode
+    assert modes[0][1].configuration.sensor_name == "newer"
+    assert modes[1][1].configuration.sensor_name == "older"
+    assert asdict(mode) == original_mode
+
+
+@pytest.mark.parametrize("explicit_generation", [False, True])
+def test_matched_binding_does_not_change_default_response_source(
+    stove, configuration, explicit_generation
+):
+    """An older command still works while a stove without a ping uses newer-model readings."""
+    # 1. The model advertises an older control, but has no generation-identifying ping.
+    definition = models_types.MczConfigItem(
+        "Target", None, sensor_set_name_m1="older_target"
+    )
+    definition.sensor_get_name = "set_amb1"
+    definition.sensor_set_config_name = "Set_amb_temp"
+    definition.value_response_source = {
+        models_types.MczStoveModelGeneration.M1: models_types.MczResponseSource.STATUS,
+        models_types.MczStoveModelGeneration.M2_PLUS: models_types.MczResponseSource.STATE,
+    }
+    stove.Model.model_configurations = [
+        ModelConfiguration(
+            {
+                "ConfigurationName": "Set_amb_temp",
+                "ConfigurationId": "target-group",
+                "Timed": False,
+                "Limitations": None,
+                "Configurations": [configuration("older_target")],
+            }
+        )
+    ]
+    stove.Status.set_amb1 = 30
+    stove.State.set_amb1 = 0
+
+    # 2. Resolve the concrete command while reading with the actual detected generation.
+    resolved, matched = stove.get_first_supported_sensor_configuration([definition])
+    reading = get_response_value(
+        resolved,
+        stove.State,
+        stove.Status,
+        stove.model_generation if explicit_generation else None,
+    )
+
+    # 3. The M1 command works, but the M2+ source and real zero stay intact.
+    assert matched.configuration.sensor_name == "older_target"
+    assert resolved is definition
+    assert stove.model_generation is models_types.MczStoveModelGeneration.M2_PLUS
+    assert reading == 0
+    assert resolved.value_response_source == definition.value_response_source
+    assert resolved.value_response_source is definition.value_response_source
+
+
+def test_shared_definition_keeps_two_stove_commands_separate(
+    stove, controller, configuration
+):
+    """Finding an older stove's control must not change a newer stove's selected command."""
+    # 1. Two stove instances share one temperature definition but advertise different controls.
+    definition = model_definitions.supported_thermostats[0]
+    older_stove = MaestroStove(
+        controller, controller.retrieve_linked_stove_infos.return_value[0]
+    )
+    older_stove._model = Model(
+        {
+            "ModelName": "Older controls",
+            "ModelId": "older",
+            "SensorSetTypeId": "int",
+            "SensorIds": [],
+            "Properties": [],
+            "ModelConfigurations": [
+                {
+                    "ConfigurationName": "Set_amb_temp",
+                    "ConfigurationId": "older-target",
+                    "Timed": False,
+                    "Limitations": None,
+                    "Configurations": [configuration("m1_set_amb1")],
+                }
+            ],
+        }
+    )
+    original_definition = asdict(definition)
+
+    # 2. Find the newer stove's command, then the older stove's command.
+    newer_settings, newer_control = stove.get_first_supported_sensor_configuration(
+        [definition]
+    )
+    older_settings, older_control = (
+        older_stove.get_first_supported_sensor_configuration([definition])
+    )
+
+    # 3. Only model controls differ; the shared declaration and earlier match stay unchanged.
+    assert newer_settings is definition
+    assert older_settings is definition
+    assert newer_control.configuration.sensor_name == "set_amb1"
+    assert older_control.configuration.sensor_name == "m1_set_amb1"
+    assert newer_control.configuration_id == "config-Set_amb_temp"
+    assert older_control.configuration_id == "older-target"
+    assert asdict(definition) == original_definition
 
 
 @pytest.fixture
@@ -838,7 +1257,9 @@ def test_model_configuration_lookup_and_missing_values(stove):
     assert stove.get_model_configuration_by_model_configuration_name(None) is None
     assert stove.get_model_configuration_by_model_configuration_name("missing") is None
     # 2. Sensor names also ignore capitalization; missing names yield no control.
-    find_sensor = stove.get_sensor_configuration_by_model_configuration_name_and_sensor_name
+    find_sensor = (
+        stove.get_sensor_configuration_by_model_configuration_name_and_sensor_name
+    )
     power_sensor = find_sensor("Spegnimento", "COM_ON_OFF")
     assert power_sensor.configuration.sensor_id == "id-com_on_off"
     assert find_sensor("missing", "com_on_off") is None
@@ -849,28 +1270,34 @@ def test_model_configuration_lookup_and_missing_values(stove):
 def test_generation_discovery_and_fan_mode_grouping(stove):
     """Discover supported controls and fan modes without creating nonexistent controls."""
     # 1. Search the model for the first matching power control and all number controls.
-    find_first_control = (
-        stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name
+    find_first_control = stove.get_first_supported_sensor_configuration
+    find_all_controls = stove.get_supported_sensor_configurations
+    power_setting, power_configuration = find_first_control(
+        model_definitions.supported_power_settings
     )
-    find_all_controls = (
-        stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name
-    )
-    power_setting, _power_configuration = find_first_control(models.supported_power_settings)
-    assert power_setting.stove_model_generation is models.MczStoveModelGeneration.M2_PLUS
+    assert power_setting is model_definitions.supported_power_settings[0]
+    assert power_configuration.configuration.sensor_name == "com_on_off"
     assert find_first_control([]) is None
     assert find_all_controls([]) is None
-    assert len(find_all_controls(models.supported_numbers)) == 1
+    assert len(find_all_controls(model_definitions.supported_numbers)) == 1
 
     # 2. One fan can belong to several modes; keep those modes grouped together.
-    fan_matches = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
-        models.supported_fans
+    fan_matches = get_supported_fan_configurations(
+        stove,
+        [
+            fan
+            for fan in model_definitions.supported_fans
+            if (
+                fan.mode_to_configuration_name_mapping is not None
+                or fan.mode_to_configuration_name_mapping_m1 is not None
+                or fan.mode_to_configuration_name_mapping_m2 is not None
+            )
+        ],
     )
     assert len(fan_matches) == 1
     _fan_setting, fan_configuration = fan_matches[0]
     assert set(fan_configuration.mode_configurations) == {"manual", "auto"}
-    missing_fans = stove.get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
-        []
-    )
+    missing_fans = get_supported_fan_configurations(stove, [])
     assert missing_fans is None
 
 
@@ -885,55 +1312,87 @@ def test_generation_one_configuration_aliases(stove):
     }
     for group in stove.Model.model_configurations:
         for config in group.configurations:
-            config.sensor_name = m1_sensor_names.get(config.sensor_name, config.sensor_name)
+            config.sensor_name = m1_sensor_names.get(
+                config.sensor_name, config.sensor_name
+            )
     # 2. Discovery should now choose M1 power and temperature controls.
-    find_control = (
-        stove.get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name
+    find_control = stove.get_first_supported_sensor_configuration
+    power_setting, power_configuration = find_control(
+        model_definitions.supported_power_settings
     )
-    power_setting, _power_configuration = find_control(models.supported_power_settings)
-    thermostat_setting, _thermostat_configuration = find_control(models.supported_thermostats)
-    assert power_setting.stove_model_generation is models.MczStoveModelGeneration.M1
-    assert thermostat_setting.stove_model_generation is models.MczStoveModelGeneration.M1
+    thermostat_setting, thermostat_configuration = find_control(
+        model_definitions.supported_thermostats
+    )
+    assert power_setting is model_definitions.supported_power_settings[0]
+    assert thermostat_setting is model_definitions.supported_thermostats[0]
+    assert power_configuration.configuration.sensor_name == "m1_stato_stufa"
+    assert thermostat_configuration.configuration.sensor_name == "m1_set_amb1"
 
 
 @pytest.mark.parametrize(
-    "ping_group,ping_sensor,power_sensor,model_name,expected_family",
+    "ping_group,ping_sensor,power_sensor,model_name,expected_generation",
     [
         (
-            "PING STOVE", "m1_cod_for_spe_mqtt", "com_on_off",
-            "Newer-looking product", models.MczStoveModelGeneration.M1,
+            "PING STOVE",
+            "m1_cod_for_spe_mqtt",
+            "com_on_off",
+            "Newer-looking product",
+            models_types.MczStoveModelGeneration.M1,
         ),
         (
-            "cod_for_spe_mqtt", "cod_for_spe_mqtt", "m1_stato_stufa",
-            "M1 example", models.MczStoveModelGeneration.M2_PLUS,
+            "cod_for_spe_mqtt",
+            "cod_for_spe_mqtt",
+            "m1_stato_stufa",
+            "M1 example",
+            models_types.MczStoveModelGeneration.M2_PLUS,
         ),
         (
-            "PING STOVE", "cod_for_spe_mqtt", "m1_stato_stufa",
-            "M3 example", models.MczStoveModelGeneration.M2_PLUS,
+            "PING STOVE",
+            "cod_for_spe_mqtt",
+            "m1_stato_stufa",
+            "M3 example",
+            models_types.MczStoveModelGeneration.M2_PLUS,
         ),
         (
-            None, None, "m1_stato_stufa",
-            "M1 example", models.MczStoveModelGeneration.UNKNOWN,
+            None,
+            None,
+            "m1_stato_stufa",
+            "M1 example",
+            models_types.MczStoveModelGeneration.M2_PLUS,
         ),
         (
-            None, None, "com_on_off",
-            "M2 example", models.MczStoveModelGeneration.UNKNOWN,
+            None,
+            None,
+            "com_on_off",
+            "M2 example",
+            models_types.MczStoveModelGeneration.M2_PLUS,
         ),
         (
-            "unrecognized", "cod_for_spe_mqtt", "com_on_off",
-            "M2 example", models.MczStoveModelGeneration.UNKNOWN,
+            "unrecognized",
+            "cod_for_spe_mqtt",
+            "com_on_off",
+            "M2 example",
+            models_types.MczStoveModelGeneration.M2_PLUS,
         ),
         (
-            "PING STOVE", "unrecognized", "m1_stato_stufa",
-            "M1 example", models.MczStoveModelGeneration.UNKNOWN,
+            "PING STOVE",
+            "unrecognized",
+            "m1_stato_stufa",
+            "M1 example",
+            models_types.MczStoveModelGeneration.M2_PLUS,
         ),
     ],
 )
 def test_model_generation_uses_only_ping_configuration(
-    stove, configuration, ping_group, ping_sensor, power_sensor, model_name,
-    expected_family
+    stove,
+    configuration,
+    ping_group,
+    ping_sensor,
+    power_sensor,
+    model_name,
+    expected_generation,
 ):
-    """Use ping commands alone, even when power controls or product names disagree."""
+    """Recognize older ping commands and otherwise default to newer controls, regardless of product names."""
     # 1. Give the stove power controls and a name that need not match its ping.
     stove.Model.model_name = model_name
     power_configuration = stove.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
@@ -962,24 +1421,24 @@ def test_model_generation_uses_only_ping_configuration(
             )
         )
 
-    # 2. Ask the stove for its centrally determined control family.
-    detected_family = stove.model_generation
+    # 2. Ask the stove for its centrally determined generation.
+    detected_generation = stove.model_generation
 
-    # 3. Only a recognized ping identifies a family; power controls cannot fill gaps.
-    assert detected_family is expected_family
+    # 3. Only an M1 ping selects M1; absent or unfamiliar pings use M2+.
+    assert detected_generation is expected_generation
 
 
 def test_model_generation_before_model_is_loaded(controller):
-    """Keep an unloaded stove unknown instead of guessing or failing during setup."""
+    """Use the newer generation safely before a stove's model has been retrieved."""
     # 1. Create a stove before its controls have been retrieved.
     stove_info = controller.retrieve_linked_stove_infos.return_value[0]
     unloaded_stove = MaestroStove(controller, stove_info)
 
     # 2. Detection is safe before initialization.
-    detected_family = unloaded_stove.model_generation
+    detected_generation = unloaded_stove.model_generation
 
-    # 3. No model data means no known generation.
-    assert detected_family is models.MczStoveModelGeneration.UNKNOWN
+    # 3. No model data uses the same M2+ default as an unrecognized ping.
+    assert detected_generation is models_types.MczStoveModelGeneration.M2_PLUS
 
 
 def test_model_generation_recognizes_m1_read_channel_without_power(stove, m1_ping):
@@ -988,11 +1447,11 @@ def test_model_generation_recognizes_m1_read_channel_without_power(stove, m1_pin
     power_group = stove.get_model_configuration_by_model_configuration_name("Spegnimento")
     stove.Model.model_configurations.remove(power_group)
 
-    # 2. Detect the family from the remaining known M1 marker.
-    detected_family = stove.model_generation
+    # 2. Detect the generation from the remaining known M1 marker.
+    detected_generation = stove.model_generation
 
     # 3. Missing power controls must not cause misleading M1 consumption requests.
-    assert detected_family is models.MczStoveModelGeneration.M1
+    assert detected_generation is models_types.MczStoveModelGeneration.M1
 
 
 async def test_multiple_stoves_keep_identity_and_commands_separate(

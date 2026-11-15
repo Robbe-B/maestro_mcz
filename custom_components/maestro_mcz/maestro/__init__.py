@@ -21,10 +21,26 @@ from .controller.responses.model import (
 from .controller.responses.state import State
 from .controller.responses.status import Status
 from .controller.responses.stove_info import StoveInfo
-from .models.models import MczConfigItem, MczStoveModelGeneration
+from .models.models_types import (
+    MczConfigItem,
+    MczStoveModelGeneration,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
+    """Try declared names against the model, independently of the detected generation."""
+    if (
+        definition.sensor_set_name_m1 is not None
+        or definition.sensor_set_name_m2 is not None
+    ):
+        # Keep the original M2-before-M1 priority without changing the shared definition.
+        names = (definition.sensor_set_name_m2, definition.sensor_set_name_m1)
+    else:
+        names = (definition.sensor_set_name,)
+    return tuple(name for name in names if name is not None)
 
 
 class MaestroStove:
@@ -110,9 +126,11 @@ class MaestroStove:
 
     @property
     def model_generation(self) -> MczStoveModelGeneration:
-        """Infer the control family from the model's known ping commands."""
+        """Recognize M1's ping command, otherwise use M2+."""
+        # Catalogue generation labels describe feature definitions, not stove identity.
+        # Detect the stove through ping only; matching a feature must not reclassify it.
         if self.Model is None:
-            return MczStoveModelGeneration.UNKNOWN
+            return MczStoveModelGeneration.M2_PLUS
 
         find_ping = (
             self.get_sensor_configuration_by_model_configuration_name_and_sensor_name
@@ -120,11 +138,7 @@ class MaestroStove:
         if find_ping("PING STOVE", "m1_cod_for_spe_mqtt") is not None:
             return MczStoveModelGeneration.M1
 
-        for group_name in ("cod_for_spe_mqtt", "PING STOVE"):
-            if find_ping(group_name, "cod_for_spe_mqtt") is not None:
-                return MczStoveModelGeneration.M2_PLUS
-
-        return MczStoveModelGeneration.UNKNOWN
+        return MczStoveModelGeneration.M2_PLUS
 
     async def _do_ping_configuration(self, ping: SensorConfiguration) -> None:
         try:
@@ -356,15 +370,14 @@ class MaestroStove:
         """Get the all sensor configurations matching for the matching mode by the name of the model configuration and sensor name."""
         temp_list = []
         for x in mcz_config_items_list_to_match:
+            temp_mode_configurations: dict[str, SensorConfiguration] = {}
             if x.mode_to_configuration_name_mapping is not None:
-                temp_mode_configurations: dict[str, SensorConfiguration] = {}
                 for mode in x.mode_to_configuration_name_mapping:
                     matching_configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
                         x.mode_to_configuration_name_mapping[mode], x.sensor_set_name
                     )
                     if matching_configuration is not None:
                         temp_mode_configurations[mode] = matching_configuration
-
             if (
                 temp_mode_configurations is not None
                 and len(temp_mode_configurations) > 0
@@ -374,4 +387,30 @@ class MaestroStove:
                 )
         if temp_list:
             return temp_list
+        return None
+
+    def get_supported_sensor_configurations(
+        self, definitions: list[MczConfigItem]
+    ) -> list[tuple[MczConfigItem, SensorConfiguration]] | None:
+        """Select declared generation-specific commands, then match their advertised names."""
+        matches = []
+        for definition in definitions:
+            if definition.sensor_set_config_name is None:
+                continue
+            for sensor_name in get_control_names(definition):
+                configuration = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                    definition.sensor_set_config_name, sensor_name
+                )
+                if configuration is not None:
+                    matches.append((definition, configuration))
+        return matches or None
+
+    def get_first_supported_sensor_configuration(
+        self, definitions: list[MczConfigItem]
+    ) -> tuple[MczConfigItem, SensorConfiguration] | None:
+        """Find the first supported generation-specific command in catalogue order."""
+        for definition in definitions:
+            matches = self.get_supported_sensor_configurations([definition])
+            if matches:
+                return matches[0]
         return None

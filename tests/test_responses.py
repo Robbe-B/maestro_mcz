@@ -126,6 +126,20 @@ def test_unknown_fields_are_preserved_and_warned(response_type, caplog):
     assert "FutureField" in caplog.text
 
 
+def test_state_does_not_claim_the_current_pump_setting(caplog):
+    """Keep an unexpected pump setting for investigation, not as a State reading."""
+    # 1. An information payload unexpectedly includes the current pump setting.
+    payload = {"temp_min_circ_on": 45}
+
+    # 2. Parse it using the information response contract.
+    parsed = State(payload)
+
+    # 3. Warn and preserve the extra data without declaring a supported State field.
+    assert not hasattr(parsed, "temp_min_circ_on")
+    assert parsed.unknown_fields == payload
+    assert "temp_min_circ_on" in caplog.text
+
+
 @pytest.mark.parametrize("value", [None, 0, False, ""])
 @pytest.mark.parametrize(
     "response_type,wire_name,attribute",

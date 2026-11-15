@@ -11,7 +11,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .coordinator import MczAccountCoordinator
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
-from .maestro.models import models
+from .maestro.model_value_reader import get_response_value
+from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
@@ -26,7 +27,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
         self,
         coordinator: MczAccountCoordinator,
         stove_unique_code: str,
-        supported_selector: models.SelectMczConfigItem,
+        supported_selector: models_types.SelectMczConfigItem,
         matching_selector_configuration: SensorConfiguration,
     ) -> None:
         """Initialize the select entity."""
@@ -40,6 +41,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
         self._attr_icon = supported_selector.icon
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_selector.sensor_get_name
+        self._supported_selector = supported_selector
         self.entity_registry_enabled_default = supported_selector.enabled_by_default
         self.entity_category = supported_selector.category
         self._selector_configuration = matching_selector_configuration
@@ -130,11 +132,13 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        current_value = None
-        if hasattr(self._stove.Status, self._prop):
-            current_value = str(getattr(self._stove.Status, self._prop))
-        elif hasattr(self._stove.State, self._prop):
-            current_value = str(getattr(self._stove.State, self._prop))
+        value = get_response_value(
+            self._supported_selector,
+            self._stove.State,
+            self._stove.Status,
+            self._stove.model_generation,
+        )
+        current_value = str(value) if value is not None else None
 
         if self._selector_configuration.configuration.type == SensorTypeEnum.INT.value:
             if current_value and self._selector_configuration is not None:
@@ -172,8 +176,8 @@ def _getStoveSelectEntities(
 ) -> list[CoordinatorEntity]:
     """Get the select entities to create for this stove."""
     entities = []
-    supported_pots = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        models.supported_pots
+    supported_pots = stove.get_supported_sensor_configurations(
+        model_definitions.supported_pots
     )
     if supported_pots is not None:
         entities.extend(
@@ -184,8 +188,8 @@ def _getStoveSelectEntities(
             if supported_pot[0] is not None and supported_pot[1] is not None
         )
 
-    supported_selectors = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        models.supported_selectors
+    supported_selectors = stove.get_supported_sensor_configurations(
+        model_definitions.supported_selectors
     )
     if supported_selectors is not None:
         entities.extend(
