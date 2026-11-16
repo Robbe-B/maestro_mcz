@@ -2,9 +2,13 @@
 
 from dataclasses import dataclass
 
+from ..response_types import JsonObject
+
 
 @dataclass
 class Configuration:
+    """Parse one control's metadata, using saved attribute names during replay."""
+
     sensor_name: str | None = None
     type: str | None = None
     visible: bool | None = None
@@ -13,9 +17,9 @@ class Configuration:
     enabled: bool | None = None
     min: str | None = None
     max: str | None = None
-    mappings: dict[str, int] | None = None
+    mappings: dict[str, int | str] | None = None
 
-    def __init__(self, json, from_mocked_response=False) -> None:
+    def __init__(self, json: JsonObject, from_mocked_response: bool = False) -> None:
         if from_mocked_response:
             for k, v in json.items():
                 setattr(self, k, v)
@@ -33,13 +37,15 @@ class Configuration:
 
 @dataclass
 class ModelConfiguration:
+    """Group related control definitions without validating their field types."""
+
     timed: bool | None = None
     configuration_name: str | None = None
     configurations: list[Configuration] | None = None
     configuration_id: str | None = None
     limitations: str | None = None
 
-    def __init__(self, json, from_mocked_response=False) -> None:
+    def __init__(self, json: JsonObject, from_mocked_response: bool = False) -> None:
         if from_mocked_response:
             for k, v in json.items():
                 if k == "configurations":
@@ -60,6 +66,8 @@ class ModelConfiguration:
 
 @dataclass
 class Model:
+    """Read model metadata and controls from live fields or a saved report."""
+
     model_configurations: list[ModelConfiguration] | None = None
     model_name: str | None = None
     model_id: str | None = None
@@ -67,7 +75,7 @@ class Model:
     sensor_ids: list[str] | None = None
     properties: list[str] | None = None
 
-    def __init__(self, json, from_mocked_response=False) -> None:
+    def __init__(self, json: JsonObject, from_mocked_response: bool = False) -> None:
         if from_mocked_response:
             for k, v in json.items():
                 if k == "model_configurations":
@@ -91,19 +99,19 @@ class Model:
 
 @dataclass
 class SensorConfiguration:
-    configuration: Configuration | None = None
-    configuration_id: str | None = None
+    configuration: Configuration
+    configuration_id: str | None
 
-    def __init__(self, configuration: Configuration, configuration_id: str) -> None:
+    def __init__(
+        self, configuration: Configuration, configuration_id: str | None
+    ) -> None:
         self.configuration = configuration
         self.configuration_id = configuration_id
 
 
 @dataclass
 class SensorConfigurationMultipleModes:
-    mode_configurations: dict[str, SensorConfiguration] | None = (
-        None  # key => Mode | value => SensorConfiguration for that mode
-    )
+    mode_configurations: dict[str, SensorConfiguration]
 
     def __init__(self, mode_configurations: dict[str, SensorConfiguration]) -> None:
         self.mode_configurations = mode_configurations

@@ -1,7 +1,9 @@
 {
   "config": {
       "abort": {
-          "already_configured": "Apparaat is reeds geconfigureerd"
+          "already_configured": "Apparaat is reeds geconfigureerd",
+          "unique_id_mismatch": "Meld je aan met het Maestro-account dat al voor deze integratie is ingesteld.",
+          "reauth_not_supported": "Opgeslagen diagnoserapporten gebruiken geen cloudwachtwoord. Opnieuw aanmelden is niet mogelijk."
       },
       "error": {
           "cannot_connect": "Verbinding mislukt",
@@ -13,6 +15,16 @@
               "data": {
                   "password": "Wachtwoord",
                   "username": "Gebruikersnaam"
+              }
+          },
+          "reauth_confirm": {
+              "title": "Opnieuw aanmelden",
+              "description": "Meld je opnieuw aan bij je Maestro-account ({username}) met je huidige wachtwoord. Je apparaten en instellingen blijven behouden.",
+              "data": {
+                  "password": "Wachtwoord"
+              },
+              "data_description": {
+                  "password": "Het huidige wachtwoord van je Maestro-account."
               }
           }
       }
@@ -27,6 +39,30 @@
       }
   },
   "exceptions": {
+    "device_removal_still_linked": {
+      "message": "Deze kachel is nog gekoppeld aan je Maestro-account. Ontkoppel hem in de officiele MCZ-app voordat je hem uit Home Assistant probeert te verwijderen."
+    },
+    "device_removal_replay_linked": {
+      "message": "Deze kachel staat nog in de geladen opgeslagen rapporten. Pas de opgeslagen rapporten aan en herlaad dit account voordat je het opnieuw probeert."
+    },
+    "device_removal_cannot_verify": {
+      "message": "Er kon niet worden gecontroleerd welke kachels aan dit account gekoppeld zijn. Het apparaat is niet verwijderd. Controleer de accountverbinding en probeer het opnieuw."
+    },
+    "account_invalid_auth": {
+      "message": "Meld je opnieuw aan bij het Maestro-account."
+    },
+    "account_cannot_connect": {
+      "message": "Er kon geen verbinding worden gemaakt met de Maestro-cloud: {error}"
+    },
+    "account_no_stoves": {
+      "message": "Er zijn geen kachels gevonden voor dit Maestro-account."
+    },
+    "command_invalid_auth": {
+      "message": "Meld je opnieuw aan bij het Maestro-account voordat deze opdracht kan worden verstuurd."
+    },
+    "command_cannot_connect": {
+      "message": "De Maestro-opdracht kon niet worden bevestigd: {error}. Controleer de status van de kachel voordat je het opnieuw probeert."
+    },
     "counters_invalid_auth": {
       "message": "Authenticatie mislukt bij het ophalen van de kachelstatistieken"
     },

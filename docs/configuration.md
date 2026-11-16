@@ -6,12 +6,20 @@
 
 Add the integration with the credentials you use for the official Maestro app. It retrieves the stoves linked to that account and creates devices with the features it recognizes.
 
-The account username identifies the integration entry. You do not need a separate entry for each stove on the same account, and adding the same account again is prevented.
+You only need to add your account once, even if it has several stoves. You cannot add the same account twice.
 
 If a stove is missing, verify that it appears under the same account in the official app, then reload the integration after making account changes. See [missing devices and entities](troubleshooting.md#devices-or-entities-are-missing).
 
 > [!NOTE]
-> The documented setup uses the Maestro cloud. There is no local IP address, MQTT broker, or Bluetooth pairing step in this cloud setup.
+> This setup requires the Maestro cloud and an internet connection. You do not need the stove's local network address or Bluetooth pairing.
+
+### Remove an unlinked stove
+
+First unlink the stove from your account in the official app. In Home Assistant, go to **Settings > Devices & services > Devices**, open the stove, and choose **Delete** from its menu.
+
+The integration checks the account's current stove list before allowing removal. A linked stove cannot be removed this way, even when it is offline; the error asks you to unlink it in the official app first. If the account needs you to sign in again or its stove list cannot be checked, the error explains that instead and the device stays in Home Assistant.
+
+Removal is manual, not automatic. After removal, the integration reloads that account, briefly interrupting its other stove entities. For accounts replaying saved diagnostic reports, change the saved files and reload the account before removing an old device.
 
 ## Polling interval
 
@@ -25,28 +33,28 @@ Saving options reloads the integration. A brief interruption while it reloads is
 
 | Version | Default | Accepted range |
 |---|---|---|
-| `1.0.5` stable | 30 seconds | 30-300 seconds |
-| `1.0.6` / current `main` | 10 seconds | 10-300 seconds |
+| `1.0.5` (older release) | 30 seconds | 30-300 seconds |
+| Current version | 10 seconds | 10-300 seconds |
 
 Existing saved options can override the default. The options form constrains values to the range supported by that version.
 
 A shorter interval increases cloud requests; it does not make the stove respond instantly. Start with your version's default and increase it if you do not need frequent updates.
 
-The optional [consumption history sensor](entities.md#consumption-history) refreshes at startup and at 00:01 in the stove's timezone, retrying hourly while yesterday's reading is missing or a request fails. Changing the live polling interval does not affect these requests.
+The [lifetime statistics](entities.md#lifetime-statistics) and [consumption history](entities.md#consumption-history) have separate update schedules. Changing the live polling interval does not affect them.
 
 ## Updates and response time
 
-This integration reads cloud-reported state rather than a direct local feed. A command and its resulting state update are separate events.
+This integration reads updates through the cloud, not directly from the stove.
 
-After a setting is changed, the current cloud implementation waits about three seconds before refreshing, then waits about three more seconds and refreshes again. Network requests add to that time. A displayed value may therefore lag behind the action, and a normal polling interval is not a guarantee of end-to-end response time.
+After changing a setting, allow several seconds for the displayed value to update. Slow internet or cloud responses can add to the delay. A shorter polling interval does not guarantee a faster response to commands.
 
 Allow the state to settle before repeating a command. If the official app also shows stale information, investigate the stove or cloud connection rather than only reducing the polling interval.
 
 ## Operating modes and controls
 
-Use the climate entity for power and target temperature, and select a preset only if your stove exposes it. **Auto is a stove preset, not a separate Home Assistant HVAC mode.** The climate entity uses **Heat** and **Off**.
+Use the climate control for power and target temperature, and select a preset only if it is available for your stove. **Auto is a stove preset**; the main heating choices are **Heat** and **Off**.
 
-Fan controls can change with the stove's operating mode. A fan that is unavailable in one mode may be available in another; available speeds and presets come from that mode's cloud configuration.
+Fan controls can change with the stove's operating mode. A fan that is unavailable in one mode may be available in another, with different speeds or presets.
 
 The stove's **Timer** switch enables or disables its existing timer function. It is not a schedule editor. Continue using the official app for schedule creation and for settings that are not exposed in Home Assistant.
 
@@ -59,9 +67,9 @@ Both sides of the cloud connection matter:
 | **Cloud Connection Status** | Whether the integration considers its connection to the Maestro cloud authenticated and usable |
 | **Device Connection Status** | Whether the cloud reports the stove connected |
 
-These are last-reported indicators, not independent live network probes. The device indicator can itself be unavailable when the integration cannot reach the cloud. See [connection troubleshooting](troubleshooting.md#entities-are-unavailable-or-values-stop-updating).
+These indicators show the last reported connection status, which may be out of date. The device indicator can itself be unavailable when the integration cannot reach the cloud. See [connection troubleshooting](troubleshooting.md#entities-are-unavailable-or-values-stop-updating).
 
-Cloud outages, internet problems, or changes to the Maestro service can interrupt control. Offline operation and complete parity with the official app are not guaranteed.
+Cloud outages, internet problems, or changes to the Maestro service can interrupt control. This setup cannot control the stove without the cloud, and not every official app feature is available.
 
 ---
 

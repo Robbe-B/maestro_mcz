@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
 from .maestro.model_value_reader import get_response_value
@@ -16,12 +15,13 @@ from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
-class MczSelectEntity(CoordinatorEntity, SelectEntity):
+class MczSelectEntity(CoordinatorEntity[MczAccountCoordinator], SelectEntity):
     """Select entity for Maestro MCZ stoves."""
 
     _attr_has_entity_name = True
     _attr_current_option = None
-    _selector_configuration: SensorConfiguration | None = None
+    _selector_configuration: SensorConfiguration
+    _attr_options_mappings: dict[str, int | str]
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_selector.sensor_get_name}"
         )
-        self._attr_icon = supported_selector.icon
+        self._attr_translation_key = supported_selector.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_selector.sensor_get_name
         self._supported_selector = supported_selector
@@ -97,7 +97,7 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
         return self._stove.is_connected
 
     @property
-    def current_option(self):
+    def current_option(self) -> str | None:
         return self._attr_current_option
 
     async def async_select_option(self, option: str) -> None:
@@ -146,9 +146,9 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
                     self._attr_options_mappings
                     and current_value in self._attr_options_mappings
                 ):
-                    self._attr_current_option = self._attr_options_mappings[
-                        current_value
-                    ]
+                    mapped_value = self._attr_options_mappings[current_value]
+                    assert isinstance(mapped_value, str)
+                    self._attr_current_option = mapped_value
                 else:
                     self._attr_current_option = current_value
             else:
@@ -159,12 +159,12 @@ class MczSelectEntity(CoordinatorEntity, SelectEntity):
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up select entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
-    entities = []
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveSelectEntities(coordinator, stove))
     async_add_entities(entities)
@@ -173,9 +173,9 @@ async def async_setup_entry(
 def _getStoveSelectEntities(
     coordinator: MczAccountCoordinator,
     stove: MaestroStove,
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the select entities to create for this stove."""
-    entities = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     supported_pots = stove.get_supported_sensor_configurations(
         model_definitions.supported_pots
     )

@@ -1,15 +1,20 @@
 """Supported and legacy MCZ feature definitions."""
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.components.number import NumberDeviceClass
+from homeassistant.components.number import NumberDeviceClass, NumberMode
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfTemperature, UnitOfTime
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import (
+    REVOLUTIONS_PER_MINUTE,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 
 from .models_types import (
     BinarySensorMczConfigItem,
     ButtonMczConfigItem,
     ClimateFunctionModeMczConfigItem,
+    CounterMczConfigItem,
     DateTimeMczConfigItem,
     FanMczConfigItem,
     MczResponseSource,
@@ -112,6 +117,7 @@ supported_thermostats = [
 supported_pots = [
     PotMczConfigItem(
         user_friendly_name="Manual Power",
+        translation_key="manual_power",
         sensor_get_name="set_pot_man",
         sensor_set_name=None,
         sensor_set_config_name="Set_pot",
@@ -221,7 +227,7 @@ supported_switches = [
         sensor_get_name="att_eco",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
-        icon="mdi:leaf",
+        translation_key="start_stop",
         category=None,
         enabled_by_default=True,
         sensor_set_name_m1="m1_att_eco",
@@ -232,13 +238,12 @@ supported_switches = [
         sensor_get_name="crono_enabled",
         sensor_set_name=None,
         sensor_set_config_name="Crono",
-        icon="mdi:timer",
+        translation_key="timer",
         category=None,
         enabled_by_default=True,
         sensor_set_name_m1="m1_crono_enabled",
         sensor_set_name_m2="att",
     ),
-    # SwitchMczConfigItem("Silent Mode", "silent_enabled", "m1_silent_enabled", "set_v1", "mdi:fan-off", None, True),  #for first generation M1+
 ]
 
 supported_numbers = [
@@ -248,8 +253,8 @@ supported_numbers = [
         sensor_get_name="rit_usc_standby",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
-        mode="auto",
-        icon="mdi:fire",
+        mode=NumberMode.AUTO,
+        translation_key="ignition_delay",
         unit=UnitOfTime.SECONDS,
         category=EntityCategory.CONFIG,
         device_class=None,
@@ -262,8 +267,8 @@ supported_numbers = [
         sensor_get_name="rit_ing_standby",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
-        mode="auto",
-        icon="mdi:fire-off",
+        mode=NumberMode.AUTO,
+        translation_key="shutdown_delay",
         unit=UnitOfTime.SECONDS,
         category=EntityCategory.CONFIG,
         device_class=None,
@@ -276,8 +281,8 @@ supported_numbers = [
         sensor_get_name="ist_eco_neg_amb",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
-        mode="auto",
-        icon="mdi:thermometer-minus",
+        mode=NumberMode.AUTO,
+        translation_key="start_stop_negative_hysteresis",
         unit=UnitOfTemperature.CELSIUS,
         category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.TEMPERATURE,
@@ -290,8 +295,8 @@ supported_numbers = [
         sensor_get_name="ist_eco_pos_amb",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
-        mode="auto",
-        icon="mdi:thermometer-plus",
+        mode=NumberMode.AUTO,
+        translation_key="start_stop_positive_hysteresis",
         unit=UnitOfTemperature.CELSIUS,
         category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.TEMPERATURE,
@@ -305,8 +310,8 @@ supported_numbers = [
         sensor_get_name="ist_neg_amb",
         sensor_set_name=None,
         sensor_set_config_name="Ambiente",
-        mode="auto",
-        icon="mdi:thermometer-minus",
+        mode=NumberMode.AUTO,
+        translation_key="ambient_negative_hysteresis",
         unit=UnitOfTemperature.CELSIUS,
         category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.TEMPERATURE,
@@ -319,8 +324,8 @@ supported_numbers = [
         sensor_get_name="ist_pos_amb",
         sensor_set_name=None,
         sensor_set_config_name="Ambiente",
-        mode="auto",
-        icon="mdi:thermometer-plus",
+        mode=NumberMode.AUTO,
+        translation_key="ambient_positive_hysteresis",
         unit=UnitOfTemperature.CELSIUS,
         category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.TEMPERATURE,
@@ -334,8 +339,8 @@ supported_numbers = [
         sensor_get_name="temp_min_circ_on",
         sensor_set_name=None,
         sensor_set_config_name="temp_avanzate",
-        mode="auto",
-        icon="mdi:pump",
+        mode=NumberMode.AUTO,
+        translation_key="circulation_pump_minimum_temperature",
         unit=UnitOfTemperature.CELSIUS,
         category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.TEMPERATURE,
@@ -352,7 +357,7 @@ supported_selectors = [
         sensor_get_name="toni_buzz",
         sensor_set_name=None,
         sensor_set_config_name="Toni",
-        icon="mdi:volume-high",
+        translation_key="tones",
         category=EntityCategory.CONFIG,
         enabled_by_default=True,
         value_mappings={"0": "Silent", "1": "Normal", "2": "High"},
@@ -383,7 +388,7 @@ supported_date_times = [
         "am_pm",
         "am_pm",
         "Orodatario",
-        "mdi:calendar-clock",
+        "date_time",
         EntityCategory.CONFIG,
         False,
         MczStoveModelGeneration.M2_PLUS,
@@ -409,7 +414,7 @@ supported_date_times = [
         None,
         None,
         "Orodatario",
-        "mdi:calendar-clock",
+        "date_time",
         EntityCategory.CONFIG,
         False,
         MczStoveModelGeneration.M1,
@@ -421,7 +426,7 @@ supported_buttons = [
         user_friendly_name="Alarm Reset",
         sensor_set_name=None,
         sensor_set_config_name="Reset Allarme",
-        icon="mdi:auto-fix",
+        translation_key="alarm_reset",
         category=EntityCategory.CONFIG,
         enabled_by_default=True,
         sensor_set_name_m1="m1_com_reset_allarm",
@@ -451,7 +456,7 @@ supported_time_sync_buttons = [
         "am_pm",
         "am_pm",
         "Orodatario",
-        "mdi:calendar-clock",
+        "system_date_time",
         EntityCategory.CONFIG,
         True,
         MczStoveModelGeneration.M2_PLUS,
@@ -477,7 +482,7 @@ supported_time_sync_buttons = [
         None,
         None,
         "Orodatario",
-        "mdi:calendar-clock",
+        "system_date_time",
         EntityCategory.CONFIG,
         True,
         MczStoveModelGeneration.M1,
@@ -488,7 +493,7 @@ supported_binary_sensors = [
     BinarySensorMczConfigItem(
         "Alarm",
         "is_in_error",
-        "mdi:alert",
+        "alarm",
         EntityCategory.DIAGNOSTIC,
         BinarySensorDeviceClass.PROBLEM,
         True,
@@ -498,7 +503,7 @@ supported_binary_sensors = [
     BinarySensorMczConfigItem(
         user_friendly_name="Pellet Level Low",
         sensor_get_name="sens_liv_pel",
-        icon="mdi:gauge-low",
+        translation_key="pellet_level_low",
         category=None,
         device_class=BinarySensorDeviceClass.PROBLEM,
         enabled_by_default=True,
@@ -515,7 +520,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Last Alarm Code",
         "last_alarm",
-        "mdi:alert",
+        "last_alarm",
         None,
         None,
         EntityCategory.DIAGNOSTIC,
@@ -527,7 +532,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Current State",
         "state",
-        "mdi:state-machine",
+        "current_state",
         None,
         None,
         None,
@@ -538,7 +543,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Ambient Temperature",
         "temp_amb_install",
-        "mdi:thermometer",
+        None,
         UnitOfTemperature.CELSIUS,
         None,
         None,
@@ -553,7 +558,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Water Temperature",
         "temp_caldaia",
-        "mdi:water-thermometer",
+        "water_temperature",
         UnitOfTemperature.CELSIUS,
         None,
         None,
@@ -568,7 +573,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Puffer Temperature",
         "temp_puffer",
-        "mdi:water-thermometer",
+        "puffer_temperature",
         UnitOfTemperature.CELSIUS,
         None,
         None,
@@ -580,7 +585,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Wi-Fi Probe Temperature",
         "sondaWifi",
-        "mdi:thermometer",
+        None,
         UnitOfTemperature.CELSIUS,
         None,
         None,
@@ -592,7 +597,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Current Mode",
         "mode",
-        "mdi:tune",
+        "current_mode",
         None,
         None,
         None,
@@ -604,7 +609,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Exhaust Temperature",
         "temp_fumi",
-        "mdi:thermometer",
+        None,
         UnitOfTemperature.CELSIUS,
         None,
         EntityCategory.DIAGNOSTIC,
@@ -615,7 +620,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Board Temperature",
         "temp_scheda",
-        "mdi:thermometer",
+        None,
         UnitOfTemperature.CELSIUS,
         None,
         EntityCategory.DIAGNOSTIC,
@@ -626,7 +631,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Exhaust Fan Speed",
         "vel_real_ventola_fumi",
-        "mdi:fan-chevron-up",
+        "exhaust_fan_speed",
         REVOLUTIONS_PER_MINUTE,
         None,
         EntityCategory.DIAGNOSTIC,
@@ -637,7 +642,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Transport Screw Speed",
         "vel_real_coclea",
-        "mdi:screw-lag",
+        "transport_screw_speed",
         REVOLUTIONS_PER_MINUTE,
         None,
         EntityCategory.DIAGNOSTIC,
@@ -648,7 +653,7 @@ supported_sensors = [
     SensorMczConfigItem(
         "Next Maintenance",
         "ore_prox_manut",
-        "mdi:wrench-clock",
+        "next_maintenance",
         UnitOfTime.HOURS,
         0,
         EntityCategory.DIAGNOSTIC,
@@ -657,4 +662,46 @@ supported_sensors = [
         True,
         value_response_source=MczResponseSource.STATUS,
     ),  # SensorDeviceClass.DURATION
+]
+
+supported_counters = [
+    CounterMczConfigItem(
+        user_friendly_name="Ignition count",
+        sensor_get_name="num_acc",
+        translation_key="ignition_count",
+        value_sources={"num_acc": 1},
+        display_precision=0,
+        category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    CounterMczConfigItem(
+        user_friendly_name="Total operating time",
+        sensor_get_name="total_operating_hours",
+        translation_key="total_operating_time",
+        value_sources={"cont_tot_h_lavoro": 1, "cont_tot_t_lavoro": 3600},
+        unit=UnitOfTime.HOURS,
+        display_precision=0,
+        category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    *(
+        CounterMczConfigItem(
+            user_friendly_name=f"Operating time at power {power}",
+            sensor_get_name=f"cont_tot_t_lav{power}",
+            translation_key=f"operating_time_power_{power}",
+            value_sources={
+                f"cont_tot_t_lav{power}": {
+                    MczStoveModelGeneration.M1: 3600,
+                    MczStoveModelGeneration.M2_PLUS: 1,
+                }
+            },
+            unit=UnitOfTime.HOURS,
+            display_precision=0,
+            category=EntityCategory.DIAGNOSTIC,
+            device_class=SensorDeviceClass.DURATION,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+        )
+        for power in range(1, 6)
+    ),
 ]

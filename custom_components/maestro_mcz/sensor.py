@@ -16,13 +16,13 @@ from .coordinator import (
 )
 from .maestro import MaestroStove
 from .maestro.model_value_reader import get_counter_value, get_response_value
-from .maestro.models import counter_definitions, model_definitions, models_types
+from .maestro.models import model_definitions, models_types
 
 PARALLEL_UPDATES = 0
 
 
 class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
-    """Expose cloud lifetime statistics without depending on live connectivity."""
+    """Expose lifetime statistics while the cloud, but not necessarily the stove, is online."""
 
     _attr_has_entity_name = True
 
@@ -30,9 +30,11 @@ class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
         self,
         coordinator: MczCountersCoordinator,
         supported_counter: models_types.CounterMczConfigItem,
+        account_coordinator: MczAccountCoordinator,
     ) -> None:
         """Associate each supported counter with its existing stove device."""
         super().__init__(coordinator)
+        self._account_coordinator = account_coordinator
         self._supported_counter = supported_counter
         self._attr_translation_key = supported_counter.translation_key
         if supported_counter.translation_key is None:
@@ -41,7 +43,6 @@ class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
         self._attr_suggested_display_precision = supported_counter.display_precision
         self._attr_device_class = supported_counter.device_class
         self._attr_state_class = supported_counter.state_class
-        self._attr_icon = supported_counter.icon
         self._attr_entity_category = supported_counter.category
         self._attr_entity_registry_enabled_default = (
             supported_counter.enabled_by_default
@@ -50,6 +51,15 @@ class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
             f"{coordinator.stove.UniqueCode}-{supported_counter.sensor_get_name}"
         )
         self._attr_device_info = coordinator.stove.get_device_info()
+
+    async def async_added_to_hass(self) -> None:
+        """Track cloud availability without requesting the hourly counters again."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._account_coordinator.async_add_listener(
+                self._handle_coordinator_update
+            )
+        )
 
     @property
     def native_value(self) -> int | float | None:
@@ -65,8 +75,12 @@ class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Treat a missing counter as unavailable, never as a zero reading."""
-        return super().available and self.native_value is not None
+        """Require cloud access and a successful, nonmissing counter reading."""
+        return (
+            self._account_coordinator.last_update_success
+            and super().available
+            and self.native_value is not None
+        )
 
 
 class MczYesterdayConsumptionSensor(
@@ -80,18 +94,33 @@ class MczYesterdayConsumptionSensor(
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_suggested_display_precision = 2
 
-    def __init__(self, coordinator: MczConsumptionCoordinator) -> None:
+    def __init__(
+        self,
+        coordinator: MczConsumptionCoordinator,
+        account_coordinator: MczAccountCoordinator,
+    ) -> None:
         """Associate history with the same stove as its live controls."""
         super().__init__(coordinator)
+        self._account_coordinator = account_coordinator
         self._attr_unique_id = f"{coordinator.stove.UniqueCode}-consumption_yesterday"
         self._attr_device_info = coordinator.stove.get_device_info()
+
+    async def async_added_to_hass(self) -> None:
+        """Track cloud availability without requesting dated history again."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._account_coordinator.async_add_listener(
+                self._handle_coordinator_update
+            )
+        )
 
     @property
     def available(self) -> bool:
         """Require yesterday's history, but not a stove currently online."""
         data = self.coordinator.data
         return (
-            super().available
+            self._account_coordinator.last_update_success
+            and super().available
             and data is not None
             and data.date == self.coordinator.yesterday
             and data.value is not None
@@ -117,11 +146,11 @@ class MczYesterdayConsumptionSensor(
         }
 
 
-class MczSensorEntity(CoordinatorEntity, SensorEntity):
+class MczSensorEntity(CoordinatorEntity[MczAccountCoordinator], SensorEntity):
     """Sensor entity for Maestro MCZ stoves."""
 
     _attr_has_entity_name = True
-    _attr_native_value = None
+    _attr_native_value: bool | int | float | str | None = None
 
     def __init__(
         self,
@@ -139,7 +168,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         self._attr_device_class = supported_sensor.device_class
         self._attr_state_class = supported_sensor.state_class
         self._attr_unique_id = f"{stove_unique_code}-{supported_sensor.sensor_get_name}"
-        self._attr_icon = supported_sensor.icon
+        self._attr_translation_key = supported_sensor.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_sensor.sensor_get_name
         self._supported_sensor = supported_sensor
@@ -158,7 +187,7 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
         return self._stove.is_connected
 
     @property
-    def native_value(self):
+    def native_value(self) -> bool | int | float | str | None:
         return self._attr_native_value
 
     @callback
@@ -174,7 +203,11 @@ class MczSensorEntity(CoordinatorEntity, SensorEntity):
             self._stove.model_generation,
         )
 
-        if self._api_value_renames is not None and value in self._api_value_renames:
+        if (
+            self._api_value_renames is not None
+            and isinstance(value, str)
+            and value in self._api_value_renames
+        ):
             self._attr_native_value = self._api_value_renames[value]
         else:
             self._attr_native_value = value
@@ -186,7 +219,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up sensor entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveSensorEntities(coordinator, stove))
@@ -207,7 +240,7 @@ async def async_setup_entry(
                 and history.data.value is not None
             ):
                 discovered.add(unique_code)
-                new_entities.append(MczYesterdayConsumptionSensor(history))
+                new_entities.append(MczYesterdayConsumptionSensor(history, coordinator))
         if new_entities:
             async_add_entities(new_entities)
 
@@ -228,7 +261,8 @@ async def async_setup_entry(
         for unique_code, counters in coordinator.counters_coordinators.items():
             if not counters.last_update_success or counters.data is None:
                 continue
-            for definition in counter_definitions.supported_counters:
+            for definition in model_definitions.supported_counters:
+                assert definition.sensor_get_name is not None
                 identity = (unique_code, definition.sensor_get_name)
                 if identity in discovered_counters:
                     continue
@@ -241,7 +275,9 @@ async def async_setup_entry(
                     is not None
                 ):
                     discovered_counters.add(identity)
-                    new_entities.append(MczCounterSensor(counters, definition))
+                    new_entities.append(
+                        MczCounterSensor(counters, definition, coordinator)
+                    )
         if new_entities:
             async_add_entities(new_entities)
 
@@ -257,9 +293,9 @@ async def async_setup_entry(
 def _getStoveSensorEntities(
     coordinator: MczAccountCoordinator,
     stove: MaestroStove,
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the sensor entities to create for this stove."""
-    entities = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     supported_sensors = filter(
         lambda supported_sensor: (
             get_response_value(

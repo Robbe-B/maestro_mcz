@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
 from .maestro.model_value_reader import get_response_value
 from .maestro.models import model_definitions, models_types
 
 
-class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
+class MczSwitchEntity(CoordinatorEntity[MczAccountCoordinator], SwitchEntity):
     """Switch entity for Maestro MCZ stoves."""
 
     _attr_has_entity_name = True
@@ -31,14 +31,14 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         stove_unique_code: str,
         supported_switch: models_types.SwitchMczConfigItem,
         matching_switch_configuration: SensorConfiguration,
-    ):
+    ) -> None:
         """Initialize the switch entity."""
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
         self._attr_name = supported_switch.user_friendly_name
         self._attr_unique_id = f"{stove_unique_code}-{supported_switch.sensor_get_name}"
-        self._attr_icon = supported_switch.icon
+        self._attr_translation_key = supported_switch.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_switch.sensor_get_name
         self._supported_switch = supported_switch
@@ -58,10 +58,10 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         return self._stove.is_connected
 
     @property
-    def is_on(self):
+    def is_on(self) -> bool | None:
         return self._attr_is_on
 
-    async def async_turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs: Any) -> None:
         """Set the switch on."""
         if self._switch_configuration is not None:
             await self._stove.activateProgram(
@@ -71,7 +71,7 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
             )
             await self.coordinator.update_data_after_set()
 
-    async def async_turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Set the switch off."""
         if self._switch_configuration is not None:
             await self._stove.activateProgram(
@@ -87,21 +87,23 @@ class MczSwitchEntity(CoordinatorEntity, SwitchEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        self._attr_is_on = get_response_value(
+        value = get_response_value(
             self._supported_switch,
             self._stove.State,
             self._stove.Status,
             self._stove.model_generation,
         )
+        assert value is None or isinstance(value, bool)
+        self._attr_is_on = value
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up switch entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveSwitchEntities(coordinator, stove))
@@ -111,9 +113,9 @@ async def async_setup_entry(
 def _getStoveSwitchEntities(
     coordinator: MczAccountCoordinator,
     stove: MaestroStove,
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the switch entities to create for this stove."""
-    entities = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     supported_switches = stove.get_supported_sensor_configurations(
         model_definitions.supported_switches
     )

@@ -13,16 +13,16 @@ from .coordinator import MczAccountCoordinator, MczConfigEntry
 
 CONFIG_FIELDS_TO_REDACT = [CONF_USERNAME, CONF_PASSWORD]
 DATA_FIELDS_TO_REDACT = ["UniqueCode", "sm_sn", "ssid_wifi", "pwd_wifi", "mac_wifi"]
-OPTION_FIELDS_TO_REDACT = []
+OPTION_FIELDS_TO_REDACT: list[str] = []
 
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, config_entry: MczConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    coordinator: MczAccountCoordinator = config_entry.runtime_data
+    coordinator: MczAccountCoordinator = config_entry.runtime_data.coordinator
 
-    diagnostics_data = {
+    diagnostics_data: dict[str, Any] = {
         "config_entry_data": async_redact_data(
             dict(config_entry.data), CONFIG_FIELDS_TO_REDACT
         ),
@@ -31,6 +31,9 @@ async def async_get_config_entry_diagnostics(
     }
 
     for stove in coordinator.stoves.values():
+        assert stove.State is not None
+        assert stove.Status is not None
+        assert stove.Model is not None
         diagnostics_data["devices"][stove.Name] = async_redact_data(
             {
                 "coordinator.stove_data": {
@@ -59,12 +62,18 @@ async def async_get_config_entry_diagnostics(
             }
         counters = coordinator.counters_coordinators.get(stove.UniqueCode)
         if counters is not None:
-            data = counters.data
+            counter_data = counters.data
             diagnostics_data["devices"][stove.Name]["counters"] = {
                 "last_update_success": counters.last_update_success,
-                "values": dataclasses.asdict(data.values) if data is not None else None,
+                "values": (
+                    dataclasses.asdict(counter_data.values)
+                    if counter_data is not None
+                    else None
+                ),
                 "last_successful_update": (
-                    data.last_updated.isoformat() if data is not None else None
+                    counter_data.last_updated.isoformat()
+                    if counter_data is not None
+                    else None
                 ),
             }
     return diagnostics_data

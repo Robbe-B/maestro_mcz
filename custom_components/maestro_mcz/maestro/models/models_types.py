@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from enum import Enum
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.components.number import NumberDeviceClass
+from homeassistant.components.number import NumberDeviceClass, NumberMode
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 
 
 class MczStoveModelGeneration(Enum):
@@ -46,8 +46,7 @@ class MczConfigItem:
         None  # key => Mode | value => Configuration Name
     )
     user_friendly_name: str | None = None
-    icon: str | None = None
-    unavailable_icon: str | None = None
+    translation_key: str | None = None
     enabled_by_default: bool = True
     category: EntityCategory | None = None
     value_response_source: (
@@ -103,7 +102,6 @@ class PowerSettingMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
-        self.icon = "mdi:power"
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.fase_sensor_get_name = fase_sensor_get_name
@@ -142,7 +140,6 @@ class ClimateFunctionModeMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
-        self.icon = "mdi:thermostat-cog"
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.enabled_by_default = enabled_by_default
@@ -177,7 +174,6 @@ class ThermostatMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
-        self.icon = "mdi:thermostat"
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.enabled_by_default = enabled_by_default
@@ -219,8 +215,6 @@ class FanMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
-        self.icon = "mdi:fan"
-        self.unavailable_icon = "mdi:fan-off"
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.mode_to_configuration_name_mapping = mode_to_configuration_name_mapping  # means we want to find the sensor name in the different mode configs
@@ -244,7 +238,7 @@ class ButtonMczConfigItem(MczConfigItem):
         user_friendly_name: str,
         sensor_set_name: str | None,
         sensor_set_config_name: str,
-        icon: str,
+        translation_key: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
         stove_model_generation: MczStoveModelGeneration | None = None,
@@ -258,7 +252,7 @@ class ButtonMczConfigItem(MczConfigItem):
             sensor_set_name_m1,
             sensor_set_name_m2,
         )
-        self.icon = icon
+        self.translation_key = translation_key
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.category = category
@@ -277,7 +271,7 @@ class SwitchMczConfigItem(MczConfigItem):
         sensor_get_name: str,
         sensor_set_name: str | None,
         sensor_set_config_name: str,
-        icon: str,
+        translation_key: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
         stove_model_generation: MczStoveModelGeneration | None = None,
@@ -292,7 +286,7 @@ class SwitchMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
-        self.icon = icon
+        self.translation_key = translation_key
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.category = category
@@ -305,7 +299,7 @@ class NumberMczConfigItem(MczConfigItem):
 
     device_class: NumberDeviceClass | None = None
     unit: str | None = None
-    mode: str = "auto"  # 'box' or 'slider'
+    mode: NumberMode = NumberMode.AUTO
 
     def __init__(
         self,
@@ -313,8 +307,8 @@ class NumberMczConfigItem(MczConfigItem):
         sensor_get_name: str,
         sensor_set_name: str | None,
         sensor_set_config_name: str,
-        mode: str,
-        icon: str,
+        mode: NumberMode,
+        translation_key: str,
         unit: str | None,
         category: EntityCategory | None,
         device_class: NumberDeviceClass | None,
@@ -333,7 +327,7 @@ class NumberMczConfigItem(MczConfigItem):
         )
         self.sensor_get_name = sensor_get_name
         self.mode = mode
-        self.icon = icon
+        self.translation_key = translation_key
         self.unit = unit
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
@@ -358,7 +352,7 @@ class SelectMczConfigItem(MczConfigItem):
         sensor_get_name: str,
         sensor_set_name: str | None,
         sensor_set_config_name: str,
-        icon: str,
+        translation_key: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
         stove_model_generation: MczStoveModelGeneration | None = None,
@@ -375,7 +369,7 @@ class SelectMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
-        self.icon = icon
+        self.translation_key = translation_key
         self.category = category
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
@@ -435,7 +429,7 @@ class DateTimeMczConfigItem(MczConfigItem):
         sensor_get_name_am_pm: str | None,
         sensor_set_name_am_pm: str | None,
         sensor_set_config_name: str,
-        icon: str,
+        translation_key: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
         stove_model_generation: MczStoveModelGeneration,
@@ -451,7 +445,7 @@ class DateTimeMczConfigItem(MczConfigItem):
         self.sensor_get_name_minute = sensor_get_name_minute
         self.sensor_get_name_second = sensor_get_name_second
         self.sensor_get_name_am_pm = sensor_get_name_am_pm
-        self.icon = icon
+        self.translation_key = translation_key
         self.category = category
         self.sensor_set_name = sensor_set_name
         self.sensor_set_name_weekday = sensor_set_name_weekday
@@ -492,7 +486,7 @@ class TimeSyncButtonMczConfigItem(DateTimeMczConfigItem):
         sensor_get_name_am_pm: str | None,
         sensor_set_name_am_pm: str | None,
         sensor_set_config_name: str,
-        icon: str,
+        translation_key: str,
         category: EntityCategory | None,
         enabled_by_default: bool,
         stove_model_generation: MczStoveModelGeneration,
@@ -519,7 +513,7 @@ class TimeSyncButtonMczConfigItem(DateTimeMczConfigItem):
             sensor_get_name_am_pm,
             sensor_set_name_am_pm,
             sensor_set_config_name,
-            icon,
+            translation_key,
             category,
             enabled_by_default,
             stove_model_generation,
@@ -537,6 +531,7 @@ class PotMczConfigItem(SelectMczConfigItem):
         sensor_set_name: str | None,
         sensor_set_config_name: str,
         enabled_by_default: bool,
+        translation_key: str,
         stove_model_generation: MczStoveModelGeneration | None = None,
         sensor_set_name_m1: str | None = None,
         sensor_set_name_m2: str | None = None,
@@ -547,7 +542,7 @@ class PotMczConfigItem(SelectMczConfigItem):
             sensor_get_name,
             sensor_set_name,
             sensor_set_config_name,
-            "mdi:fire",
+            translation_key,
             None,
             enabled_by_default,
             stove_model_generation,
@@ -570,7 +565,7 @@ class BinarySensorMczConfigItem(MczConfigItem):
         self,
         user_friendly_name: str,
         sensor_get_name: str,
-        icon: str,
+        translation_key: str,
         category: EntityCategory | None,
         device_class: BinarySensorDeviceClass | None,
         enabled_by_default: bool,
@@ -590,7 +585,7 @@ class BinarySensorMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
-        self.icon = icon
+        self.translation_key = translation_key
         self.category = category
         self.device_class = device_class
         self.enabled_by_default = enabled_by_default
@@ -615,7 +610,7 @@ class SensorMczConfigItem(MczConfigItem):
         self,
         user_friendly_name: str,
         sensor_get_name: str,
-        icon: str,
+        translation_key: str | None,
         unit: str | None,
         display_precision: int | None,
         category: EntityCategory | None,
@@ -630,7 +625,7 @@ class SensorMczConfigItem(MczConfigItem):
         """Create a 'Sensor' MCZ config item."""
         super().__init__(user_friendly_name, None)
         self.sensor_get_name = sensor_get_name
-        self.icon = icon
+        self.translation_key = translation_key
         self.unit = unit
         self.display_precision = display_precision
         self.category = category
@@ -646,4 +641,3 @@ class CounterMczConfigItem(SensorMczConfigItem):
     """Describe a counter using ordered response fields and their unit divisors."""
 
     value_sources: dict[str, int | dict[MczStoveModelGeneration, int]]
-    translation_key: str | None = None

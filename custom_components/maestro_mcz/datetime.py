@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 
 from homeassistant.components.datetime import DateTimeEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import homeassistant.util.dt as dt_util
 
-from .coordinator import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .maestro import MaestroStove
 from .maestro.controller.requests.activate_program import ProgramCommand
 from .maestro.controller.responses.model import SensorConfiguration
@@ -20,7 +20,7 @@ from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
-class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
+class MczDateTimeEntity(CoordinatorEntity[MczAccountCoordinator], DateTimeEntity):
     """Representation of a date/time entity."""
 
     _attr_has_entity_name = True
@@ -28,7 +28,7 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
     _attr_am_pm = None
     _attr_weekday = None
 
-    _supported_date_time_sensor: models_types.DateTimeMczConfigItem | None = None
+    _supported_date_time_sensor: models_types.DateTimeMczConfigItem
     _date_time_configuration: SensorConfiguration | None = None
 
     _sensor_configuration_weekday: SensorConfiguration | None = None
@@ -55,7 +55,7 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_date_time.sensor_set_name}"
         )
-        self._attr_icon = supported_date_time.icon
+        self._attr_translation_key = supported_date_time.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_date_time.sensor_set_name
         self.entity_registry_enabled_default = supported_date_time.enabled_by_default
@@ -89,7 +89,7 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
 
     def set_date_time_configuration(
         self, matching_date_time_configuration: SensorConfiguration
-    ):
+    ) -> None:
         self._date_time_configuration = matching_date_time_configuration
 
         if self._supported_date_time_sensor.sensor_set_config_name is not None:
@@ -304,6 +304,27 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
         self._handle_coordinator_update_internal()
         self.async_write_ha_state()
 
+    def _read_clock_field(
+        self, configuration: SensorConfiguration | None, field_name: str | None
+    ) -> int | None:
+        """Read a supported calendar field without inventing missing clock values."""
+        if configuration is None:
+            return None
+        assert field_name is not None
+        if not hasattr(self._stove.Status, field_name):
+            return None
+        # Calendar readings are integers; AM/PM is the one boolean (an int subtype).
+        return cast(
+            int | None,
+            get_response_value(
+                self._supported_date_time_sensor,
+                self._stove.State,
+                self._stove.Status,
+                self._stove.model_generation,
+                field_name,
+            ),
+        )
+
     def _handle_coordinator_update_internal(self) -> None:
 
         weekday: int | None = None
@@ -316,94 +337,41 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
         am_pm: bool | None = None
 
         if self._supported_date_time_sensor is not None:
-            if self._sensor_configuration_weekday is not None and hasattr(
-                self._stove.Status,
+            weekday = self._read_clock_field(
+                self._sensor_configuration_weekday,
                 self._supported_date_time_sensor.sensor_get_name_weekday,
-            ):
-                weekday = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
-                    self._supported_date_time_sensor.sensor_get_name_weekday,
-                )
-            if self._sensor_configuration_year is not None and hasattr(
-                self._stove.Status,
+            )
+            year = self._read_clock_field(
+                self._sensor_configuration_year,
                 self._supported_date_time_sensor.sensor_get_name_year,
-            ):
-                year = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
-                    self._supported_date_time_sensor.sensor_get_name_year,
-                )
-            if self._sensor_configuration_month is not None and hasattr(
-                self._stove.Status,
+            )
+            month = self._read_clock_field(
+                self._sensor_configuration_month,
                 self._supported_date_time_sensor.sensor_get_name_month,
-            ):
-                month = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
-                    self._supported_date_time_sensor.sensor_get_name_month,
-                )
-            if self._sensor_configuration_day is not None and hasattr(
-                self._stove.Status,
+            )
+            day = self._read_clock_field(
+                self._sensor_configuration_day,
                 self._supported_date_time_sensor.sensor_get_name_day,
-            ):
-                day = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
-                    self._supported_date_time_sensor.sensor_get_name_day,
-                )
-            if self._sensor_configuration_hour is not None and hasattr(
-                self._stove.Status,
+            )
+            hour = self._read_clock_field(
+                self._sensor_configuration_hour,
                 self._supported_date_time_sensor.sensor_get_name_hour,
-            ):
-                hour = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
-                    self._supported_date_time_sensor.sensor_get_name_hour,
-                )
-            if self._sensor_configuration_minute is not None and hasattr(
-                self._stove.Status,
+            )
+            minute = self._read_clock_field(
+                self._sensor_configuration_minute,
                 self._supported_date_time_sensor.sensor_get_name_minute,
-            ):
-                minute = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
-                    self._supported_date_time_sensor.sensor_get_name_minute,
-                )
-            if self._sensor_configuration_second is not None and hasattr(
-                self._stove.Status,
+            )
+            second = self._read_clock_field(
+                self._sensor_configuration_second,
                 self._supported_date_time_sensor.sensor_get_name_second,
-            ):
-                second = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
-                    self._supported_date_time_sensor.sensor_get_name_second,
-                )
-            if self._sensor_configuration_am_pm is not None and hasattr(
-                self._stove.Status,
-                self._supported_date_time_sensor.sensor_get_name_am_pm,
-            ):
-                am_pm = get_response_value(
-                    self._supported_date_time_sensor,
-                    self._stove.State,
-                    self._stove.Status,
-                    self._stove.model_generation,
+            )
+            am_pm = cast(
+                bool | None,
+                self._read_clock_field(
+                    self._sensor_configuration_am_pm,
                     self._supported_date_time_sensor.sensor_get_name_am_pm,
-                )
+                ),
+            )
 
         if weekday is not None:
             self._attr_weekday = weekday
@@ -446,11 +414,11 @@ class MczDateTimeEntity(CoordinatorEntity, DateTimeEntity):
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up datetime entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveDateTimeEntities(coordinator, stove))
@@ -460,9 +428,9 @@ async def async_setup_entry(
 def _getStoveDateTimeEntities(
     coordinator: MczAccountCoordinator,
     stove: MaestroStove,
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the date time entities to create for this stove."""
-    entities = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     supported_date_times = stove.get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
         model_definitions.supported_date_times
     )

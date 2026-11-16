@@ -1,11 +1,17 @@
+"""Parse live Status fields or restore the attribute names in saved diagnostics."""
+
 from dataclasses import dataclass
 import logging
+
+from ..response_types import JsonObject, require_json_object
 
 _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
 class Status:
+    """Store reported Status readings, leaving absent fields at their defaults."""
+
     status: str | None = None
     stato_stufa: int | None = None
     turbo_activation_timestamp: int | None = None
@@ -155,11 +161,14 @@ class Status:
     ingr_flux: float | None = None
     soglia_usc_temp: float | None = None
 
-    unknown_fields: dict | None = None
+    unknown_fields: JsonObject | None = None
 
-    def __init__(self, json, from_mocked_response=False) -> None:
+    def __init__(
+        self, json: JsonObject | None, from_mocked_response: bool = False
+    ) -> None:
         if from_mocked_response:
-            for k, v in json.items():
+            # Replay bypasses the live controller's response check.
+            for k, v in require_json_object(json).items():
                 setattr(self, k, v)
         else:
             if json is not None and len(json) > 0:

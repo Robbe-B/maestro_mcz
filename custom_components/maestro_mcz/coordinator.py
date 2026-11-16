@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, tzinfo
 
@@ -16,6 +17,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL, DOMAIN
 from .maestro import MaestroStove
+from .maestro.account import MaestroAccount
 from .maestro.controller.controller_interface import MaestroControllerInterface
 from .maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
@@ -27,20 +29,27 @@ _LOGGER = logging.getLogger(__name__)
 CONSUMPTION_RETRY_INTERVAL = timedelta(hours=1)
 COUNTERS_UPDATE_INTERVAL = timedelta(hours=1)
 
-type MczConfigEntry = ConfigEntry[MczAccountCoordinator]
+
+@dataclass(frozen=True)
+class MczRuntimeData:
+    """Keep account ownership separate from Home Assistant's polling lifecycle."""
+
+    account: MaestroAccount
+    coordinator: MczAccountCoordinator
 
 
-class MczAccountCoordinator(DataUpdateCoordinator):
+type MczConfigEntry = ConfigEntry[MczRuntimeData]
+
+
+class MczAccountCoordinator(DataUpdateCoordinator[None]):
     """MCZ Coordinator."""
-
-    _stoves: dict[str, MaestroStove] | None = None
 
     def __init__(
         self,
         hass: HomeAssistant,
         config_entry: MczConfigEntry,
         name: str,
-        stoves: list[MaestroStove] | None,
+        account: MaestroAccount,
     ) -> None:
         """Initialize coordinator."""
         super().__init__(
@@ -54,42 +63,58 @@ class MczAccountCoordinator(DataUpdateCoordinator):
                 )
             ),
         )
-        self._stoves = {stove.UniqueCode: stove for stove in stoves} if stoves else None
+        self._account = account
         self.consumption_coordinators: dict[str, MczConsumptionCoordinator] = {}
         self.counters_coordinators: dict[str, MczCountersCoordinator] = {}
 
-    async def _async_setup(self):
+    async def _async_setup(self) -> None:
         """Set up the coordinator."""
-        if self._stoves is None:
-            raise UpdateFailed("No stoves found for this account.")
-        for stove in self._stoves.values():
-            try:
-                await stove.async_init()
-            except MaestroConnectionException as err:
-                raise UpdateFailed(
-                    f"Error communicating with Maestro API: {err}"
-                ) from err
+        if not self.stoves:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="account_no_stoves",
+            )
+        try:
+            await self._account.async_initialize()
+        except MaestroAuthenticationException as err:
+            raise ConfigEntryAuthFailed(
+                translation_domain=DOMAIN,
+                translation_key="account_invalid_auth",
+            ) from err
+        except MaestroConnectionException as err:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="account_cannot_connect",
+                translation_placeholders={"error": str(err)},
+                retry_after=err.retry_after,
+            ) from err
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> None:
         """Fetch data from API endpoint."""
-        if self._stoves is None:
-            raise UpdateFailed("No stoves found for this account.")
+        if not self.stoves:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="account_no_stoves",
+            )
 
-        for stove in self._stoves.values():
-            try:
-                await stove.refresh()
-            except MaestroAuthenticationException as err:
-                # Cancels future updates & Triggers re-auth flow
-                raise ConfigEntryAuthFailed from err
-            except MaestroConnectionException as err:
-                # This marks entities as unavailable and schedules a retry
-                raise UpdateFailed(
-                    f"Error communicating with Maestro API: {err}"
-                ) from err
+        try:
+            await self._account.async_refresh()
+        except MaestroAuthenticationException as err:
+            raise ConfigEntryAuthFailed(
+                translation_domain=DOMAIN,
+                translation_key="account_invalid_auth",
+            ) from err
+        except MaestroConnectionException as err:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="account_cannot_connect",
+                translation_placeholders={"error": str(err)},
+                retry_after=err.retry_after,
+            ) from err
 
     async def update_data_after_set(
         self,
-    ):  # should be revised in the future to be more efficient
+    ) -> None:  # should be revised in the future to be more efficient
         """Force refresh of data from API endpoint after a SET was executed."""
         # we need to wait here because there is an actual delay between sending a SET and receiving the updated value from the polled MCZ database
         await asyncio.sleep(3)
@@ -98,9 +123,9 @@ class MczAccountCoordinator(DataUpdateCoordinator):
         await self.async_refresh()
 
     @property
-    def stoves(self) -> dict[str, MaestroStove]:
-        """Return the stoves."""
-        return self._stoves
+    def stoves(self) -> Mapping[str, MaestroStove]:
+        """Return the account-owned stoves used by the entity platforms."""
+        return self._account.stoves
 
 
 @dataclass(frozen=True)
@@ -126,7 +151,7 @@ class MczCountersCoordinator(DataUpdateCoordinator[CountersData]):
             hass,
             _LOGGER,
             config_entry=config_entry,
-            name=f"{stove.Name} counters",
+            name=f"{config_entry.title} / {stove.Name} counters",
             update_interval=COUNTERS_UPDATE_INTERVAL,
         )
         self._controller = controller
@@ -148,6 +173,7 @@ class MczCountersCoordinator(DataUpdateCoordinator[CountersData]):
                 translation_domain=DOMAIN,
                 translation_key="counters_cannot_connect",
                 translation_placeholders={"error": str(err)},
+                retry_after=err.retry_after,
             ) from err
         except (TypeError, ValueError) as err:
             raise UpdateFailed(
@@ -181,7 +207,7 @@ class MczConsumptionCoordinator(DataUpdateCoordinator[ConsumptionData]):
             hass,
             _LOGGER,
             config_entry=config_entry,
-            name=f"{stove.Name} consumption",
+            name=f"{config_entry.title} / {stove.Name} consumption",
             update_interval=CONSUMPTION_RETRY_INTERVAL,
         )
         self._controller = controller
@@ -223,6 +249,7 @@ class MczConsumptionCoordinator(DataUpdateCoordinator[ConsumptionData]):
                 translation_domain=DOMAIN,
                 translation_key="consumption_cannot_connect",
                 translation_placeholders={"error": str(err)},
+                retry_after=err.retry_after,
             ) from err
         except ValueError as err:
             raise UpdateFailed(

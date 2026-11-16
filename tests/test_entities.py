@@ -1,8 +1,10 @@
 """Cloud entity discovery, state, availability, IDs and commands on all platforms."""
 
 import importlib
+import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
@@ -11,6 +13,7 @@ import pytest
 from homeassistant.components.climate import ClimateEntityFeature, HVACAction, HVACMode
 from homeassistant.components.fan import FanEntityFeature
 from homeassistant.const import UnitOfTemperature
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.util import dt as dt_util
 
@@ -27,6 +30,10 @@ from custom_components.maestro_mcz.climate import MczClimateEntity
 from custom_components.maestro_mcz.fan import (
     MczFanEntity,
     get_supported_fan_configurations,
+)
+from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+    MaestroAuthenticationException,
+    MaestroConnectionException,
 )
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Configuration,
@@ -358,6 +365,60 @@ def test_all_platforms_discover_supported_entities_and_keep_legacy_ids(entities)
     for platform_entities in entities.values():
         for item in platform_entities:
             assert item.device_info["identifiers"] == {("maestro_mcz", "SERIAL-001")}
+
+
+def test_catalogue_icons_cover_every_custom_entity_and_temperature_defaults():
+    """Keep every catalogue variant linked to an icon or its unchanged temperature default."""
+    # 1. Load the frontend icons alongside every catalogue that creates entities.
+    icons = json.loads(
+        Path("custom_components/maestro_mcz/icons.json").read_text(encoding="utf-8")
+    )["entity"]
+    catalogues = {
+        "binary_sensor": model_definitions.supported_binary_sensors,
+        "button": [
+            *model_definitions.supported_buttons,
+            *model_definitions.supported_time_sync_buttons,
+        ],
+        "datetime": model_definitions.supported_date_times,
+        "number": model_definitions.supported_numbers,
+        "select": [
+            *model_definitions.supported_selectors,
+            *model_definitions.supported_pots,
+        ],
+        "sensor": [
+            *model_definitions.supported_sensors,
+            *model_definitions.supported_counters,
+        ],
+        "switch": model_definitions.supported_switches,
+    }
+
+    # 2. Each custom icon is reachable; ordinary temperature readings retain HA defaults.
+    for domain, definitions in catalogues.items():
+        for definition in definitions:
+            if definition.translation_key is None:
+                assert domain == "sensor"
+                assert definition.device_class == "temperature"
+            else:
+                assert icons[domain][definition.translation_key]["default"]
+            assert not hasattr(definition, "icon")
+            assert not hasattr(definition, "unavailable_icon")
+
+    # 3. Shared fan/climate icons retain their presets without backend icon fields.
+    for definition in model_definitions.supported_fans:
+        assert not hasattr(definition, "icon")
+        assert not hasattr(definition, "unavailable_icon")
+    climate_presets = icons["climate"]["main_climate"]["state_attributes"][
+        "preset_mode"
+    ]
+    assert set(climate_presets["state"]) == {
+        "manual",
+        "auto",
+        "overnight",
+        "comfort",
+        "turbo",
+    }
+    fan_presets = icons["fan"]["main_fan"]["state_attributes"]["preset_mode"]
+    assert set(fan_presets["state"]) == {"auto", "silent"}
 
 
 @pytest.mark.parametrize("prop,value", [("state", "working"), ("mode", "manual")])
@@ -1156,7 +1217,7 @@ async def test_select_options_round_trip(entities, controller, coordinator, stov
 
 
 async def test_manual_power_selector_is_numeric(entities, controller):
-    """Present power levels as readable choices but send the selected level as a number."""
+    """Keep recognizable power choices and send the selected power level as a number."""
     # 1. The stove supports five power levels and currently reports level three.
     item = next(selector for selector in entities["select"] if selector._prop == "set_pot_man")
     assert item.options == ["1", "2", "3", "4", "5"]
@@ -1164,7 +1225,10 @@ async def test_manual_power_selector_is_numeric(entities, controller):
     # 2. Selecting the text label "5" sends numeric power level 5.
     await item.async_select_option("5")
     command = last_sent_command(controller)
+    # 3. The stove receives a number and the control points to its frontend icons.
     assert command.Value == 5
+    assert item.translation_key == "manual_power"
+    assert item.icon is None
 
 
 @pytest.mark.parametrize("kind,value", [("boolean", True), ("int", 7)])
@@ -1198,6 +1262,78 @@ async def test_command_failures_do_not_trigger_success_refresh(
     with pytest.raises(RuntimeError, match="command failed"):
         await entity(entities, "number").async_set_native_value(20)
     # 3. A success refresh must not disguise the failed command.
+    coordinator.update_data_after_set.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "platform,action,arguments",
+    [
+        ("climate", "async_set_temperature", {"temperature": 23}),
+        ("climate", "async_set_hvac_mode", {"hvac_mode": HVACMode.OFF}),
+        ("climate", "async_set_preset_mode", {"preset_mode": "auto"}),
+        ("fan", "async_turn_on", {}),
+        ("fan", "async_turn_off", {}),
+        ("fan", "async_set_percentage", {"percentage": 40}),
+        ("fan", "async_set_preset_mode", {"preset_mode": "auto"}),
+        ("number", "async_set_native_value", {"value": 20}),
+        ("switch", "async_turn_on", {}),
+        ("switch", "async_turn_off", {}),
+        ("select", "async_select_option", {"option": "High"}),
+        ("button", "async_press", {}),
+        (
+            "datetime",
+            "async_set_value",
+            {
+                "value": datetime(2026, 12, 31, 23, 58, tzinfo=UTC),
+            },
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "failure_type", [MaestroAuthenticationException, MaestroConnectionException]
+)
+async def test_user_commands_report_terminal_ha_errors(
+    entities, controller, coordinator, entry, platform, action, arguments, failure_type
+):
+    """Explain failed controls in HA and request a new password only for rejected credentials."""
+    # 1. Select a usable control whose controller has already reported final failure.
+    item = entity(entities, platform)
+    if platform == "button":
+        item = entity(entities, platform, MczButtonEntity)
+    if platform == "select":
+        item = next(
+            control for control in entities[platform] if control._prop == "toni_buzz"
+        )
+    if platform == "fan" and action == "async_set_preset_mode":
+        fan_configuration = item._current_fan_configuration.configuration
+        fan_configuration.variants = ["auto"]
+        fan_configuration.mappings = {"auto": 6}
+        item._update_features_based_on_current_stove_mode()
+    failure = failure_type("service unavailable")
+    command = controller.activate_program_with_commands_for_stove
+    command.side_effect = failure
+
+    # 2. Try the setting as a user would, without launching a real sign-in flow.
+    with (
+        patch.object(type(entry), "async_start_reauth") as start_reauth,
+        pytest.raises(HomeAssistantError) as raised,
+    ):
+        await getattr(item, action)(**arguments)
+
+    # 3. Platforms translate the final failure without adding retries or a success refresh.
+    reported_error = raised.value
+    assert reported_error.__cause__ is failure
+    assert reported_error.translation_domain == "maestro_mcz"
+    if failure_type is MaestroAuthenticationException:
+        assert reported_error.translation_key == "command_invalid_auth"
+        start_reauth.assert_called_once_with(coordinator.hass)
+    else:
+        assert reported_error.translation_key == "command_cannot_connect"
+        assert reported_error.translation_placeholders == {
+            "error": "service unavailable"
+        }
+        start_reauth.assert_not_called()
+    command.assert_awaited_once()
     coordinator.update_data_after_set.assert_not_awaited()
 
 
@@ -1740,15 +1876,16 @@ async def test_fan_turn_on_off_and_presets(entities, controller):
 
 def test_fan_mode_changes_and_silent_disable_availability(entities, stove):
     """Disable unavailable fan controls when silent mode or the operating mode forbids them."""
-    # 1. A manual-mode fan starts available with its normal icon.
+    # 1. A manual-mode fan starts available with frontend-managed icons.
     item = entity(entities, "fan")
     assert item.available
-    assert item.icon == "mdi:fan"
+    assert item.translation_key == "main_fan"
+    assert item.icon is None
     # 2. Silent mode makes manual fan adjustment unavailable.
     stove.Status.silent_enabled = True
     item._handle_coordinator_update_internal()
     assert not item.available
-    assert item.icon == "mdi:fan-off"
+    assert item.icon is None
     # 3. Automatic or unknown operating modes must not invent manual fan controls.
     stove.Status.silent_enabled = False
     stove.State.mode = "auto"

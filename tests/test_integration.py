@@ -1,13 +1,458 @@
 """Verify real HA registration and service calls, not just entity methods."""
 
+import json
+from copy import deepcopy
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import async_get_platforms
+from homeassistant.setup import async_setup_component
 from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
+from pytest_homeassistant.common import MockConfigEntry
 
+from custom_components.maestro_mcz import async_remove_config_entry_device
 from custom_components.maestro_mcz.const import DOMAIN
+from custom_components.maestro_mcz.maestro import MaestroStove
+from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+    MaestroAuthenticationException,
+    MaestroConnectionException,
+)
+from custom_components.maestro_mcz.maestro.controller.responses.model import (
+    ModelConfiguration,
+)
+
+
+@pytest.fixture
+async def removal_account(hass, entry, controller, request):
+    """Load an account normally without contacting the cloud or registering controls."""
+    if getattr(request, "param", False):
+        hass.config_entries.async_update_entry(
+            entry, data=dict(entry.data) | {"MOCKED_FOLDER": "/synthetic"}
+        )
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch(
+            "custom_components.maestro_mcz.MockedController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", new_callable=AsyncMock
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        yield entry
+        if entry.state is ConfigEntryState.LOADED:
+            assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    "membership",
+    [
+        "absent",
+        "empty",
+        "linked",
+        "offline",
+        "connection",
+        "auth",
+        "incomplete",
+        "unloaded",
+    ],
+)
+async def test_device_removal_checks_current_account_and_preserves_other_devices(
+    hass, hass_ws_client, removal_account, controller, membership
+):
+    """Delete only an unlinked stove, never an offline stove or another account's saved controls."""
+    # 1. Two accounts share a stove identifier but keep their own devices and entity names.
+    entry = removal_account
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "SERIAL-001"), ("other_integration", "SERIAL-002")},
+        name="Living Room",
+    )
+    other_entry = MockConfigEntry(domain=DOMAIN, unique_id="other-account")
+    other_entry.add_to_hass(hass)
+    retained_device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "SERIAL-002")},
+        name="Kitchen",
+    )
+    other_device = registry.async_get_or_create(
+        config_entry_id=other_entry.entry_id,
+        identifiers={(DOMAIN, "SERIAL-001")},
+        name="Other account stove",
+    )
+    entities = er.async_get(hass)
+    entity = entities.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "SERIAL-001-room",
+        config_entry=entry,
+        device_id=device.id,
+        suggested_object_id="my_living_room",
+    )
+    other_entity = entities.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "other-account-room",
+        config_entry=other_entry,
+        device_id=other_device.id,
+        suggested_object_id="my_other_room",
+    )
+    other_device = registry.async_update_device(
+        other_device.id, name_by_user="My stove"
+    )
+    known_info = controller.retrieve_linked_stove_infos.return_value[0]
+    current_info = deepcopy(known_info)
+    current_info.node.unique_code = "SERIAL-002"
+    controller.retrieve_linked_stove_infos.reset_mock()
+    if membership in {"absent", "empty", "unloaded"}:
+        controller.retrieve_linked_stove_infos.return_value = (
+            [current_info] if membership == "absent" else []
+        )
+    elif membership == "offline":
+        offline_stove = entry.runtime_data.coordinator.stoves["SERIAL-001"]
+        offline_stove._is_stove_connected_to_cloud = False
+    elif membership == "connection":
+        controller.retrieve_linked_stove_infos.side_effect = MaestroConnectionException(
+            "offline"
+        )
+    elif membership == "auth":
+        controller.retrieve_linked_stove_infos.side_effect = (
+            MaestroAuthenticationException("rejected")
+        )
+    elif membership == "incomplete":
+        current_info.node.unique_code = None
+        controller.retrieve_linked_stove_infos.return_value = [current_info]
+    if membership == "unloaded":
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+    # 2. Use HA's real device-page removal endpoint and its registry cleanup.
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    with (
+        patch.object(
+            hass.config_entries,
+            "async_reload",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as reload_entry,
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ) as client_factory,
+    ):
+        await client.send_json(
+            {
+                "id": 1,
+                "type": "config/device_registry/remove",
+                "device_id": device.id,
+            }
+        )
+        result = await client.receive_json()
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    # 3. Fresh absence allows deletion; failures and current links preserve identities.
+    removable = membership in {"absent", "empty", "unloaded"}
+    assert result["success"] is removable
+    controller.retrieve_linked_stove_infos.assert_awaited_once_with(
+        require_unique_codes=True
+    )
+    if membership == "unloaded":
+        client_factory.assert_called_once()
+    else:
+        client_factory.assert_not_called()
+    if removable:
+        assert registry.async_get(device.id) is None
+        assert entities.async_get(entity.entity_id) is None
+        reload_entry.assert_awaited_once_with(entry.entry_id)
+    else:
+        assert registry.async_get(device.id).id == device.id
+        assert entities.async_get(entity.entity_id).id == entity.id
+        reload_entry.assert_not_awaited()
+    assert registry.async_get(other_device.id).name_by_user == "My stove"
+    assert registry.async_get(retained_device.id).name == "Kitchen"
+    assert entities.async_get(other_entity.entity_id).id == other_entity.id
+    pending_flows = hass.config_entries.flow.async_progress()
+    assert bool(pending_flows) is (membership == "auth")
+    if membership == "auth":
+        assert pending_flows[0]["context"]["entry_id"] == entry.entry_id
+    if membership in {"connection", "incomplete"}:
+        assert "not removed" in result["error"]["message"]
+    elif membership in {"linked", "offline"}:
+        assert "still linked to your Maestro account" in result["error"]["message"]
+        assert "official MCZ app" in result["error"]["message"]
+    elif membership == "auth":
+        assert "sign in again" in result["error"]["message"]
+
+
+@pytest.mark.parametrize("linked", [False, True])
+@pytest.mark.parametrize("removal_account", [True], indirect=True)
+async def test_replay_device_removal_uses_loaded_reports_without_cloud_requests(
+    hass, hass_ws_client, removal_account, controller, linked
+):
+    """Keep replay removal local and require reloading reports before an old device can disappear."""
+    # 1. A loaded replay account knows only the stoves from its last successful load.
+    entry = removal_account
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "SERIAL-001" if linked else "REMOVED-SERIAL")},
+    )
+    controller.reset_mock()
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+
+    # 2. Request removal from the same HA device-page endpoint as a cloud account.
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock, return_value=True
+    ) as reload_entry:
+        await client.send_json(
+            {
+                "id": 1,
+                "type": "config/device_registry/remove",
+                "device_id": device.id,
+            }
+        )
+        result = await client.receive_json()
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    # 3. Only an old replay device can be removed, without reading files or calling the cloud.
+    assert result["success"] is not linked
+    assert (registry.async_get(device.id) is not None) is linked
+    controller.retrieve_linked_stove_infos.assert_not_awaited()
+    controller.make_request.assert_not_awaited()
+    if linked:
+        reload_entry.assert_not_awaited()
+        assert "loaded saved reports" in result["error"]["message"]
+    else:
+        reload_entry.assert_awaited_once_with(entry.entry_id)
+
+
+@pytest.mark.parametrize("replay", [False, True])
+async def test_unverifiable_device_removal_preserves_registry(
+    hass, removal_account, controller, replay
+):
+    """Refuse removal when a device has no stove identity or its replay account is not loaded."""
+    # 1. Prepare a device whose current account membership cannot be checked.
+    entry = removal_account
+    if replay:
+        hass.config_entries.async_update_entry(
+            entry, data=dict(entry.data) | {"MOCKED_FOLDER": "/synthetic"}
+        )
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN if replay else "other_integration", "unknown")},
+    )
+    controller.reset_mock()
+
+    # 2. Ask the removal hook without fabricating a current device list.
+    with pytest.raises(HomeAssistantError) as raised:
+        await async_remove_config_entry_device(hass, entry, device)
+    assert raised.value.translation_key == "device_removal_cannot_verify"
+
+    # 3. Preserve the device and avoid any cloud or replay-file requests.
+    assert registry.async_get(device.id) is not None
+    controller.retrieve_linked_stove_infos.assert_not_awaited()
+
+
+@pytest.mark.parametrize("probe_binding", ["m1_sens_liv_pellet", "sens_liv_pellet"])
+@pytest.mark.parametrize(
+    "probe_state", ["enabled", "disabled", "missing", "unsupported"]
+)
+async def test_existing_pellet_registry_entry_keeps_identity_and_truthful_state(
+    hass, entry, controller, configuration, probe_binding, probe_state
+):
+    """Keep saved probe identities while respecting their enabled setting and actual readings."""
+    # 1. Keep a pre-migration registry entry while the model describes its actual probe.
+    registry = er.async_get(hass)
+    original = registry.async_get_or_create(
+        "binary_sensor",
+        DOMAIN,
+        "SERIAL-001-sens_liv_pel",
+        config_entry=entry,
+        suggested_object_id="existing_pellet_warning",
+        original_name="Pellet Level Low",
+    )
+    model = controller.get_stove_model_for_stove.return_value
+    state = controller.get_stove_state_for_stove.return_value
+    status = controller.get_stove_status_for_stove.return_value
+    state.sens_liv_pellet = probe_state != "disabled"
+    status.sens_liv_pellet = probe_state != "disabled"
+    status.sens_liv_pel = None if probe_state == "missing" else probe_state == "enabled"
+    if probe_state != "unsupported":
+        model.model_configurations.append(
+            ModelConfiguration(
+                {
+                    "ConfigurationName": "Sensore Livello Pellet",
+                    "ConfigurationId": "probe-group",
+                    "Timed": False,
+                    "Limitations": None,
+                    "Configurations": [configuration(probe_binding)],
+                }
+            )
+        )
+    if probe_binding.startswith("m1_"):
+        ping = next(
+            group
+            for group in model.model_configurations
+            if group.configuration_name == "cod_for_spe_mqtt"
+        )
+        ping.configuration_name = "PING STOVE"
+        ping.configurations[0].sensor_name = "m1_cod_for_spe_mqtt"
+
+    # 2. Load real HA entities, not just constructors or the catalogue definitions.
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+        patch.object(MaestroStove, "_ping", new_callable=AsyncMock),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    registered = registry.async_get(original.entity_id)
+    assert registered.id == original.id
+    assert registered.unique_id == "SERIAL-001-sens_liv_pel"
+    matching_entries = [
+        item
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if item.unique_id == registered.unique_id
+    ]
+    assert len(matching_entries) == 1
+    binary_platform = next(
+        platform
+        for platform in async_get_platforms(hass, DOMAIN)
+        if platform.domain == "binary_sensor"
+    )
+
+    # 3. Disabled, unsupported or unreadable probes leave saved entries, not invented readings.
+    if probe_state != "enabled":
+        assert original.entity_id not in binary_platform.entities
+        assert registered.translation_key is None
+        state = hass.states.get(original.entity_id)
+        assert state is None or state.state == "unavailable"
+    else:
+        assert original.entity_id in binary_platform.entities
+        assert registered.translation_key == "pellet_level_low"
+        assert hass.states.get(original.entity_id).state == "off"
+        assert (
+            hass.states.get(original.entity_id).name == "Living Room Pellet Level Low"
+        )
+
+        # 4. Live warnings invert only genuine readings; missing readings remain unknown.
+        account = entry.runtime_data.coordinator
+        stove = account.stoves["SERIAL-001"]
+        for reading, expected in [(False, "on"), (True, "off"), (None, "unknown")]:
+            stove.Status.sens_liv_pel = reading
+            account.async_set_updated_data(None)
+            await hass.async_block_till_done()
+            state = hass.states.get(original.entity_id)
+            assert state.state == expected
+            assert "icon" not in state.attributes
+
+        # 5. A cloud failure changes availability without changing the registered identity.
+        account.async_set_update_error(MaestroConnectionException("offline"))
+        await hass.async_block_till_done()
+        assert hass.states.get(original.entity_id).state == "unavailable"
+        stove.Status.sens_liv_pel = True
+        account.async_set_updated_data(None)
+        await hass.async_block_till_done()
+        assert hass.states.get(original.entity_id).state == "off"
+        assert registry.async_get(original.entity_id).id == original.id
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize("language", ["en", "nl"])
+async def test_frontend_icons_preserve_registered_names_and_fan_availability(
+    hass, entry, controller, language
+):
+    """Move icons out of HA states without renaming controls or losing the unavailable fan icon."""
+    # 1. Load real platforms in either supported language using only mocked cloud data.
+    hass.config.language = language
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    registry = er.async_get(hass)
+    icons = json.loads(
+        await hass.async_add_executor_job(
+            Path("custom_components/maestro_mcz/icons.json").read_text, "utf-8"
+        )
+    )["entity"]
+
+    # 2. New icon keys keep existing names, including the disabled clock's fallback name.
+    for domain, suffix, name, key in [
+        (
+            "binary_sensor",
+            "Cloud_Connection_Status",
+            "Cloud Connection Status",
+            "cloud_connection",
+        ),
+        (
+            "binary_sensor",
+            "Device_Connection_Status",
+            "Device Connection Status",
+            "device_connection",
+        ),
+        ("button", "com_reset_allarm", "Alarm Reset", "alarm_reset"),
+        ("button", "giorno", "Set System Date & Time", "system_date_time"),
+        ("datetime", "giorno", "Date & Time", "date_time"),
+        (
+            "number",
+            "rit_usc_standby",
+            "Start / Stop - Delay in Ignition",
+            "ignition_delay",
+        ),
+        ("select", "set_pot_man", "Manual Power", "manual_power"),
+        ("sensor", "last_alarm", "Last Alarm Code", "last_alarm"),
+        ("switch", "att_eco", "Start / Stop", "start_stop"),
+    ]:
+        entity_id = registry.async_get_entity_id(domain, DOMAIN, f"SERIAL-001-{suffix}")
+        registered = registry.async_get(entity_id)
+        assert registered.original_name == name
+        assert registered.translation_key == key
+        assert icons[domain][key]["default"]
+        if (state := hass.states.get(entity_id)) is not None:
+            assert state.name == f"Living Room {name}"
+            assert "icon" not in state.attributes
+
+    # 3. Available fans use the same icon even when off; unavailable fans use fan-off.
+    fan_id = registry.async_get_entity_id("fan", DOMAIN, "SERIAL-001-set_vent_v1")
+    assert registry.async_get(fan_id).translation_key == "main_fan"
+    fan_icons = icons["fan"]["main_fan"]
+    account = entry.runtime_data.coordinator
+    stove = account.stoves["SERIAL-001"]
+    for value, silent, expected_state, expected_icon in [
+        (3, False, "on", "mdi:fan"),
+        (0, False, "off", "mdi:fan"),
+        (3, True, "unavailable", "mdi:fan-off"),
+        (3, False, "on", "mdi:fan"),
+    ]:
+        stove.Status.set_vent_v1 = value
+        stove.Status.silent_enabled = silent
+        account.async_set_updated_data(None)
+        await hass.async_block_till_done()
+        state = hass.states.get(fan_id)
+        assert state.state == expected_state
+        assert "icon" not in state.attributes
+        assert (
+            fan_icons["state"].get(state.state, fan_icons["default"]) == expected_icon
+        )
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.parametrize(
@@ -72,7 +517,9 @@ async def test_real_platform_setup_services_and_unload(
 
         # 3. Change the target temperature through HA, as a user would.
         with patch.object(
-            entry.runtime_data, "update_data_after_set", new_callable=AsyncMock
+            entry.runtime_data.coordinator,
+            "update_data_after_set",
+            new_callable=AsyncMock,
         ) as refresh:
             await hass.services.async_call(
                 "climate",
@@ -93,3 +540,59 @@ async def test_real_platform_setup_services_and_unload(
         await hass.async_block_till_done()
         assert entry.state is ConfigEntryState.NOT_LOADED
         assert hass.states.get(climate_entity_id).state == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "failure_type", [MaestroAuthenticationException, MaestroConnectionException]
+)
+async def test_real_service_failure_reports_error_and_starts_only_needed_reauth(
+    hass, entry, controller, failure_type
+):
+    """Show a failed action in HA and open password recovery only when sign-in is rejected."""
+    # 1. Load a working account, then make its next setting command fail.
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        setup_succeeded = await hass.config_entries.async_setup(entry.entry_id)
+        assert setup_succeeded
+        await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    climate_entity_id = registry.async_get_entity_id("climate", DOMAIN, "SERIAL-001")
+    failure = failure_type("service unavailable")
+    command = controller.activate_program_with_commands_for_stove
+    command.side_effect = failure
+
+    # 2. Call HA's temperature action rather than invoking an entity method directly.
+    with (
+        patch.object(
+            entry.runtime_data.coordinator,
+            "update_data_after_set",
+            new_callable=AsyncMock,
+        ) as refresh,
+        pytest.raises(HomeAssistantError) as raised,
+    ):
+        await hass.services.async_call(
+            "climate",
+            "set_temperature",
+            {"entity_id": climate_entity_id, "temperature": 23},
+            blocking=True,
+        )
+    await hass.async_block_till_done()
+
+    # 3. The failure reaches the user once, without replay or removal of the account.
+    assert raised.value.__cause__ is failure
+    command.assert_awaited_once()
+    refresh.assert_not_awaited()
+    assert entry.state is ConfigEntryState.LOADED
+    pending_flows = hass.config_entries.flow.async_progress()
+    if failure_type is MaestroAuthenticationException:
+        assert "sign in again" in str(raised.value)
+        assert len(pending_flows) == 1
+        assert pending_flows[0]["step_id"] == "reauth_confirm"
+        assert pending_flows[0]["context"]["entry_id"] == entry.entry_id
+    else:
+        assert "Check the stove's state" in str(raised.value)
+        assert pending_flows == []

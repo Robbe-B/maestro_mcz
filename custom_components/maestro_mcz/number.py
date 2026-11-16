@@ -8,12 +8,11 @@ from homeassistant.components.number import (
     DEFAULT_STEP,
     NumberEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
 from .maestro.model_value_reader import get_response_value
@@ -21,7 +20,7 @@ from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
-class MczNumberEntity(CoordinatorEntity, NumberEntity):
+class MczNumberEntity(CoordinatorEntity[MczAccountCoordinator], NumberEntity):
     """Number entity for Maestro MCZ stoves."""
 
     _attr_has_entity_name = True
@@ -43,7 +42,7 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
         self._attr_native_unit_of_measurement = supported_number.unit
         self._attr_device_class = supported_number.device_class
         self._attr_unique_id = f"{stove_unique_code}-{supported_number.sensor_get_name}"
-        self._attr_icon = supported_number.icon
+        self._attr_translation_key = supported_number.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._attr_mode = supported_number.mode
         self._prop = supported_number.sensor_get_name
@@ -74,12 +73,13 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
         return self._stove.is_connected
 
     @property
-    def native_value(self):
+    def native_value(self) -> float | None:
         return self._attr_native_value
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
         if self._number_configuration is not None:
+            converted_value: float
             if (
                 self._number_configuration.configuration.type
                 == SensorTypeEnum.INT.value
@@ -101,21 +101,23 @@ class MczNumberEntity(CoordinatorEntity, NumberEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        self._attr_native_value = get_response_value(
+        value = get_response_value(
             self._supported_number,
             self._stove.State,
             self._stove.Status,
             self._stove.model_generation,
         )
+        assert value is None or isinstance(value, (int, float))
+        self._attr_native_value = value
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up number entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveNumberEntities(coordinator, stove))
@@ -125,9 +127,9 @@ async def async_setup_entry(
 def _getStoveNumberEntities(
     coordinator: MczAccountCoordinator,
     stove: MaestroStove,
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the number entities to create for this stove."""
-    entities = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     supported_numbers = stove.get_supported_sensor_configurations(
         model_definitions.supported_numbers
     )

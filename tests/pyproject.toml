@@ -13,3 +13,9 @@ show_missing = true
 skip_empty = true
 precision = 2
 fail_under = 97
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["custom_components/maestro_mcz"]
+explicit_package_bases = true

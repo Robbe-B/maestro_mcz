@@ -1,24 +1,37 @@
 """Setup, coordinator lifecycle, and error propagation regression coverage."""
 
 from datetime import timedelta
-from unittest.mock import AsyncMock, patch
+from copy import deepcopy
+from pathlib import Path
+from threading import get_ident
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maestro_mcz import (
     PLATFORMS,
-    _async_update_listener,
     _has_mocked_folder,
     async_setup,
     async_setup_entry,
     async_unload_entry,
 )
-from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
+from custom_components.maestro_mcz.const import DOMAIN
+from custom_components.maestro_mcz.maestro.account import MaestroAccount
+from custom_components.maestro_mcz.coordinator import (
+    MczAccountCoordinator,
+    MczConsumptionCoordinator,
+    MczCountersCoordinator,
+    MczRuntimeData,
+)
 from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
+    MaestroController,
 )
 
 
@@ -54,16 +67,39 @@ async def test_setup_starts_mock_import(hass):
 
 
 @pytest.mark.parametrize("exists", [False, True])
-async def test_mock_folder_detection(exists):
-    """Use the replay folder only when it exists, avoiding a nonexistent data source."""
-    # 1. Choose whether the expected replay folder is present.
-    expected_folder = (
-        "config/custom_components/maestro_mcz/mocked" if exists else None
-    )
-    with patch("custom_components.maestro_mcz.Path.is_dir", return_value=exists):
-        # 2. Ask setup which folder it should use.
-        detected_folder = await _has_mocked_folder()
+async def test_mock_folder_detection(hass, tmp_path, monkeypatch, exists):
+    """Find existing replay folders without making HA wait for filesystem checks."""
+    # 1. Prepare an isolated installation with or without the expected replay folder.
+    replay_path = Path("config/custom_components/maestro_mcz/mocked")
+
+    def prepare_folder():
+        monkeypatch.chdir(tmp_path)
+        if exists:
+            replay_path.mkdir(parents=True)
+
+    await hass.async_add_executor_job(prepare_folder)
+    event_loop_thread = get_ident()
+    checking_threads = []
+    original_is_dir = Path.is_dir
+
+    def check_directory(folder):
+        checking_threads.append(get_ident())
+        return original_is_dir(folder)
+
+    # 2. Detect the real folder and record which thread performs its filesystem check.
+    with patch(
+        "custom_components.maestro_mcz.Path.is_dir",
+        autospec=True,
+        side_effect=check_directory,
+    ) as directory_check:
+        detected_folder = await _has_mocked_folder(hass)
+
+    # 3. Preserve the detected path while keeping the check off HA's event-loop thread.
+    expected_folder = str(replay_path) if exists else None
     assert detected_folder == expected_folder
+    directory_check.assert_called_once_with(replay_path)
+    assert len(checking_threads) == 1
+    assert checking_threads[0] != event_loop_thread
 
 
 @pytest.mark.parametrize("mocked", [False, True])
@@ -104,10 +140,16 @@ async def test_setup_entry_initializes_coordinator_and_platforms(
     else:
         live_controller_factory.assert_called_once()
         replay_controller_factory.assert_not_called()
-    assert isinstance(entry.runtime_data, MczAccountCoordinator)
-    assert list(entry.runtime_data.stoves) == ["SERIAL-001"]
+    assert isinstance(entry.runtime_data, MczRuntimeData)
+    assert isinstance(entry.runtime_data.account, MaestroAccount)
+    account = entry.runtime_data.coordinator
+    assert isinstance(account, MczAccountCoordinator)
+    assert list(account.stoves) == ["SERIAL-001"]
+    assert (
+        account.stoves["SERIAL-001"] is entry.runtime_data.account.stoves["SERIAL-001"]
+    )
     expected_interval = 10 if polling_interval is None else polling_interval
-    assert entry.runtime_data.update_interval == timedelta(seconds=expected_interval)
+    assert account.update_interval == timedelta(seconds=expected_interval)
     setup_platforms.assert_awaited_once_with(entry, PLATFORMS)
     controller.get_stove_model_for_stove.assert_awaited_once_with(
         "model-1", "Living Room"
@@ -115,13 +157,172 @@ async def test_setup_entry_initializes_coordinator_and_platforms(
     controller.do_ping_for_stove.assert_awaited_once_with("device-1", "Living Room")
 
 
+async def test_account_logs_distinguish_configured_entries(
+    hass, entry, controller, caplog
+):
+    """Keep cloud failure and recovery logs identifiable when two accounts use the same stove name."""
+    # 1. Two saved accounts have distinct user-facing labels, not raw login details.
+    hass.config_entries.async_update_entry(entry, title="Downstairs account")
+    second_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Upstairs account",
+        unique_id="private-second-account",
+        data={"username": "private-login", "password": "private-password"},
+    )
+    second_entry.add_to_hass(hass)
+    entries = (entry, second_entry)
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", new_callable=AsyncMock
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        for configured_entry in entries:
+            assert configured_entry.state is ConfigEntryState.LOADED
+
+    # 2. Let HA report a normal polling failure for each configured account.
+    hass.config.components.add(DOMAIN)
+    await async_get_translations(hass, "en", "exceptions", {DOMAIN})
+    caplog.clear()
+    controller.do_ping_for_stove.side_effect = MaestroConnectionException(
+        "Ping for 'Living Room': Maestro request timed out"
+    )
+    for configured_entry in entries:
+        account = configured_entry.runtime_data.coordinator
+        assert account.name == configured_entry.title
+        counters = account.counters_coordinators["SERIAL-001"]
+        history = account.consumption_coordinators["SERIAL-001"]
+        assert counters.name == f"{configured_entry.title} / Living Room counters"
+        assert history.name == f"{configured_entry.title} / Living Room consumption"
+        await account.async_refresh()
+
+    # 3. Logs identify both accounts and the stove without adding duplicate controller errors.
+    messages = [record.getMessage() for record in caplog.records]
+    failures = [message for message in messages if "Error fetching" in message]
+    assert len(failures) == 2
+    for configured_entry in entries:
+        assert any(
+            f"Error fetching {configured_entry.title} data:" in message
+            and "Ping for 'Living Room'" in message
+            for message in failures
+        )
+    assert "private" not in caplog.text
+
+    # 4. HA's recovery messages use those same labels, rather than the literal 'username'.
+    controller.do_ping_for_stove.side_effect = None
+    for configured_entry in entries:
+        await configured_entry.runtime_data.coordinator.async_refresh()
+    messages = [record.getMessage() for record in caplog.records]
+    for configured_entry in entries:
+        assert f"Fetching {configured_entry.title} data recovered" in messages
+        assert await hass.config_entries.async_unload(configured_entry.entry_id)
+
+
+async def test_accounts_own_separate_clients_stoves_and_membership(
+    hass, entry, controller
+):
+    """Keep two accounts independent even when their stove serial numbers match."""
+    # 1. Each configured account has its own authenticated client and stove objects.
+    second_entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="second-account",
+        data={"username": "second-user", "password": "second-password"},
+    )
+    second_entry.add_to_hass(hass)
+    second_client = Mock(spec=MaestroController)
+    second_client.is_authenticated = True
+    for method in (
+        "retrieve_linked_stove_infos",
+        "get_stove_model_for_stove",
+        "get_stove_state_for_stove",
+        "get_stove_status_for_stove",
+    ):
+        getattr(second_client, method).return_value = deepcopy(
+            getattr(controller, method).return_value
+        )
+    clients = {entry.data["username"]: controller, "second-user": second_client}
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController",
+            side_effect=lambda session, username, password: clients[username],
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", new_callable=AsyncMock
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    first_account = entry.runtime_data.account
+    second_account = second_entry.runtime_data.account
+    assert first_account is not second_account
+    assert first_account.stoves["SERIAL-001"] is not second_account.stoves["SERIAL-001"]
+
+    # 2. A fresh removal check on one account must not replace either loaded stove map.
+    controller.retrieve_linked_stove_infos.reset_mock()
+    second_client.retrieve_linked_stove_infos.reset_mock()
+    controller.retrieve_linked_stove_infos.return_value = []
+    assert not await first_account.async_has_linked_stove({"SERIAL-001"})
+    assert await second_account.async_has_linked_stove({"SERIAL-001"})
+    controller.retrieve_linked_stove_infos.assert_awaited_once_with(
+        require_unique_codes=True
+    )
+    second_client.retrieve_linked_stove_infos.assert_awaited_once_with(
+        require_unique_codes=True
+    )
+    assert list(first_account.stoves) == ["SERIAL-001"]
+    assert list(second_account.stoves) == ["SERIAL-001"]
+
+    # 3. One account's failed polling must not use or change the other's client.
+    controller.do_ping_for_stove.side_effect = MaestroConnectionException("offline")
+    await entry.runtime_data.coordinator.async_refresh()
+    await second_entry.runtime_data.coordinator.async_refresh()
+    assert not entry.runtime_data.coordinator.last_update_success
+    assert second_entry.runtime_data.coordinator.last_update_success
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert await hass.config_entries.async_unload(second_entry.entry_id)
+
+
 @pytest.mark.parametrize(
-    "error", [MaestroAuthenticationException, MaestroConnectionException]
+    ("error", "expected", "expected_key", "expected_messages"),
+    [
+        (
+            MaestroAuthenticationException,
+            ConfigEntryAuthFailed,
+            "account_invalid_auth",
+            {
+                "en": "The Maestro account needs to sign in again.",
+                "nl": "Meld je opnieuw aan bij het Maestro-account.",
+            },
+        ),
+        (
+            MaestroConnectionException,
+            ConfigEntryNotReady,
+            "account_cannot_connect",
+            {
+                "en": "Could not connect to the Maestro cloud: unavailable",
+                "nl": "Er kon geen verbinding worden gemaakt met de Maestro-cloud: unavailable",
+            },
+        ),
+    ],
 )
-async def test_setup_account_failure_returns_false(hass, entry, controller, error):
-    """Do not create controls when the account cannot be reached or authenticated."""
+@pytest.mark.parametrize("language", ["en", "nl"])
+async def test_setup_account_failure(
+    hass, entry, controller, error, expected, expected_key, expected_messages, language
+):
+    """Distinguish a rejected account from an outage so HA offers the right recovery."""
     # 1. Make account discovery fail before any controls are created.
-    controller.retrieve_linked_stove_infos.side_effect = error("unavailable")
+    failure = error("unavailable")
+    controller.retrieve_linked_stove_infos.side_effect = failure
+    # HA includes translations in exception logs only for loaded integrations.
+    hass.config.components.add(DOMAIN)
+    await async_get_translations(hass, "en", "exceptions", {DOMAIN})
+    translations = await async_get_translations(hass, language, "exceptions", {DOMAIN})
     with (
         patch(
             "custom_components.maestro_mcz.MaestroController", return_value=controller
@@ -129,43 +330,244 @@ async def test_setup_account_failure_returns_false(hass, entry, controller, erro
         patch.object(
             hass.config_entries, "async_forward_entry_setups", new_callable=AsyncMock
         ) as forward,
+        pytest.raises(expected) as raised,
     ):
         # 2. Try setting up the account.
-        setup_succeeded = await async_setup_entry(hass, entry)
+        await async_setup_entry(hass, entry)
     # 3. Setup must fail without loading empty or misleading controls.
-    assert setup_succeeded is False
+    reported_error = raised.value
+    assert reported_error.__cause__ is failure
+    assert reported_error.translation_domain == DOMAIN
+    assert reported_error.translation_key == expected_key
+    expected_placeholders = (
+        None if error is MaestroAuthenticationException else {"error": "unavailable"}
+    )
+    assert reported_error.translation_placeholders == expected_placeholders
+    message_template = translations[
+        f"component.{DOMAIN}.exceptions.{expected_key}.message"
+    ]
+    rendered_message = message_template.format(**(expected_placeholders or {}))
+    assert rendered_message == expected_messages[language]
+    assert str(reported_error) == expected_messages["en"].rstrip(".")
     forward.assert_not_awaited()
 
 
+async def test_setup_connection_failure_waits_for_retry(hass, entry, controller):
+    """Retry a temporary cloud outage automatically without asking for a new password."""
+    # 1. The account's discovery request fails because the cloud cannot be reached.
+    controller.retrieve_linked_stove_infos.side_effect = MaestroConnectionException(
+        "cloud is offline"
+    )
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", new_callable=AsyncMock
+        ) as forward,
+    ):
+        # 2. Let HA handle setup normally, including scheduling its next attempt.
+        setup_succeeded = await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    # 3. HA waits to retry and does not request new credentials or create controls.
+    assert setup_succeeded is False
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert hass.config_entries.flow.async_progress() == []
+    forward.assert_not_awaited()
+
+
+async def test_setup_preserves_server_requested_retry_delay(hass, entry, controller):
+    """Let HA wait as requested by the cloud instead of retrying an overloaded login early."""
+    # 1. Discovery is temporarily blocked by a server-requested pause.
+    failure = MaestroConnectionException(
+        "Maestro login failed (HTTP 503)", retry_after=120
+    )
+    controller.retrieve_linked_stove_infos.side_effect = failure
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        pytest.raises(ConfigEntryNotReady) as raised,
+    ):
+        # 2. Try setup through its real Home Assistant exception boundary.
+        await async_setup_entry(hass, entry)
+    # 3. HA receives the original requested delay and its cause.
+    assert raised.value.retry_after == 120
+    assert raised.value.__cause__ is failure
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == "account_cannot_connect"
+    assert raised.value.translation_placeholders == {"error": str(failure)}
+
+
+@pytest.mark.parametrize(
+    ("data_source", "expected_key"),
+    [
+        ("model", "account_cannot_connect"),
+        ("live", "account_cannot_connect"),
+        ("statistics", "counters_cannot_connect"),
+        ("consumption", "consumption_cannot_connect"),
+    ],
+)
+async def test_coordinators_preserve_server_requested_retry_delay(
+    hass, entry, coordinator, stove, controller, data_source, expected_key
+):
+    """Preserve server-requested pauses for setup and every independently scheduled reading."""
+    # 1. The selected cloud operation asks HA to pause before its next update.
+    updates = {
+        "model": (coordinator, controller.get_stove_model_for_stove),
+        "live": (coordinator, controller.do_ping_for_stove),
+        "statistics": (
+            MczCountersCoordinator(hass, entry, controller, stove),
+            controller.get_counters_for_stove,
+        ),
+        "consumption": (
+            MczConsumptionCoordinator(hass, entry, controller, stove),
+            controller.get_consumption_for_stove,
+        ),
+    }
+    update_coordinator, request = updates[data_source]
+    failure = MaestroConnectionException("Maestro service is busy", retry_after=120)
+    request.side_effect = failure
+    # 2. Let the coordinator translate the failure for HA's scheduler.
+    with pytest.raises(UpdateFailed) as raised:
+        if data_source == "model":
+            await update_coordinator._async_setup()
+        else:
+            await update_coordinator._async_update_data()
+    # 3. No layer discards the pause or turns overload into a password prompt.
+    assert raised.value.retry_after == 120
+    assert raised.value.__cause__ is failure
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == expected_key
+    assert raised.value.translation_placeholders == {"error": str(failure)}
+    assert hass.config_entries.flow.async_progress() == []
+    await update_coordinator.async_shutdown()
+
+
+@pytest.mark.parametrize(
+    "failing_request",
+    [
+        "retrieve_linked_stove_infos",
+        "get_stove_model_for_stove",
+        "do_ping_for_stove",
+    ],
+)
+async def test_setup_authentication_starts_reauth(
+    hass, entry, controller, failing_request
+):
+    """Show HA's password recovery prompt wherever setup discovers expired credentials."""
+    # 1. Reject the account during discovery, model loading, or its first live update.
+    getattr(controller, failing_request).side_effect = MaestroAuthenticationException(
+        "password changed"
+    )
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        # 2. Let HA handle setup normally, including authentication errors.
+        setup_succeeded = await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    # 3. Setup stops and offers recovery for the existing account.
+    assert setup_succeeded is False
+    pending_flows = hass.config_entries.flow.async_progress()
+    assert len(pending_flows) == 1
+    recovery_flow = pending_flows[0]
+    assert recovery_flow["step_id"] == "reauth_confirm"
+    assert recovery_flow["context"]["source"] == "reauth"
+    assert recovery_flow["context"]["entry_id"] == entry.entry_id
+
+
+@pytest.mark.parametrize("data_source", ["live", "statistics", "consumption"])
+@pytest.mark.parametrize("authentication_failed", [False, True])
+async def test_update_authentication_starts_reauth(
+    hass, entry, coordinator, stove, controller, data_source, authentication_failed
+):
+    """Offer sign-in recovery for rejected live or history requests, not network outages."""
+    # 1. Fail one kind of update with expired credentials or a temporary outage.
+    updates = {
+        "live": (coordinator, controller.do_ping_for_stove),
+        "statistics": (
+            MczCountersCoordinator(hass, entry, controller, stove),
+            controller.get_counters_for_stove,
+        ),
+        "consumption": (
+            MczConsumptionCoordinator(hass, entry, controller, stove),
+            controller.get_consumption_for_stove,
+        ),
+    }
+    update_coordinator, request = updates[data_source]
+    failure = (
+        MaestroAuthenticationException
+        if authentication_failed
+        else MaestroConnectionException
+    )
+    request.side_effect = failure("unavailable")
+
+    # 2. Let HA handle the failed scheduled update.
+    await update_coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    # 3. Only authentication failures start recovery, always for the same account.
+    assert not update_coordinator.last_update_success
+    pending_flows = hass.config_entries.flow.async_progress()
+    if authentication_failed:
+        assert len(pending_flows) == 1
+        assert pending_flows[0]["step_id"] == "reauth_confirm"
+        assert pending_flows[0]["context"]["entry_id"] == entry.entry_id
+    else:
+        assert pending_flows == []
+    await update_coordinator.async_shutdown()
+
+
 @pytest.mark.parametrize("result", [False, True])
-async def test_unload_and_options_reload(hass, entry, result):
-    """Unload controls and reload changed options so HA applies the user's new settings."""
-    # 1. Unload the platforms, keeping HA's success or failure result.
+async def test_unload_platforms(hass, entry, result):
+    """Report whether controls unloaded successfully so HA knows the account's state."""
+    # 1. Let platform unloading succeed or fail for this account.
     with patch.object(
         hass.config_entries,
         "async_unload_platforms",
         new_callable=AsyncMock,
         return_value=result,
     ) as unload:
+        # 2. Ask the integration to unload its controls.
         unload_result = await async_unload_entry(hass, entry)
+    # 3. Pass the result back to HA without hiding an unload failure.
     assert unload_result is result
     unload.assert_awaited_once_with(entry, PLATFORMS)
-    # 2. Updating options should reload this account, not a different account.
-    with patch.object(
-        hass.config_entries, "async_reload", new_callable=AsyncMock
-    ) as reload:
-        await _async_update_listener(hass, entry)
-    reload.assert_awaited_once_with(entry.entry_id)
 
 
-async def test_coordinator_empty_account(hass, entry):
+@pytest.mark.parametrize(
+    ("language", "expected_message"),
+    [
+        ("en", "No stoves were found for this Maestro account."),
+        ("nl", "Er zijn geen kachels gevonden voor dit Maestro-account."),
+    ],
+)
+async def test_coordinator_empty_account(
+    hass, entry, controller, language, expected_message
+):
     """Report an account with no stoves instead of pretending a refresh succeeded."""
     # 1. Start with a refresh manager that has no stoves.
-    coordinator = MczAccountCoordinator(hass, entry, "empty", [])
+    coordinator = MczAccountCoordinator(
+        hass, entry, "empty", MaestroAccount(controller)
+    )
+    translations = await async_get_translations(hass, language, "exceptions", {DOMAIN})
     # 2. Both its first setup and later refreshes must explain the missing stove.
     for method in (coordinator._async_setup, coordinator._async_update_data):
-        with pytest.raises(UpdateFailed, match="No stoves"):
+        with pytest.raises(UpdateFailed) as raised:
             await method()
+        # 3. Either failure explains the empty account in the user's language.
+        assert raised.value.translation_domain == DOMAIN
+        assert raised.value.translation_key == "account_no_stoves"
+        assert raised.value.translation_placeholders is None
+        assert raised.value.__cause__ is None
+        translated_message = translations[
+            f"component.{DOMAIN}.exceptions.account_no_stoves.message"
+        ]
+        assert translated_message == expected_message
 
 
 async def test_coordinator_model_failure(coordinator, stove, controller):
@@ -175,26 +577,44 @@ async def test_coordinator_model_failure(coordinator, stove, controller):
         "offline"
     )
     # 2. The refresh manager should tell HA that setup failed.
-    with pytest.raises(UpdateFailed, match="offline"):
+    with pytest.raises(UpdateFailed) as raised:
         await coordinator._async_setup()
+    assert raised.value.translation_key == "account_cannot_connect"
+    assert raised.value.translation_placeholders == {"error": "offline"}
 
 
 @pytest.mark.parametrize(
-    "error,expected",
+    ("error", "expected", "expected_key"),
     [
-        (MaestroAuthenticationException, ConfigEntryAuthFailed),
-        (MaestroConnectionException, UpdateFailed),
+        (MaestroAuthenticationException, ConfigEntryAuthFailed, "account_invalid_auth"),
+        (MaestroConnectionException, UpdateFailed, "account_cannot_connect"),
     ],
 )
+@pytest.mark.parametrize("during_setup", [False, True])
 async def test_coordinator_maps_update_failures(
-    coordinator, controller, error, expected
+    coordinator, controller, error, expected, expected_key, during_setup
 ):
     """Distinguish expired login from connection trouble so HA can respond appropriately."""
-    # 1. Make the stove's ping fail with this case's account or connection error.
-    controller.do_ping_for_stove.side_effect = error("offline")
+    # 1. Make model loading or a live update fail with an account or connection error.
+    failure = error("offline")
+    if during_setup:
+        controller.get_stove_model_for_stove.side_effect = failure
+    else:
+        controller.do_ping_for_stove.side_effect = failure
     # 2. HA receives the matching kind of failure, not a generic success.
-    with pytest.raises(expected):
-        await coordinator._async_update_data()
+    with pytest.raises(expected) as raised:
+        if during_setup:
+            await coordinator._async_setup()
+        else:
+            await coordinator._async_update_data()
+    # 3. The translated failure retains its cause without exposing sign-in details.
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == expected_key
+    assert raised.value.__cause__ is failure
+    expected_placeholders = (
+        None if error is MaestroAuthenticationException else {"error": "offline"}
+    )
+    assert raised.value.translation_placeholders == expected_placeholders
 
 
 async def test_coordinator_delayed_refresh_contract(coordinator):

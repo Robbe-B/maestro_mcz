@@ -38,7 +38,7 @@ from custom_components.maestro_mcz.maestro.controller.responses.stove_info impor
     StoveInfo,
 )
 from custom_components.maestro_mcz.maestro.model_value_reader import get_counter_value
-from custom_components.maestro_mcz.maestro.models import counter_definitions
+from custom_components.maestro_mcz.maestro.models import model_definitions
 from custom_components.maestro_mcz.maestro.models.models_types import (
     CounterMczConfigItem,
     MczStoveModelGeneration,
@@ -97,7 +97,7 @@ def test_totals_preserve_units_zero_and_missing_values(total, expected):
     counters = Counters(payload)
     total_definition = next(
         definition
-        for definition in counter_definitions.supported_counters
+        for definition in model_definitions.supported_counters
         if definition.sensor_get_name == "total_operating_hours"
     )
     operating_hours = get_counter_value(
@@ -144,7 +144,7 @@ def test_invalid_counters_fail_explicitly(payload):
     ],
 )
 async def test_power_units_follow_controller_family(
-    counters_factory, controller, stove, generation, raw_power, expected
+    counters_factory, controller, stove, coordinator, generation, raw_power, expected
 ):
     """Display both families in hours so their operating times can be compared safely."""
     # 1. The cloud has a reading even though the physical stove is disconnected.
@@ -153,7 +153,9 @@ async def test_power_units_follow_controller_family(
         {"cont_tot_t_lav1": raw_power, "num_acc": 0}
     )
     stove.Status.is_connected = False
-    power_sensor = MczCounterSensor(counters, counter_definitions.supported_counters[2])
+    power_sensor = MczCounterSensor(
+        counters, model_definitions.supported_counters[2], coordinator
+    )
     assert power_sensor.native_value is None
     assert not power_sensor.available
 
@@ -168,7 +170,7 @@ async def test_power_units_follow_controller_family(
         assert power_sensor.native_value == expected
         assert power_sensor.available is (expected is not None)
         ignition_sensor = MczCounterSensor(
-            counters, counter_definitions.supported_counters[0]
+            counters, model_definitions.supported_counters[0], coordinator
         )
         assert ignition_sensor.native_value == 0
         assert ignition_sensor.available
@@ -255,13 +257,12 @@ async def test_new_counter_definition_drives_discovery_and_presentation(
         user_friendly_name="Custom operating time",
         sensor_get_name="custom_operating_time",
         value_sources={"cont_tot_t_lav3": 60},
-        icon="mdi:clock-outline",
         unit=UnitOfTime.MINUTES,
         display_precision=1,
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.TOTAL,
     )
-    monkeypatch.setattr(counter_definitions, "supported_counters", [custom_counter])
+    monkeypatch.setattr(model_definitions, "supported_counters", [custom_counter])
     controller.get_counters_for_stove.return_value = Counters(
         {"cont_tot_t_lav3": 5400, "num_acc": 123}
     )
@@ -285,7 +286,7 @@ async def test_new_counter_definition_drives_discovery_and_presentation(
     assert float(state.state) == 90
     assert state.attributes["unit_of_measurement"] == "min"
     assert state.attributes["state_class"] == "total"
-    assert state.attributes["icon"] == "mdi:clock-outline"
+    assert "icon" not in state.attributes
     assert registry.async_get(entity_id).entity_category is None
     assert registry.async_get_entity_id("sensor", DOMAIN, "SERIAL-001-num_acc") is None
     assert await hass.config_entries.async_unload(entry.entry_id)
@@ -346,7 +347,7 @@ async def test_discovery_recovery_polling_and_unload(
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done(wait_background_tasks=True)
-    coordinator = entry.runtime_data
+    coordinator = entry.runtime_data.coordinator
     counters = coordinator.counters_coordinators["SERIAL-001"]
     registry = er.async_get(hass)
     assert registry.async_get_entity_id("sensor", DOMAIN, "SERIAL-001-num_acc") is None
@@ -373,7 +374,7 @@ async def test_discovery_recovery_polling_and_unload(
     await hass.async_block_till_done()
 
     # 3. All seven counters share the stove, with translated names and lifetime statistics.
-    for definition in counter_definitions.supported_counters:
+    for definition in model_definitions.supported_counters:
         unique_id = f"SERIAL-001-{definition.sensor_get_name}"
         entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
         state = hass.states.get(entity_id)
@@ -438,6 +439,81 @@ async def test_discovery_recovery_polling_and_unload(
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
     assert controller.get_counters_for_stove.await_count == expected_count
+
+
+@pytest.mark.parametrize("polling_disabled", [False, True])
+async def test_counter_availability_follows_cloud_without_extra_requests(
+    hass, entry, controller, polling_disabled
+):
+    """Hide cached counters during cloud outages and restore them without hourly requests."""
+    # 1. Discover a genuine zero through the real platforms and normal startup request.
+    hass.config_entries.async_update_entry(entry, pref_disable_polling=polling_disabled)
+    controller.get_counters_for_stove.return_value = Counters({"num_acc": 0})
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    account = entry.runtime_data.coordinator
+    counters = account.counters_coordinators["SERIAL-001"]
+    registry = er.async_get(hass)
+    ignition_id = registry.async_get_entity_id("sensor", DOMAIN, "SERIAL-001-num_acc")
+    assert hass.states.get(ignition_id).state == "0"
+    initial_requests = controller.get_counters_for_stove.await_count
+    assert initial_requests == 1
+
+    # 2. A live cloud failure immediately hides counters, before their hourly refresh.
+    controller.get_stove_state_for_stove.side_effect = MaestroConnectionException(
+        "cloud unavailable"
+    )
+    await account.async_refresh()
+    await hass.async_block_till_done()
+    assert not account.last_update_success
+    assert counters.last_update_success
+    assert hass.states.get(ignition_id).state == "unavailable"
+    assert controller.get_counters_for_stove.await_count == initial_requests
+
+    # 3. Cloud recovery restores the saved zero without another statistics request.
+    controller.get_stove_state_for_stove.side_effect = None
+    await account.async_refresh()
+    await hass.async_block_till_done()
+    assert account.last_update_success
+    assert hass.states.get(ignition_id).state == "0"
+    assert controller.get_counters_for_stove.await_count == initial_requests
+
+    # 4. An offline physical stove does not hide statistics when cloud access still works.
+    controller.get_stove_status_for_stove.return_value.is_connected = False
+    await account.async_refresh()
+    await hass.async_block_till_done()
+    assert account.last_update_success
+    assert not account.stoves["SERIAL-001"].is_connected
+    assert hass.states.get(ignition_id).state == "0"
+    assert controller.get_counters_for_stove.await_count == initial_requests
+
+    # 5. A statistics-only failure stays unavailable despite successful live updates.
+    controller.get_counters_for_stove.side_effect = MaestroConnectionException(
+        "statistics unavailable"
+    )
+    await counters.async_refresh()
+    await account.async_refresh()
+    await hass.async_block_till_done()
+    assert account.last_update_success
+    assert not counters.last_update_success
+    assert hass.states.get(ignition_id).state == "unavailable"
+    assert controller.get_counters_for_stove.await_count == initial_requests + 1
+
+    # 6. Unloading removes both subscriptions, so later updates cannot reach removed entities.
+    assert account._listeners
+    assert counters._listeners
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert not account._listeners
+    assert not counters._listeners
+    account.async_set_updated_data(None)
+    await hass.async_block_till_done()
+    assert controller.get_counters_for_stove.await_count == initial_requests + 1
 
 
 async def test_slow_counters_do_not_delay_controls(hass, entry, controller):
