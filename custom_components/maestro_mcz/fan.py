@@ -6,7 +6,6 @@ import math
 from typing import Any
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -15,7 +14,7 @@ from homeassistant.util.percentage import (
     ranged_value_to_percentage,
 )
 
-from .coordinator import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .maestro import MaestroStove, get_control_names
 from .maestro.controller.responses.model import (
     SensorConfiguration,
@@ -28,7 +27,7 @@ from .maestro.types.enums import SensorTypeEnum
 _LOGGER = logging.getLogger(__name__)
 
 
-class MczFanEntity(CoordinatorEntity, FanEntity):
+class MczFanEntity(CoordinatorEntity[MczAccountCoordinator], FanEntity):
     """Fan entity for Maestro MCZ stoves."""
 
     _attr_has_entity_name = True
@@ -59,7 +58,6 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
         self._attr_name = supported_fan.user_friendly_name
         self._attr_unique_id = f"{stove_unique_code}-{supported_fan.sensor_get_name}"
-        self._attr_icon = supported_fan.icon
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_fan.sensor_get_name
         self.entity_registry_enabled_default = supported_fan.enabled_by_default
@@ -75,15 +73,6 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
     @property
     def available(self) -> bool:
         return self._attr_available
-
-    @property
-    def icon(self) -> str | None:
-        if self._supported_fan is not None:
-            if self._supported_fan.icon is not None and self.available:
-                return self._supported_fan.icon
-            if self._supported_fan.unavailable_icon is not None and not self.available:
-                return self._supported_fan.unavailable_icon
-        return None
 
     @property
     def is_on(self) -> bool | None:
@@ -184,7 +173,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
             )
             self._current_fan_configuration = (
                 self._fan_configuration.mode_configurations.get(current_mode)
-                if self._fan_configuration is not None
+                if self._fan_configuration is not None and isinstance(current_mode, str)
                 else None
             )
 
@@ -209,6 +198,7 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
                 )
 
                 # speed
+                assert self._current_fan_configuration.configuration.max is not None
                 self._attr_speed_count = int(
                     self._current_fan_configuration.configuration.max
                 )
@@ -220,6 +210,10 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
                     and len(self._current_fan_configuration.configuration.variants) > 0
                 ):
                     self._attr_preset_modes = []
+                    assert (
+                        self._current_fan_configuration.configuration.mappings
+                        is not None
+                    )
                     for key in self._current_fan_configuration.configuration.variants:
                         if (
                             key
@@ -273,9 +267,10 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
             self._stove.Status,
             self._stove.model_generation,
         )
-        fan_value = str(value) if value is not None else None
+        fan_value: str | int | None = str(value) if value is not None else None
 
         with contextlib.suppress(Exception):
+            assert fan_value is not None
             fan_value = int(fan_value)  # fan_value can be a string
 
         # on/off
@@ -350,11 +345,11 @@ class MczFanEntity(CoordinatorEntity, FanEntity):
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up fan entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveFanEntities(coordinator, stove))
@@ -397,9 +392,9 @@ def get_supported_fan_configurations(
 
 def _getStoveFanEntities(
     coordinator: MczAccountCoordinator, stove: MaestroStove
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the fan entities to create for this stove."""
-    entities = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     fixed_fans = {
         fan.sensor_get_name: (fan, configuration)
         for fan, configuration in (

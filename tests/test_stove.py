@@ -1,14 +1,18 @@
 """Protect stove identity, configuration discovery, refresh, and command routing."""
 
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import asdict, fields
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
 from custom_components.maestro_mcz.fan import get_supported_fan_configurations
 from custom_components.maestro_mcz.maestro import MaestroStove
+from custom_components.maestro_mcz.maestro.account import MaestroAccount
+from custom_components.maestro_mcz.maestro.controller import maestro_controller
 from custom_components.maestro_mcz.maestro.controller.const import (
     ACTIVATE_PROGRAM_URL,
     PING_URL,
@@ -17,6 +21,9 @@ from custom_components.maestro_mcz.maestro.controller.maestro_controller import 
     MaestroAuthenticationException,
     MaestroConnectionException,
     MaestroController,
+)
+from custom_components.maestro_mcz.maestro.controller.requests.activate_program import (
+    ProgramCommand,
 )
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Model,
@@ -36,7 +43,7 @@ def test_model_schema_preserves_units_and_alarm_inversion(unit, inverted):
         "rit_usc_standby",
         "Wait Standby",
         "auto",
-        "mdi:timer",
+        "ignition_delay",
         unit,
         None,
         None,
@@ -44,7 +51,7 @@ def test_model_schema_preserves_units_and_alarm_inversion(unit, inverted):
         models_types.MczStoveModelGeneration.M2_PLUS,
     )
     alarm = models_types.BinarySensorMczConfigItem(
-        "Alarm", "is_in_error", "mdi:alert", None, None, True, inverted=inverted
+        "Alarm", "is_in_error", "alarm", None, None, True, inverted=inverted
     )
 
     # 2. Inspect the declared fields and record both configurations.
@@ -193,7 +200,7 @@ def test_optional_control_bindings_follow_advertised_commands(
         "toni_buzz",
         common,
         "Toni",
-        "mdi:volume-high",
+        "tones",
         None,
         True,
         value_mappings={"0": "Silent"},
@@ -493,7 +500,12 @@ async def test_m1_refresh_requests_parameters_then_info(stove, controller, m1_pi
     events = []
 
     async def record_activation(
-        device_id, model_id, configuration_id, sensor_set_type_id, commands, callback
+        device_id,
+        model_id,
+        configuration_id,
+        sensor_set_type_id,
+        commands,
+        callback,
     ):
         events.append(("activate", commands[0].Value))
 
@@ -587,12 +599,14 @@ async def test_m1_cloud_request_serialization_and_rejection(
     # 1. Use the real HTTP-request builder with an accepted or rejected reply.
     api = MaestroController(Mock(), "test-user", "test-password")
     stove._controller = api
+    failure = MaestroConnectionException("Read request failed")
     with (
         patch.object(
             api,
             "make_request",
             new_callable=AsyncMock,
-            return_value={} if accepted else None,
+            return_value={},
+            side_effect=None if accepted else failure,
         ) as request,
         patch(
             "custom_components.maestro_mcz.maestro.asyncio.sleep",
@@ -602,7 +616,7 @@ async def test_m1_cloud_request_serialization_and_rejection(
         if accepted:
             await stove._ping()
         else:
-            with pytest.raises(MaestroConnectionException, match="device-1"):
+            with pytest.raises(MaestroConnectionException, match="Read request failed"):
                 await stove.refresh()
             assert not stove.is_integration_connected_to_cloud
     # 2. Acceptance allows both reads; rejection stops after the first read.
@@ -687,6 +701,7 @@ async def test_m1_ping_failure_stops_refresh(
         activation_results.insert(0, None)
     controller.activate_program_with_commands_for_stove.side_effect = activation_results
     with (
+        patch.object(stove, "_on_authentication_failed") as start_reauth,
         patch(
             "custom_components.maestro_mcz.maestro.asyncio.sleep",
             new_callable=AsyncMock,
@@ -703,6 +718,7 @@ async def test_m1_ping_failure_stops_refresh(
     controller.get_stove_status_for_stove.assert_not_awaited()
     controller.get_stove_state_for_stove.assert_not_awaited()
     assert not stove.is_connected
+    start_reauth.assert_not_called()
 
 
 @pytest.mark.parametrize("group_name", ["cod_for_spe_mqtt", "PING STOVE"])
@@ -749,7 +765,12 @@ async def test_m2_refresh_uses_only_dedicated_ping(
     events = []
 
     async def record_activation(
-        device_id, model_id, configuration_id, sensor_set_type_id, commands, callback
+        device_id,
+        model_id,
+        configuration_id,
+        sensor_set_type_id,
+        commands,
+        callback,
     ):
         events.append(("activate", commands[0].Value))
 
@@ -807,17 +828,19 @@ async def test_m2_cloud_request_serialization_and_rejection(
     # 1. Accept or reject the dedicated ping through the real request builder.
     api = MaestroController(Mock(), "test-user", "test-password")
     stove._controller = api
+    failure = MaestroConnectionException("Ping request failed")
     with patch.object(
         api,
         "make_request",
         new_callable=AsyncMock,
-        return_value={} if accepted else None,
+        return_value={},
+        side_effect=None if accepted else failure,
     ) as request:
         # 2. Run the real cloud-message construction without using the network.
         if accepted:
             await stove._ping()
         else:
-            with pytest.raises(MaestroConnectionException, match="Ping failed"):
+            with pytest.raises(MaestroConnectionException, match="Ping request failed"):
                 await stove._ping()
     # 3. Exactly one ping request is sent, with no configuration activation.
     request.assert_awaited_once_with("POST", url=f"{PING_URL}/device-1")
@@ -834,8 +857,13 @@ async def test_retained_m2_configuration_helper_serialization_and_rejection(
     )
     api = MaestroController(Mock(), "test-user", "test-password")
     stove._controller = api
+    failure = MaestroConnectionException("Ping request failed")
     with patch.object(
-        api, "make_request", new_callable=AsyncMock, return_value={} if accepted else None
+        api,
+        "make_request",
+        new_callable=AsyncMock,
+        return_value={},
+        side_effect=None if accepted else failure,
     ) as request:
         # 2. Exercise only the helper, not the normal HA refresh path.
         await stove._do_ping_configuration(ping)
@@ -1158,7 +1186,8 @@ async def test_mixed_generation_account_keeps_ping_requests_separate(
         second_stove._model.model_configurations.append(
             deepcopy(stove.Model.model_configurations[-1])
         )
-    coordinator = MczAccountCoordinator(hass, entry, "mixed", [stove, second_stove])
+    account = MaestroAccount(controller, [stove, second_stove])
+    coordinator = MczAccountCoordinator(hass, entry, "mixed", account)
     controller.reset_mock()
     with patch(
         "custom_components.maestro_mcz.maestro.asyncio.sleep", new_callable=AsyncMock
@@ -1217,6 +1246,154 @@ async def test_stove_refresh_and_command_contract(stove, controller):
     await stove.refresh()
     assert stove.is_integration_connected_to_cloud
     assert not stove.is_stove_connected_to_cloud
+
+
+@pytest.mark.parametrize("multiple_commands", [False, True])
+@pytest.mark.parametrize(
+    "failure_type", [MaestroAuthenticationException, MaestroConnectionException]
+)
+async def test_stove_user_commands_report_failures_without_replay(
+    stove, controller, multiple_commands, failure_type
+):
+    """Keep failed commands visible to the user without replaying them or reporting success."""
+    # 1. Prepare one setting or a batch, and reject it at the cloud boundary.
+    commands = [ProgramCommand("power", False)]
+    if multiple_commands:
+        commands.append(ProgramCommand("target", 23.5))
+    success_callback = Mock()
+    failure = failure_type("command rejected")
+    send_command = controller.activate_program_with_commands_for_stove
+    send_command.side_effect = failure
+
+    # 2. Call the stove directly, as the entity platforms do.
+    with (
+        patch.object(stove, "_on_authentication_failed") as start_reauth,
+        pytest.raises(HomeAssistantError) as raised,
+    ):
+        if multiple_commands:
+            await stove.activateProgramMultipleCommands(
+                "config-1", commands, success_callback
+            )
+        else:
+            await stove.activateProgram("power", "config-1", False, success_callback)
+
+    # 3. Preserve the cause and callback, starting account recovery only for bad credentials.
+    assert raised.value.__cause__ is failure
+    send_command.assert_awaited_once()
+    assert send_command.await_args.args[4] == commands
+    assert send_command.await_args.args[5] is success_callback
+    success_callback.assert_not_called()
+    if failure_type is MaestroAuthenticationException:
+        assert raised.value.translation_key == "command_invalid_auth"
+        start_reauth.assert_called_once_with()
+    else:
+        assert raised.value.translation_key == "command_cannot_connect"
+        assert raised.value.translation_placeholders == {"error": "command rejected"}
+        start_reauth.assert_not_called()
+
+
+@pytest.mark.parametrize("multiple_commands", [False, True])
+async def test_stove_user_commands_preserve_success_callbacks(stove, multiple_commands):
+    """Keep success callbacks working when direct stove commands are accepted by the cloud."""
+    # 1. Use the real controller's acceptance handling without making an HTTP request.
+    api = MaestroController(Mock(), "test-user", "test-password")
+    stove._controller = api
+    success_callback = Mock()
+    with patch.object(
+        api, "make_request", new_callable=AsyncMock, return_value={}
+    ) as request:
+        # 2. Send either a single setting or a batch through the stove facade.
+        if multiple_commands:
+            await stove.activateProgramMultipleCommands(
+                "config-1",
+                [ProgramCommand("power", False), ProgramCommand("target", 23.5)],
+                success_callback,
+            )
+        else:
+            await stove.activateProgram("power", "config-1", False, success_callback)
+    # 3. Acceptance runs the supplied callback exactly once, without an extra command.
+    success_callback.assert_called_once_with()
+    request.assert_awaited_once()
+
+
+async def test_stove_without_ha_callback_still_reports_auth_failure(controller):
+    """Keep direct construction usable while never hiding rejected credentials from callers."""
+    # 1. Create a stove without an HA recovery callback, using the original constructor.
+    stove_info = controller.retrieve_linked_stove_infos.return_value[0]
+    standalone_stove = MaestroStove(controller, stove_info)
+    failure = MaestroAuthenticationException("credentials rejected")
+    send_command = controller.activate_program_with_commands_for_stove
+    send_command.side_effect = failure
+    # 2. Try a setting without any HA entry to notify.
+    with pytest.raises(HomeAssistantError) as raised:
+        await standalone_stove.activateProgram("power", "config-1", False)
+    # 3. The caller still receives the translated failure and its original cause.
+    assert raised.value.translation_key == "command_invalid_auth"
+    assert raised.value.__cause__ is failure
+    send_command.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "commands",
+    [
+        [ProgramCommand("id-set_amb1", 23.5)],
+        [ProgramCommand("id-com_on_off", True)],
+        [ProgramCommand("custom-action", 1)],
+        [ProgramCommand("id-set_amb1", 23.5), ProgramCommand("custom-action", True)],
+    ],
+    ids=["temperature", "power-toggle", "unknown-action", "mixed-batch"],
+)
+@pytest.mark.parametrize("outage_persists", [False, True])
+@pytest.mark.parametrize("is_timeout", [False, True], ids=["server-error", "timeout"])
+async def test_all_commands_share_transient_retries(
+    stove, commands, outage_persists, is_timeout
+):
+    """Retry settings, toggles and custom actions alike while reporting local success only once."""
+    # 1. The chosen command or batch encounters a temporary or sustained cloud outage.
+    api = MaestroController(Mock(), "test-user", "test-password")
+    api._token = "test-token"
+    stove._controller = api
+    success_callback = Mock()
+    request_count = 0
+
+    @asynccontextmanager
+    async def cloud_response(*_args, **_kwargs):
+        nonlocal request_count
+        request_count += 1
+        if is_timeout and (outage_persists or request_count == 1):
+            raise TimeoutError("private transport details")
+        status = 503 if outage_persists or request_count == 1 else 200
+        yield Mock(status=status, headers={}, json=AsyncMock(return_value={}))
+
+    api._session.request.side_effect = cloud_response
+    with patch.object(
+        maestro_controller, "_wait_before_retry", new_callable=AsyncMock
+    ) as wait:
+        # 2. Use the unchanged public stove API and the real controller retry policy.
+        if not outage_persists:
+            await stove.activateProgramMultipleCommands(
+                "config-1", commands, success_callback
+            )
+        else:
+            with pytest.raises(HomeAssistantError) as raised:
+                await stove.activateProgramMultipleCommands(
+                    "config-1", commands, success_callback
+                )
+            assert raised.value.translation_key == "command_cannot_connect"
+
+    # 3. Every command uses the same budget; only confirmed success runs the callback.
+    expected_attempts = 3 if outage_persists else 2
+    assert request_count == expected_attempts
+    assert wait.await_count == expected_attempts - 1
+    api._session.post.assert_not_called()
+    if not outage_persists:
+        success_callback.assert_called_once_with()
+    else:
+        success_callback.assert_not_called()
+    sent_requests = api._session.request.call_args_list
+    original_request = sent_requests[0]
+    for request in sent_requests:
+        assert request == original_request
 
 
 @pytest.mark.parametrize(
@@ -1466,7 +1643,8 @@ async def test_multiple_stoves_keep_identity_and_commands_separate(
     kitchen_stove = MaestroStove(controller, kitchen_info)
     await kitchen_stove.async_init()
     await kitchen_stove.refresh()
-    coordinator = MczAccountCoordinator(hass, entry, "two-stoves", [stove, kitchen_stove])
+    account = MaestroAccount(controller, [stove, kitchen_stove])
+    coordinator = MczAccountCoordinator(hass, entry, "two-stoves", account)
     assert set(coordinator.stoves) == {"SERIAL-001", "SERIAL-002"}
     living_room_identifiers = stove.get_device_info()["identifiers"]
     kitchen_identifiers = kitchen_stove.get_device_info()["identifiers"]

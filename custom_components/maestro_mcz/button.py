@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .coordinator import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .datetime import MczDateTimeEntity
 from .maestro import MaestroStove
 from .maestro.controller.responses.model import SensorConfiguration
@@ -17,7 +16,7 @@ from .maestro.models import model_definitions, models_types
 from .maestro.types.enums import SensorTypeEnum
 
 
-class MczButtonEntity(CoordinatorEntity, ButtonEntity):
+class MczButtonEntity(CoordinatorEntity[MczAccountCoordinator], ButtonEntity):
     """Button entity for Maestro MCZ stoves."""
 
     _attr_has_entity_name = True
@@ -36,6 +35,7 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
         self._attr_name = supported_button.user_friendly_name
         control_name = matching_button_configuration.configuration.sensor_name
+        assert control_name is not None
         # Keep the catalogue spelling in entity IDs even if the model uses other casing.
         for name in (
             supported_button.sensor_set_name_m2,
@@ -46,7 +46,7 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
                 control_name = name
                 break
         self._attr_unique_id = f"{stove_unique_code}-{control_name}"
-        self._attr_icon = supported_button.icon
+        self._attr_translation_key = supported_button.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._prop = control_name
         self.entity_registry_enabled_default = supported_button.enabled_by_default
@@ -65,9 +65,9 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
 
     def _set_button_configuration(
         self, matching_button_configuration: SensorConfiguration
-    ):
+    ) -> None:
         self._button_configuration = matching_button_configuration
-        self._attr_return_value = None
+        self._attr_return_value: int | bool | str | None = None
 
         if (
             matching_button_configuration.configuration.type
@@ -77,12 +77,14 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         elif (
             matching_button_configuration.configuration.type == SensorTypeEnum.INT.value
         ):
-            for key in matching_button_configuration.configuration.variants:
-                if key in matching_button_configuration.configuration.mappings:
+            variants = matching_button_configuration.configuration.variants
+            mappings = matching_button_configuration.configuration.mappings
+            assert variants is not None
+            assert mappings is not None
+            for key in variants:
+                if key in mappings:
                     if key == "reset":
-                        self._attr_return_value = (
-                            matching_button_configuration.configuration.mappings[key]
-                        )
+                        self._attr_return_value = mappings[key]
 
     async def async_press(self) -> None:
         """Button pressed action execute."""
@@ -116,7 +118,7 @@ class MczButtonEntity(CoordinatorEntity, ButtonEntity):
         self.async_write_ha_state()
 
 
-class MczTimeSyncButtonEntity(CoordinatorEntity, ButtonEntity):
+class MczTimeSyncButtonEntity(CoordinatorEntity[MczAccountCoordinator], ButtonEntity):
     """Button entity to trigger time synchronization."""
 
     _attr_has_entity_name = True
@@ -145,7 +147,7 @@ class MczTimeSyncButtonEntity(CoordinatorEntity, ButtonEntity):
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_time_sync_button.sensor_set_name}"
         )
-        self._attr_icon = supported_time_sync_button.icon
+        self._attr_translation_key = supported_time_sync_button.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_time_sync_button.sensor_set_name
         self.entity_registry_enabled_default = (
@@ -168,7 +170,7 @@ class MczTimeSyncButtonEntity(CoordinatorEntity, ButtonEntity):
 
     def _set_time_sync_button_configuration(
         self, matching_time_sync_button_configuration: SensorConfiguration
-    ):
+    ) -> None:
         self._time_sync_button_configuration = matching_time_sync_button_configuration
         if self._mcz_date_time_entity is not None:
             self._mcz_date_time_entity.set_date_time_configuration(
@@ -193,11 +195,11 @@ class MczTimeSyncButtonEntity(CoordinatorEntity, ButtonEntity):
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up button entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveButtonEntities(coordinator, stove))
@@ -206,9 +208,9 @@ async def async_setup_entry(
 
 def _getStoveButtonEntities(
     coordinator: MczAccountCoordinator, stove: MaestroStove
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the button entities to create for this stove."""
-    entities = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
     # buttons
     supported_buttons = stove.get_supported_sensor_configurations(
         model_definitions.supported_buttons

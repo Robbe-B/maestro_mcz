@@ -11,6 +11,9 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.maestro_mcz.const import DOMAIN
 from custom_components.maestro_mcz.maestro import MaestroStove
+from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+    MaestroConnectionException,
+)
 from custom_components.maestro_mcz.maestro.controller.mocked_controller import (
     MockedController,
 )
@@ -21,6 +24,20 @@ def replay(tmp_path):
     """Start a replay controller with an empty folder, not a real cloud account."""
     replay_controller = MockedController(str(tmp_path))
     return replay_controller
+
+
+async def test_replay_does_not_claim_current_cloud_membership(replay):
+    """Reject authoritative cloud checks instead of treating saved reports as a current account list."""
+    # 1. Saved reports are local snapshots, not proof that a stove was unlinked.
+    with (
+        patch.object(replay, "get_mocked_files") as read_reports,
+        pytest.raises(MaestroConnectionException, match="current cloud"),
+    ):
+        # 2. A destructive decision asks for a complete current account list.
+        await replay.retrieve_linked_stove_infos(require_unique_codes=True)
+
+    # 3. Refuse the check before reading or changing the cached replay stoves.
+    read_reports.assert_not_called()
 
 
 @pytest.mark.parametrize(

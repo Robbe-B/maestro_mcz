@@ -43,7 +43,7 @@ See the [Marketplace custom repository guide](https://www.home-assistant.io/inte
 
 ## Install manually
 
-Use this method if you do not use Marketplace or HACS. You will need to install future updates manually too.
+Use this method if you do not use Marketplace. You will need to install future updates manually too.
 
 1. Download the source archive for the version you want from [Releases](https://github.com/Robbe-B/maestro_mcz/releases). Prefer the latest stable release unless you intentionally want to test a pre-release.
 2. Extract the archive and find `custom_components/maestro_mcz` inside it.
@@ -77,7 +77,7 @@ The installed layout should look like this:
 
 ![Home Assistant's Add integration dialog showing Maestro MCZ](add_integration.png)
 
-The screenshot is retained from the wiki; the appearance of the dialog may change between Home Assistant versions.
+The appearance of the dialog may differ between Home Assistant versions.
 
 Configuration is through the Home Assistant interface. You do not need to add a `maestro_mcz:` section to `configuration.yaml`.
 
@@ -87,8 +87,6 @@ If setup fails, use the [setup troubleshooting steps](troubleshooting.md#setup-o
 
 Make a Home Assistant backup and read the [release notes](https://github.com/Robbe-B/maestro_mcz/releases) before updating.
 
-**HACS installation:** download the update through HACS and restart Home Assistant.
-
 **Marketplace installation:** use **Settings > Updates** or the repository's Marketplace page to install the update, then restart Home Assistant.
 
 **Manual installation:** download the desired release and replace the installed integration files with that release's complete `custom_components/maestro_mcz` folder, then restart Home Assistant. Do not mix files from different releases.
@@ -97,7 +95,7 @@ Keep pre-releases for deliberate testing. Documentation on `main` can describe c
 
 ## Remove
 
-To stop using the integration, remove its entry under **Settings > Devices & services** first. Then uninstall the downloaded integration through Marketplace or HACS, or delete only its `custom_components/maestro_mcz` folder for a manual installation, and restart Home Assistant.
+To stop using the integration, remove its entry under **Settings > Devices & services** first. Then uninstall the downloaded integration through Marketplace, or delete only its `custom_components/maestro_mcz` folder for a manual installation, and restart Home Assistant.
 
 Removing the integration from Home Assistant does not unlink the stove from your Maestro account. Review any dashboards or automations that referenced its entities.
 

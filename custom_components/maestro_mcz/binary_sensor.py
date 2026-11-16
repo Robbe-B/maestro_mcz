@@ -6,13 +6,12 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import MczAccountCoordinator
+from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .maestro import MaestroStove
 from .maestro.model_value_reader import get_response_value
 from .maestro.models import model_definitions, models_types
@@ -45,7 +44,9 @@ def _binary_sensor_enabled(
     return enabled is True
 
 
-class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
+class MczBinarySensorEntity(
+    CoordinatorEntity[MczAccountCoordinator], BinarySensorEntity
+):
     """Generic binary sensor for Maestro MCZ stoves."""
 
     _attr_has_entity_name = True
@@ -66,7 +67,7 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_binary_sensor.sensor_get_name}"
         )
-        self._attr_icon = supported_binary_sensor.icon
+        self._attr_translation_key = supported_binary_sensor.translation_key
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_binary_sensor.sensor_get_name
         self._supported_binary_sensor = supported_binary_sensor
@@ -78,7 +79,7 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self._handle_coordinator_update_internal()  # getting the initial update directly without delay
 
     @property
-    def is_on(self):
+    def is_on(self) -> bool | None:
         return self._attr_is_on
 
     @property
@@ -106,22 +107,25 @@ class MczBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
             value = None
         if value is not None and self._inverted:
             value = not value
+        assert value is None or isinstance(value, bool)
         self._attr_is_on = value
 
 
-class MczConnectionStatusBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
+class MczConnectionStatusBinarySensorEntity(
+    CoordinatorEntity[MczAccountCoordinator], BinarySensorEntity
+):
     """Binary Sensor to represent the connection status."""
 
     _attr_has_entity_name = True
     _attr_is_on = None
 
-    _stove_field: str | None = None
+    _stove_field: str
 
     def __init__(
         self,
         coordinator: MczAccountCoordinator,
         entity_name: str,
-        entity_icon: str,
+        translation_key: str,
         stove_field: str,
         stove_unique_code: str,
     ) -> None:
@@ -135,14 +139,14 @@ class MczConnectionStatusBinarySensorEntity(CoordinatorEntity, BinarySensorEntit
             f"{stove_unique_code}-{self._attr_name.replace(' ', '_')}"
         )
         self._stove_field = stove_field
-        self._attr_icon = entity_icon
+        self._attr_translation_key = translation_key
         self._attr_device_info = self._stove.get_device_info()
         self.entity_registry_enabled_default = True
         self.entity_category = EntityCategory.DIAGNOSTIC
         self._handle_coordinator_update_internal()  # getting the initial update directly without delay
 
     @property
-    def is_on(self):
+    def is_on(self) -> bool | None:
         return self._attr_is_on
 
     @property
@@ -172,7 +176,7 @@ class MczCloudStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
         super().__init__(
             coordinator,
             "Cloud Connection Status",
-            "mdi:cloud",
+            "cloud_connection",
             "is_integration_connected_to_cloud",
             stove_unique_code,
         )
@@ -191,7 +195,7 @@ class MczStoveStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
         super().__init__(
             coordinator,
             "Device Connection Status",
-            "mdi:connection",
+            "device_connection",
             "is_stove_connected_to_cloud",
             stove_unique_code,
         )
@@ -208,11 +212,11 @@ class MczStoveStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: MczConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up button entities from a config entry."""
-    coordinator: MczAccountCoordinator = entry.runtime_data
+    """Set up binary sensor entities from a config entry."""
+    coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveBinarySensorEntities(coordinator, stove))
@@ -222,10 +226,10 @@ async def async_setup_entry(
 def _getStoveBinarySensorEntities(
     coordinator: MczAccountCoordinator,
     stove: MaestroStove,
-) -> list[CoordinatorEntity]:
+) -> list[CoordinatorEntity[MczAccountCoordinator]]:
     """Get the binary sensor entities to create for this stove."""
-    entities = []
-    definitions = []
+    entities: list[CoordinatorEntity[MczAccountCoordinator]] = []
+    definitions: list[models_types.BinarySensorMczConfigItem] = []
     for definition in model_definitions.supported_binary_sensors:
         if (
             definition.sensor_set_name_m1 is not None

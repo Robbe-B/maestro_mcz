@@ -6,6 +6,16 @@
           "username": "[%key:common::config_flow::data::username%]",
           "password": "[%key:common::config_flow::data::password%]"
         }
+      },
+      "reauth_confirm": {
+        "title": "[%key:common::config_flow::title::reauth%]",
+        "description": "Sign in again to your Maestro account ({username}) with your current password. Your devices and settings will be kept.",
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        },
+        "data_description": {
+          "password": "Your current Maestro account password."
+        }
       }
     },
     "error": {
@@ -14,7 +24,9 @@
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "unique_id_mismatch": "Sign in with the Maestro account already configured for this entry.",
+      "reauth_not_supported": "Saved diagnostic reports do not use a cloud password. They cannot be reauthenticated."
     }
   },
   "options": {
@@ -27,6 +39,30 @@
     }
   },
   "exceptions": {
+    "device_removal_still_linked": {
+      "message": "This stove is still linked to your Maestro account. Unlink it in the official MCZ app before trying to delete it from Home Assistant."
+    },
+    "device_removal_replay_linked": {
+      "message": "This stove is still in the loaded saved reports. Update the saved reports and reload this account before trying again."
+    },
+    "device_removal_cannot_verify": {
+      "message": "Could not verify which stoves are linked to this account. The device was not removed. Check the account connection and try again."
+    },
+    "account_invalid_auth": {
+      "message": "The Maestro account needs to sign in again."
+    },
+    "account_cannot_connect": {
+      "message": "Could not connect to the Maestro cloud: {error}"
+    },
+    "account_no_stoves": {
+      "message": "No stoves were found for this Maestro account."
+    },
+    "command_invalid_auth": {
+      "message": "The Maestro account needs to sign in again before this command can be sent."
+    },
+    "command_cannot_connect": {
+      "message": "Could not confirm the Maestro command: {error}. Check the stove's state before trying again."
+    },
     "counters_invalid_auth": {
       "message": "Authentication failed while retrieving stove statistics"
     },

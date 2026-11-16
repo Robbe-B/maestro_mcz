@@ -1,5 +1,7 @@
 """Read definition-declared fields from cached API responses, without HTTP."""
 
+from typing import cast
+
 from .controller.responses.counters import Counters
 from .controller.responses.state import State
 from .controller.responses.status import Status
@@ -19,7 +21,8 @@ def read_response_value(
 ) -> bool | int | float | str | None:
     """Read one response, preserving None, zero and False."""
     response = status if source is MczResponseSource.STATUS else state
-    return getattr(response, sensor_name, None)
+    # Field names come from the catalogue; getattr loses the response field types.
+    return cast(bool | int | float | str | None, getattr(response, sensor_name, None))
 
 
 def get_response_value(
@@ -50,7 +53,7 @@ def get_counter_value(
 ) -> int | float | None:
     """Read the first available declared field and apply its configured unit divisor."""
     for name, divisor in config.value_sources.items():
-        value = getattr(counters, name, None)
+        value = cast(int | float | None, getattr(counters, name, None))
         if value is not None:
             if isinstance(divisor, dict):
                 divisor = divisor[model_generation]

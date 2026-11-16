@@ -38,6 +38,14 @@ tooling and configuration, and run available checks on changed Python files
 before finishing. Fix issues introduced by the change without weakening rules,
 adding blanket suppressions, or reformatting unrelated code.
 
+# Python typing
+
+Maintain strict typing across all production modules, including the bundled
+Maestro client. After relevant Python changes, run
+`python -m mypy --config-file tests/pyproject.toml` from the repository root.
+Keep this check enforced in CI. Fix typing errors rather than weakening checks,
+excluding modules, or adding blanket suppressions.
+
 # Imports
 
 Keep module dependencies acyclic. Import coordinators and their shared types

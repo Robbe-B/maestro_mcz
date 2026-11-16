@@ -1,15 +1,119 @@
 {
   "entity": {
+    "binary_sensor": {
+      "alarm": {
+        "default": "mdi:alert"
+      },
+      "pellet_level_low": {
+        "default": "mdi:gauge-low"
+      },
+      "cloud_connection": {
+        "default": "mdi:cloud"
+      },
+      "device_connection": {
+        "default": "mdi:connection"
+      }
+    },
+    "button": {
+      "alarm_reset": {
+        "default": "mdi:auto-fix"
+      },
+      "system_date_time": {
+        "default": "mdi:calendar-clock"
+      }
+    },
+    "datetime": {
+      "date_time": {
+        "default": "mdi:calendar-clock"
+      }
+    },
+    "number": {
+      "ignition_delay": {
+        "default": "mdi:fire"
+      },
+      "shutdown_delay": {
+        "default": "mdi:fire-off"
+      },
+      "start_stop_negative_hysteresis": {
+        "default": "mdi:thermometer-minus"
+      },
+      "start_stop_positive_hysteresis": {
+        "default": "mdi:thermometer-plus"
+      },
+      "ambient_negative_hysteresis": {
+        "default": "mdi:thermometer-minus"
+      },
+      "ambient_positive_hysteresis": {
+        "default": "mdi:thermometer-plus"
+      },
+      "circulation_pump_minimum_temperature": {
+        "default": "mdi:pump"
+      }
+    },
+    "select": {
+      "manual_power": {
+        "default": "mdi:fire"
+      },
+      "tones": {
+        "default": "mdi:volume-high"
+      }
+    },
     "sensor": {
       "consumption_yesterday": {
         "default": "mdi:fire"
+      },
+      "last_alarm": {
+        "default": "mdi:alert"
+      },
+      "current_state": {
+        "default": "mdi:state-machine"
+      },
+      "water_temperature": {
+        "default": "mdi:water-thermometer"
+      },
+      "puffer_temperature": {
+        "default": "mdi:water-thermometer"
+      },
+      "current_mode": {
+        "default": "mdi:tune"
+      },
+      "exhaust_fan_speed": {
+        "default": "mdi:fan-chevron-up"
+      },
+      "transport_screw_speed": {
+        "default": "mdi:screw-lag"
+      },
+      "next_maintenance": {
+        "default": "mdi:wrench-clock"
+      },
+      "ignition_count": {
+        "default": "mdi:fire"
+      },
+      "total_operating_time": {
+        "default": "mdi:timer-outline"
+      },
+      "operating_time_power_1": {
+        "default": "mdi:timer-outline"
+      },
+      "operating_time_power_2": {
+        "default": "mdi:timer-outline"
+      },
+      "operating_time_power_3": {
+        "default": "mdi:timer-outline"
+      },
+      "operating_time_power_4": {
+        "default": "mdi:timer-outline"
+      },
+      "operating_time_power_5": {
+        "default": "mdi:timer-outline"
       }
     },
     "climate": {
       "main_climate": {
+        "default": "mdi:stove",
         "state_attributes": {
           "preset_mode": {
-            "default": "mdi:confused",
+            "default": "mdi:emoticon-confused",
             "state": {
               "manual": "mdi:hand-back-right",
               "auto": "mdi:thermometer-auto",
@@ -23,6 +127,10 @@
     },
     "fan": {
       "main_fan": {
+        "default": "mdi:fan",
+        "state": {
+          "unavailable": "mdi:fan-off"
+        },
         "state_attributes": {
           "preset_mode": {
             "state": {
@@ -31,6 +139,14 @@
             }
           }
         }
+      }
+    },
+    "switch": {
+      "start_stop": {
+        "default": "mdi:leaf"
+      },
+      "timer": {
+        "default": "mdi:timer"
       }
     }
   }

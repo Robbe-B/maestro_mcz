@@ -2,7 +2,7 @@
 
 [Documentation home](README.md) | [Configuration](configuration.md) | [Troubleshooting](troubleshooting.md)
 
-The integration supports nine Home Assistant entity platforms. The tables below describe implemented features, **not a guaranteed list for every stove**.
+The integration provides the controls and readings below. **Not every stove supports every feature.**
 
 ## At a glance
 
@@ -22,13 +22,13 @@ Entity IDs are assigned by Home Assistant and may differ between installations. 
 
 ## Climate
 
-The main climate entity supports **Heat** and **Off** when a recognized power configuration is present. Target temperature and presets are added when matching thermostat and mode configurations are available.
+Use the main climate control to turn the stove on with **Heat** or off with **Off**. Target temperature and presets are available where supported by your stove.
 
-Possible presets include **Manual**, **Auto**, **Overnight**, **Comfort**, and **Turbo**. Your stove determines the available subset and temperature range. The integration normalizes some older model names: `dynamic` becomes `auto`, and `power` becomes `turbo`.
+Possible presets include **Manual**, **Auto**, **Overnight**, **Comfort**, and **Turbo**. Your stove determines the available presets and temperature range.
 
 Some older stoves may show extra presets they do not support. Use **Manual** or **Auto** if another preset does not work.
 
-**Heat** expresses the selected HVAC mode; it does not mean the stove is burning at that instant. Startup, shutdown, standby, and other phases can affect the reported heating action.
+**Heat** means heating is enabled; it does not mean the stove is burning at that instant. The stove may be starting up, shutting down, or on standby.
 
 ## Fans and manual power
 
@@ -62,31 +62,25 @@ Numeric ranges and steps are read from the cloud model. Consult your stove's man
 | Mechanical information | Exhaust Fan Speed, Transport Screw Speed |
 | Maintenance | Next Maintenance |
 
-Water and puffer readings are relevant only where the stove exposes them. Sensor creation depends on the returned data; the existence of an internal field or a sensor name in the code does not establish that your stove provides a meaningful reading.
+Water and puffer (buffer tank) readings are available only on supported stoves. A sensor listed here may not appear for your model.
 
 ### Lifetime statistics
 
-Where supported, **Ignition count**, **Total operating time**, and **Operating time at power 1** through **5** show the stove's accumulated counters. Operating times are displayed in whole hours; more precise readings are kept for history. These sensors appear under the stove's diagnostic entities only after the cloud supplies a reading; a missing reading is not treated as zero.
+Where supported, **Ignition count**, **Total operating time**, and **Operating time at power 1** through **5** show the stove's lifetime totals. Operating times are displayed in whole hours; more precise readings are kept for history. These sensors appear under the stove's diagnostic entities only after the cloud supplies a reading; a missing reading is not treated as zero.
 
-Statistics are requested at startup and hourly, separately from live controls. Changing the live polling interval does not change this hourly schedule. Disabling polling in Home Assistant also stops scheduled statistics updates. A statistics failure does not interrupt heating controls, and saved cloud counters can remain readable while the physical stove is offline.
+Statistics refresh at startup and hourly, separately from live controls. Changing the live polling interval does not change this hourly schedule. Disabling polling in Home Assistant also stops scheduled statistics updates. A statistics failure does not interrupt heating controls. These sensors become unavailable when the integration detects a cloud connection failure, and show their saved readings again when the connection recovers, provided the last statistics request succeeded. They can remain readable while the stove itself is offline.
 
-M1 and M2+ stoves report operating times differently; the integration converts them to the same unit.
-
-**Next Maintenance** remains the existing sensor and follows live stove updates, not the hourly statistics schedule. It is not duplicated. Diagnostic replay preserves saved statistics; older reports without them do not create readings.
+**Next Maintenance** follows live stove updates, not the hourly statistics schedule.
 
 ### Consumption history
 
-**Yesterday's consumption** shows the Maestro cloud's estimate in kWh. It appears only after the service returns a reading for yesterday, including a genuine zero. M1 stoves are not queried because their cloud history only returns zero.
+**Yesterday's consumption** shows the Maestro cloud's estimate in kWh. It appears only after the service returns a reading for yesterday, including a genuine zero. It is not available for M1 stoves.
 
-History is requested at startup and at 00:01, separately from live stove updates. The one-minute wait avoids requesting history exactly at midnight, but the cloud may still take longer to publish the completed day's estimate. If yesterday's reading is missing or the request fails, it retries hourly until a reading is available, including zero. Once retrieved, the reading is kept until the next day without further scheduled requests. The sensor uses the stove's cloud-configured timezone, or Home Assistant's timezone if none is provided. Its attributes show the consumption date and the last successful retrieval time.
+The reading refreshes at startup and at 00:01, separately from live stove updates. If yesterday's reading is missing or the request fails, it retries hourly until a reading is available. The sensor uses the stove's timezone from the cloud, or Home Assistant's timezone if none is provided. Its attributes show the consumption date and the last successful retrieval time.
 
-The sensor can remain available while the stove is offline, provided its cloud history is accessible. It becomes unavailable if the history request fails or yesterday's reading is missing. The previous day's displayed value may remain until the 00:01 update; the cloud may take time to publish the next reading. Empty history is not treated as zero or as proof that the stove is unsupported.
+The sensor can remain available while the stove itself is offline. It becomes unavailable when the integration detects a cloud connection failure, if the history request fails, or if yesterday's reading is missing. When the cloud connection recovers, a saved reading for yesterday is shown again if the last history request succeeded. The previous day's displayed value may remain until the 00:01 update. The cloud may take longer to publish the next reading; a missing reading does not mean zero consumption or that the stove is unsupported.
 
 This is the app's estimated energy figure, not a measurement of electricity drawn by the stove. It is not a live meter and does not provide Energy dashboard integration or historical imports.
-
-Diagnostic replay uses the saved consumption value without contacting the cloud. Older reports without consumption data do not create a reading.
-
-If several replay files describe the same stove ID and name, the most recently modified file is used. Reports with different stove names keep their own saved readings.
 
 ## Connectivity and alarms
 
@@ -108,11 +102,9 @@ After changing the clock, check it in the official app or on the stove, especial
 
 ## Why entities differ between stoves
 
-The integration matches known feature definitions against cloud-provided model configuration and state. Different generations, firmware, operating modes, and accessories can expose different features.
+Available features depend on the stove model, installed software, operating mode, and accessories.
 
 This means an entity may not be created, may be disabled by default, or may become unavailable in a particular mode. Those are different situations.
-
-The integration recognizes M1 and otherwise uses M2+ as the default generation. M2+ covers newer controllers without distinguishing M2 from M3. AIR, HYDRO, and CORE describe product categories, not controller generations.
 
 To inspect disabled entities, open **Settings > Devices & services > Entities**, filter by **Maestro MCZ**, and include disabled entities. Enable an entity only if you need it and it applies to your stove.
 

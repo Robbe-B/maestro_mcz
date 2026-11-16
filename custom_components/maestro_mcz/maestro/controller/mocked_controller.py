@@ -4,11 +4,14 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
 from .controller_interface import MaestroControllerInterface
+from .maestro_controller import MaestroConnectionException
 from .requests.activate_program import ProgramCommand
+from .response_types import JsonObject
 from .responses.consumption import ConsumptionHistory
 from .responses.counters import Counters
 from .responses.model import Model
@@ -40,15 +43,20 @@ class MockedController(MaestroControllerInterface):
         self,
         method: str,
         url: str,
-        headers: dict | None = None,
-        body=None,
-        avoid_retries: bool = False,
-    ):
+        headers: dict[str, str] | None = None,
+        body: object = None,
+    ) -> None:
         """Simulates making a request to the API (not in mocked implementation)."""
         pass  # noqa: PIE790
 
-    async def retrieve_linked_stove_infos(self) -> list[StoveInfo]:
+    async def retrieve_linked_stove_infos(
+        self, *, require_unique_codes: bool = False
+    ) -> list[StoveInfo]:
         """Simulates getting information about the stoves linked to the user account. (from json mock files)."""
+        if require_unique_codes:
+            raise MaestroConnectionException(
+                "Saved diagnostics do not provide current cloud account membership"
+            )
         # fill the mocked controller with stove models from the json file(s)
         self._mocked_stoves.clear()
         file_paths = await self.get_mocked_files()
@@ -57,7 +65,7 @@ class MockedController(MaestroControllerInterface):
                 try:
                     loop = asyncio.get_running_loop()
                     f = await loop.run_in_executor(None, open, _file_path)
-                    data = json.load(f)
+                    data: JsonObject = json.load(f)
                     devices = data["data"]["devices"]
                     for stove in list(devices.values()):
                         stove_data = stove["coordinator.stove_data"]
@@ -102,6 +110,7 @@ class MockedController(MaestroControllerInterface):
         try:
             loop = asyncio.get_running_loop()
             folder_path = self._folder_path
+            assert folder_path is not None
             files_in_dir = await loop.run_in_executor(None, os.listdir, folder_path)
             if files_in_dir is not None:
                 # Only return regular files, ignore directories
@@ -125,13 +134,16 @@ class MockedController(MaestroControllerInterface):
         """Pings the stove to check connectivity."""
         pass  # noqa: PIE790
 
-    async def get_stove_model_for_stove(self, model_id: str, device_name: str) -> Model:
+    async def get_stove_model_for_stove(
+        self, model_id: str, device_name: str
+    ) -> Model | None:
         """Gets the stove model for a given model ID."""
         stove = next(
             (
                 stove
                 for stove in self._mocked_stoves.values()
-                if stove.stove_info.node.model_id == model_id
+                if stove.stove_info.node is not None
+                and stove.stove_info.node.model_id == model_id
                 and stove.stove_info.node.name == device_name
             ),
             None,
@@ -142,7 +154,7 @@ class MockedController(MaestroControllerInterface):
 
     async def get_stove_status_for_stove(
         self, device_id: str, device_name: str
-    ) -> Status:
+    ) -> Status | None:
         """Gets the stove status for a given device ID."""
         stove = self._mocked_stoves.get((device_id, device_name))
         if stove:
@@ -151,7 +163,7 @@ class MockedController(MaestroControllerInterface):
 
     async def get_stove_state_for_stove(
         self, device_id: str, device_name: str
-    ) -> State:
+    ) -> State | None:
         """Gets the stove state for a given device ID."""
         stove = self._mocked_stoves.get((device_id, device_name))
         if stove:
@@ -162,10 +174,10 @@ class MockedController(MaestroControllerInterface):
         self,
         device_id: str,
         model_id: str,
-        configuration_id: str,
+        configuration_id: str | None,
         sensor_set_type_id: str,
         commands: list[ProgramCommand],
-        callback_on_success=None,
+        callback_on_success: Callable[[], None] | None = None,
     ) -> None:
         """Activate a program on the stove with multiple commands for a given device ID."""
         if callback_on_success is not None:
@@ -179,7 +191,8 @@ class MockedController(MaestroControllerInterface):
             (
                 stove
                 for stove in self._mocked_stoves.values()
-                if stove.stove_info.node.unique_code == unique_code
+                if stove.stove_info.node is not None
+                and stove.stove_info.node.unique_code == unique_code
             ),
             None,
         )
@@ -215,10 +228,10 @@ class MockedController(MaestroControllerInterface):
 class MockedStove:
     """Class of a MockedStove."""
 
-    stove_info: StoveInfo = None
-    model: Model = None
-    state: State = None
-    status: Status = None
+    stove_info: StoveInfo
+    model: Model
+    state: State
+    status: Status
     consumption: object | None = None
     counters: object | None = None
 

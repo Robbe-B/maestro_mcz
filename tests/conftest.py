@@ -12,8 +12,12 @@ import pytest
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maestro_mcz.const import DOMAIN
-from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
+from custom_components.maestro_mcz.coordinator import (
+    MczAccountCoordinator,
+    MczRuntimeData,
+)
 from custom_components.maestro_mcz.maestro import MaestroStove
+from custom_components.maestro_mcz.maestro.account import MaestroAccount
 from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
     MaestroController,
 )
@@ -221,24 +225,31 @@ def controller(stove_info_payload, model_payload):
 
 
 @pytest.fixture
-async def stove(controller):
+async def stove(controller, hass, entry):
     """Load and refresh the stove, so tests start with known readings.
 
     Tests checking request counts reset the controller's recorded calls first:
     this initial refresh has already made requests.
     """
     stove_info = controller.retrieve_linked_stove_infos.return_value[0]
-    living_room_stove = MaestroStove(controller, stove_info)
+    living_room_stove = MaestroStove(
+        controller,
+        stove_info,
+        on_authentication_failed=lambda: entry.async_start_reauth(hass),
+    )
     await living_room_stove.async_init()
     await living_room_stove.refresh()
     return living_room_stove
 
 
 @pytest.fixture
-def coordinator(hass, entry, stove):
+def coordinator(hass, entry, stove, controller):
     """Connect the stove to HA's refresh manager without waiting after commands."""
-    account_coordinator = MczAccountCoordinator(hass, entry, "test-account", [stove])
+    account = MaestroAccount(controller, [stove])
+    account_coordinator = MczAccountCoordinator(hass, entry, "test-account", account)
     account_coordinator.last_update_success = True
     account_coordinator.update_data_after_set = AsyncMock()
-    entry.runtime_data = account_coordinator
+    entry.runtime_data = MczRuntimeData(
+        account=account, coordinator=account_coordinator
+    )
     return account_coordinator

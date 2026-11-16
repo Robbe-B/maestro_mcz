@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+from collections.abc import Callable, Sequence
 
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from ..const import DOMAIN, MANUFACTURER
 from .controller.controller_interface import MaestroControllerInterface
@@ -37,7 +39,10 @@ def get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
         or definition.sensor_set_name_m2 is not None
     ):
         # Keep the original M2-before-M1 priority without changing the shared definition.
-        names = (definition.sensor_set_name_m2, definition.sensor_set_name_m1)
+        names: tuple[str | None, ...] = (
+            definition.sensor_set_name_m2,
+            definition.sensor_set_name_m1,
+        )
     else:
         names = (definition.sensor_set_name,)
     return tuple(name for name in names if name is not None)
@@ -47,14 +52,18 @@ class MaestroStove:
     """Class to represent a Maestro Stove. (One instance per device)."""
 
     def __init__(
-        self, controller: MaestroControllerInterface, stove: StoveInfo
+        self,
+        controller: MaestroControllerInterface,
+        stove: StoveInfo,
+        on_authentication_failed: Callable[[], None] | None = None,
     ) -> None:
         """Initialize the MaestroStove."""
         self._node = stove.node
         self._controller: MaestroControllerInterface = controller
-        self._model = None
-        self._state = None
-        self._status = None
+        self._on_authentication_failed = on_authentication_failed
+        self._model: Model | None = None
+        self._state: State | None = None
+        self._status: Status | None = None
         self._is_integration_connected_to_cloud = False
         self._is_stove_connected_to_cloud = False
 
@@ -82,31 +91,37 @@ class MaestroStove:
     @property
     def Id(self) -> str:
         """Return the stove ID."""
+        assert self._node is not None and self._node.id is not None
         return self._node.id
 
     @property
     def ModelId(self) -> str:
         """Return the model ID."""
+        assert self._node is not None and self._node.model_id is not None
         return self._node.model_id
 
     @property
     def SensorSetTypeId(self) -> str:
         """Return the sensor set type ID."""
+        assert self._node is not None and self._node.sensor_set_type_id is not None
         return self._node.sensor_set_type_id
 
     @property
     def Name(self) -> str:
         """Return the stove name."""
+        assert self._node is not None and self._node.name is not None
         return self._node.name
 
     @property
     def UniqueCode(self) -> str:
         """Return the stove unique code."""
+        assert self._node is not None and self._node.unique_code is not None
         return self._node.unique_code
 
     @property
     def time_zone_iana(self) -> str | None:
         """Return the cloud's timezone for calendar-based history."""
+        assert self._node is not None
         return self._node.time_zone_iana
 
     @property
@@ -156,10 +171,9 @@ class MaestroStove:
                     f"Invalid M2+ ping configuration for device '{self.Name}'"
                 )
 
-            await self.activateProgram(
-                configuration.sensor_id,
+            await self._activate_program(
                 ping.configuration_id,
-                mappings["Ping"],
+                [ProgramCommand(configuration.sensor_id, mappings["Ping"])],
             )
         except MaestroConnectionException as err:
             _LOGGER.warning(
@@ -187,10 +201,9 @@ class MaestroStove:
             )
 
         for command in ("C|RecuperoParametri", "C|RecuperoInfo"):
-            await self.activateProgram(
-                configuration.sensor_id,
+            await self._activate_program(
                 ping.configuration_id,
-                mappings[command],
+                [ProgramCommand(configuration.sensor_id, mappings[command])],
             )
             await asyncio.sleep(1)
 
@@ -201,7 +214,12 @@ class MaestroStove:
             )
         )
         if m1_ping is not None:
-            await self._do_ping_m1_configuration(m1_ping)
+            try:
+                await self._do_ping_m1_configuration(m1_ping)
+            except MaestroConnectionException as err:
+                raise type(err)(
+                    f"Ping for '{self.Name}': {err}", retry_after=err.retry_after
+                ) from err
             return
 
         if False:  # For now, we don't want to ping M2+ stoves, as it can cause issues with some models. This can be re-enabled in the future if needed.
@@ -229,7 +247,7 @@ class MaestroStove:
             self.Id, self.Name
         )
 
-    async def refresh(self):
+    async def refresh(self) -> None:
         """Refresh the stove information, status and state."""
         try:
             await self._ping()
@@ -246,11 +264,11 @@ class MaestroStove:
 
     async def activateProgram(
         self,
-        sensor_id: str,
-        configuration_id: str,
+        sensor_id: str | None,
+        configuration_id: str | None,
         value: object,
-        callback_on_success=None,
-    ):
+        callback_on_success: Callable[[], None] | None = None,
+    ) -> None:
         """Activate a program on the stove with a single command."""
         await self.activateProgramMultipleCommands(
             configuration_id, [ProgramCommand(sensor_id, value)], callback_on_success
@@ -258,11 +276,36 @@ class MaestroStove:
 
     async def activateProgramMultipleCommands(
         self,
-        configuration_id: str,
+        configuration_id: str | None,
         commands: list[ProgramCommand],
-        callback_on_success=None,
-    ):
-        """Activate a program on the stove with multiple commands."""
+        callback_on_success: Callable[[], None] | None = None,
+    ) -> None:
+        """Activate user commands and report failures through Home Assistant."""
+        try:
+            await self._activate_program(
+                configuration_id, commands, callback_on_success
+            )
+        except MaestroAuthenticationException as err:
+            if self._on_authentication_failed is not None:
+                self._on_authentication_failed()
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_invalid_auth",
+            ) from err
+        except MaestroConnectionException as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_cannot_connect",
+                translation_placeholders={"error": str(err)},
+            ) from err
+
+    async def _activate_program(
+        self,
+        configuration_id: str | None,
+        commands: list[ProgramCommand],
+        callback_on_success: Callable[[], None] | None = None,
+    ) -> None:
+        """Keep ping failures unmodified for HA's setup and polling recovery."""
         await self._controller.activate_program_with_commands_for_stove(
             self.Id,
             self.ModelId,
@@ -274,9 +317,11 @@ class MaestroStove:
 
     def get_device_info(self) -> DeviceInfo:
         """Return device info."""
+        assert self.Model is not None
         sw_version = ""
 
         if self.is_connected:
+            assert self.Status is not None
             sw_version = (
                 f"{self.Status.sm_nome_app}.{self.Status.sm_vs_app}"
                 f", Panel:{self.Status.mc_vs_app}"
@@ -297,6 +342,8 @@ class MaestroStove:
         self, model_configuration_name: str
     ) -> ModelConfiguration | None:
         """Get the model configuration by the name of the model configuration."""
+        assert self.Model is not None
+        assert self.Model.model_configurations is not None
         return next(
             (
                 x
@@ -310,7 +357,7 @@ class MaestroStove:
         )
 
     def get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        self, model_configuration_name: str, sensor_name: str
+        self, model_configuration_name: str, sensor_name: str | None
     ) -> SensorConfiguration | None:
         """Get the sensor configuration by the name of the model configuration and sensor name."""
         model_configuration = self.get_model_configuration_by_model_configuration_name(
@@ -319,6 +366,7 @@ class MaestroStove:
         if model_configuration is None:
             return None
 
+        assert model_configuration.configurations is not None
         sensor_configuration = next(
             (
                 x
@@ -335,9 +383,11 @@ class MaestroStove:
             )
         return None
 
-    def get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name(
-        self, mcz_config_items_list_to_match: list[MczConfigItem]
-    ) -> tuple[MczConfigItem, SensorConfiguration] | None:
+    def get_first_matching_sensor_configuration_by_model_configuration_name_and_sensor_name[
+        T: MczConfigItem
+    ](
+        self, mcz_config_items_list_to_match: Sequence[T]
+    ) -> tuple[T, SensorConfiguration] | None:
         """Get the first sensor configuration matching by the name of the model configuration and sensor name."""
         for x in mcz_config_items_list_to_match:
             if x.sensor_set_config_name is not None:
@@ -348,9 +398,11 @@ class MaestroStove:
                     return (x, matching_configuration)
         return None
 
-    def get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name(
-        self, mcz_config_items_list_to_match: list[MczConfigItem]
-    ) -> list[tuple[MczConfigItem, SensorConfiguration]] | None:
+    def get_all_matching_sensor_configurations_by_model_configuration_name_and_sensor_name[
+        T: MczConfigItem
+    ](
+        self, mcz_config_items_list_to_match: Sequence[T]
+    ) -> list[tuple[T, SensorConfiguration]] | None:
         """Get the all sensor configurations matching by the name of the model configuration and sensor name."""
         temp_list = []
         for x in mcz_config_items_list_to_match:
@@ -364,9 +416,11 @@ class MaestroStove:
             return temp_list
         return None
 
-    def get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name(
-        self, mcz_config_items_list_to_match: list[MczConfigItem]
-    ) -> list[tuple[MczConfigItem, SensorConfigurationMultipleModes]] | None:
+    def get_all_matching_sensor_for_all_configurations_by_model_mode_and_sensor_name[
+        T: MczConfigItem
+    ](
+        self, mcz_config_items_list_to_match: Sequence[T]
+    ) -> list[tuple[T, SensorConfigurationMultipleModes]] | None:
         """Get the all sensor configurations matching for the matching mode by the name of the model configuration and sensor name."""
         temp_list = []
         for x in mcz_config_items_list_to_match:
@@ -389,9 +443,9 @@ class MaestroStove:
             return temp_list
         return None
 
-    def get_supported_sensor_configurations(
-        self, definitions: list[MczConfigItem]
-    ) -> list[tuple[MczConfigItem, SensorConfiguration]] | None:
+    def get_supported_sensor_configurations[T: MczConfigItem](
+        self, definitions: Sequence[T]
+    ) -> list[tuple[T, SensorConfiguration]] | None:
         """Select declared generation-specific commands, then match their advertised names."""
         matches = []
         for definition in definitions:
@@ -405,9 +459,9 @@ class MaestroStove:
                     matches.append((definition, configuration))
         return matches or None
 
-    def get_first_supported_sensor_configuration(
-        self, definitions: list[MczConfigItem]
-    ) -> tuple[MczConfigItem, SensorConfiguration] | None:
+    def get_first_supported_sensor_configuration[T: MczConfigItem](
+        self, definitions: Sequence[T]
+    ) -> tuple[T, SensorConfiguration] | None:
         """Find the first supported generation-specific command in catalogue order."""
         for definition in definitions:
             matches = self.get_supported_sensor_configurations([definition])

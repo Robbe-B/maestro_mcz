@@ -1,10 +1,13 @@
 """Exercise real HA flow management without contacting the MCZ cloud."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maestro_mcz.const import DOMAIN
@@ -122,6 +125,203 @@ async def test_mock_import_and_duplicate(hass):
         assert duplicate["reason"] == "already_configured"
 
 
+async def test_reauth_preserves_account_devices_and_options(hass, entry, controller):
+    """Replace a changed password without losing the user's stove or saved settings."""
+    # 1. Load a working account with a custom name and refresh interval.
+    hass.config_entries.async_update_entry(
+        entry, title="My stove account", options={"polling_interval": 60}
+    )
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ) as setup_controller,
+        patch(
+            "custom_components.maestro_mcz.config_flow.MaestroController",
+            return_value=controller,
+        ) as login_controller,
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        devices = dr.async_get(hass)
+        entities = er.async_get(hass)
+        original_device_ids = {
+            device.id
+            for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+        }
+        original_entity_ids = {
+            entity.id
+            for entity in er.async_entries_for_config_entry(entities, entry.entry_id)
+        }
+        original_entry_id = entry.entry_id
+        setup_controller.reset_mock()
+
+        # 2. Recover this account using only its new password, not another username.
+        form = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=entry.data,
+        )
+        assert form["step_id"] == "reauth_confirm"
+        assert form["description_placeholders"] == {
+            "username": "test-user",
+            "name": "My stove account",
+        }
+        with pytest.raises(vol.Invalid):
+            form["data_schema"](
+                {"username": "another-user", "password": "new-password"}
+            )
+        result = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {"password": "new-password"}
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    # 3. HA reloads the same entry once and keeps its identity and custom settings.
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert hass.config_entries.async_entries(DOMAIN) == [entry]
+    assert entry.entry_id == original_entry_id
+    assert entry.unique_id == "test-user"
+    assert entry.title == "My stove account"
+    assert entry.data == {"username": "test-user", "password": "new-password"}
+    assert entry.options == {"polling_interval": 60}
+    assert original_device_ids
+    assert original_entity_ids
+    recovered_device_ids = {
+        device.id
+        for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+    }
+    recovered_entity_ids = {
+        entity.id
+        for entity in er.async_entries_for_config_entry(entities, entry.entry_id)
+    }
+    assert recovered_device_ids == original_device_ids
+    assert recovered_entity_ids == original_entity_ids
+    assert login_controller.call_args.args[1:] == ("test-user", "new-password")
+    setup_controller.assert_called_once()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    ("exception", "error"),
+    [
+        (MaestroAuthenticationException("bad password"), "invalid_auth"),
+        (MaestroConnectionException("offline"), "cannot_connect"),
+    ],
+)
+async def test_reauth_error_and_retry(hass, entry, controller, exception, error):
+    """Keep the saved password unchanged after a failed attempt and allow another try."""
+    # 1. The existing account needs a password update, but validation initially fails.
+    controller.retrieve_linked_stove_infos.side_effect = exception
+    with (
+        patch(
+            "custom_components.maestro_mcz.config_flow.MaestroController",
+            return_value=controller,
+        ),
+        patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as reload_entry,
+    ):
+        form = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=entry.data,
+        )
+
+        # 2. Submit the password and explain the failure without changing the account.
+        failed = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {"password": "new-password"}
+        )
+        assert failed["type"] is FlowResultType.FORM
+        assert failed["step_id"] == "reauth_confirm"
+        assert failed["errors"] == {"base": error}
+        assert entry.data["password"] == "test-password"
+        reload_entry.assert_not_awaited()
+
+        # 3. Correct the problem and finish recovery using the same form.
+        controller.retrieve_linked_stove_infos.side_effect = None
+        recovered = await hass.config_entries.flow.async_configure(
+            failed["flow_id"], {"password": "corrected-password"}
+        )
+        await hass.async_block_till_done()
+    assert recovered["reason"] == "reauth_successful"
+    assert entry.data["password"] == "corrected-password"
+    reload_entry.assert_awaited_once_with(entry.entry_id)
+
+
+async def test_reauth_rejects_mismatched_account_identity(hass, entry, controller):
+    """Refuse inconsistent account details rather than replacing another account's data."""
+    # 1. The saved username no longer matches the account's registered identity.
+    hass.config_entries.async_update_entry(entry, unique_id="another-user")
+    with (
+        patch(
+            "custom_components.maestro_mcz.config_flow.MaestroController",
+            return_value=controller,
+        ),
+        patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as reload_entry,
+    ):
+        form = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=entry.data,
+        )
+        # 2. Even a valid password must not override that identity mismatch.
+        result = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {"password": "new-password"}
+        )
+        await hass.async_block_till_done()
+    # 3. Explain why recovery stopped and leave the existing credentials untouched.
+    assert result["reason"] == "unique_id_mismatch"
+    assert entry.data["password"] == "test-password"
+    reload_entry.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("source", "extra_data"),
+    [
+        (config_entries.SOURCE_IMPORT, {}),
+        (config_entries.SOURCE_USER, {"MOCKED_FOLDER": "/synthetic"}),
+    ],
+)
+async def test_reauth_skips_saved_diagnostic_accounts(hass, source, extra_data):
+    """Do not ask for a cloud password when an account only replays saved reports."""
+    # 1. Register an imported or replay-backed account with dummy credentials.
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        source=source,
+        unique_id="MockedHost",
+        data={"username": "dummy", "password": "dummy"} | extra_data,
+    )
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.maestro_mcz.config_flow.MaestroController"
+    ) as cloud_controller:
+        # 2. Try to start cloud sign-in recovery for the saved reports.
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=entry.data,
+        )
+    # 3. Stop with an explanation instead of showing a dummy-account password form.
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_not_supported"
+    cloud_controller.assert_not_called()
+
+
 async def test_options_defaults_and_save(hass, entry):
     """Keep refresh settings usable: sensible defaults, safe limits, and saved choices."""
     # 1. Open options for an account that has no saved refresh interval.
@@ -143,11 +343,16 @@ async def test_options_defaults_and_save(hass, entry):
         assert validated_options == {"polling_interval": expected_interval}
 
     # 3. Choose one minute and verify that HA remembers it.
-    saved = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"polling_interval": 60}
-    )
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock
+    ) as reload_entry:
+        saved = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"polling_interval": 60}
+        )
+        await hass.async_block_till_done()
     assert saved["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options == {"polling_interval": 60}
+    reload_entry.assert_awaited_once_with(entry.entry_id)
 
 
 @pytest.mark.parametrize("polling_interval", [10, 30, 120])

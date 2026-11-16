@@ -7,15 +7,15 @@ from dataclasses import dataclass
 class ActivateProgramRequest:
     """Represents a request to activate a program on the stove."""
 
-    ModelId: str | None = None
-    ConfigurationId: str | None = None
-    SensorSetTypeId: str | None = None
-    Commands: list[ProgramCommand] | None = None
+    ModelId: str
+    ConfigurationId: str | None
+    SensorSetTypeId: str
+    Commands: list[ProgramCommand]
 
     def __init__(
         self,
         model_id: str,
-        configuration_id: str,
+        configuration_id: str | None,
         sensor_set_type_id: str,
         commands: list[ProgramCommand],
     ) -> None:

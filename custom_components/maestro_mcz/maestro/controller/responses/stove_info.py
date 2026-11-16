@@ -1,19 +1,25 @@
-"""Bla."""
+"""Parse account-linked stove records and their nested device/access metadata."""
 
 from dataclasses import dataclass
 import logging
+
+from ..response_types import JsonObject
 
 _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
 class StoveInfo:
+    """Read a linked stove's device record and account access information."""
+
     node: Node | None = None
     access_control: AccessControl | None = None
 
-    unknown_fields: dict | None = None
+    unknown_fields: JsonObject | None = None
 
-    def __init__(self, json, from_mocked_response=False) -> None:
+    def __init__(
+        self, json: JsonObject | None, from_mocked_response: bool = False
+    ) -> None:
         if json is not None:
             if from_mocked_response:
                 for k, v in json.items():
@@ -57,9 +63,11 @@ class Node:
     ssid_wifi: str | None = None
     mac_address_ble: str | None = None
 
-    unknown_fields: dict | None = None
+    unknown_fields: JsonObject | None = None
 
-    def __init__(self, json, from_mocked_response=False) -> None:
+    def __init__(
+        self, json: JsonObject | None, from_mocked_response: bool = False
+    ) -> None:
         if json is not None:
             if from_mocked_response:
                 for k, v in json.items():
@@ -128,9 +136,11 @@ class AccessControl:
     created: float | None = None
     modified: float | None = None
 
-    unknown_fields: dict | None = None
+    unknown_fields: JsonObject | None = None
 
-    def __init__(self, json, from_mocked_response=False) -> None:
+    def __init__(
+        self, json: JsonObject | None, from_mocked_response: bool = False
+    ) -> None:
         if json is not None:
             if from_mocked_response:
                 for k, v in json.items():

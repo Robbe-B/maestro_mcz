@@ -29,6 +29,8 @@ jobs:
           --cov-report=term-missing
           --cov-report=xml
           --cov-report=html
+      - name: Check strict production types
+        run: python -m mypy --config-file tests/pyproject.toml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

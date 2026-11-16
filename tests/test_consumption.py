@@ -2,6 +2,7 @@
 
 import asyncio
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date, timedelta
 import json
 from unittest.mock import AsyncMock, Mock, patch
@@ -236,7 +237,7 @@ async def test_history_errors_remain_distinguishable(
 
 
 async def test_missing_day_is_not_replaced_by_week_total_or_today(
-    consumption_factory, controller
+    consumption_factory, controller, coordinator
 ):
     """Keep yesterday missing when the service only supplies another day's estimate."""
     # 1. Today's reading exists, but yesterday's reading has not been published.
@@ -247,7 +248,7 @@ async def test_missing_day_is_not_replaced_by_week_total_or_today(
 
     # 2. Retrieve the response and inspect the optional sensor.
     await history.async_refresh()
-    sensor = MczYesterdayConsumptionSensor(history)
+    sensor = MczYesterdayConsumptionSensor(history, coordinator)
 
     # 3. Neither today's value nor its total is presented as yesterday's consumption.
     assert history.last_update_success
@@ -257,7 +258,7 @@ async def test_missing_day_is_not_replaced_by_week_total_or_today(
 
 
 async def test_zero_history_is_available_while_stove_is_offline(
-    consumption_factory, controller, stove
+    consumption_factory, controller, stove, coordinator
 ):
     """Allow genuine zero use and cloud history even when the live stove is unreachable."""
     # 1. The stove is offline, but yesterday's cloud history explicitly reports zero.
@@ -269,7 +270,7 @@ async def test_zero_history_is_available_while_stove_is_offline(
     await history.async_refresh()
 
     # 2. Create the consumption sensor from its independent coordinator.
-    sensor = MczYesterdayConsumptionSensor(history)
+    sensor = MczYesterdayConsumptionSensor(history, coordinator)
 
     # 3. The estimate is usable and cannot be mistaken for an accumulating meter.
     assert sensor.available
@@ -285,7 +286,7 @@ async def test_zero_history_is_available_while_stove_is_offline(
 
 @pytest.mark.parametrize("polling_disabled", [False, True])
 async def test_daily_refresh_expires_old_day_without_guessing_next_value(
-    hass, entry, consumption_factory, controller, freezer, polling_disabled
+    hass, entry, consumption_factory, controller, coordinator, freezer, polling_disabled
 ):
     """Notify sensors at 00:01 without inventing a reading, even with polling disabled."""
     # 1. The stove is one minute from midnight and yesterday's estimate is known.
@@ -295,7 +296,7 @@ async def test_daily_refresh_expires_old_day_without_guessing_next_value(
         date(2026, 11, 12), 10
     )
     await history.async_refresh()
-    sensor = MczYesterdayConsumptionSensor(history)
+    sensor = MczYesterdayConsumptionSensor(history, coordinator)
     changed = Mock()
     remove_listener = history.async_add_listener(changed)
     hass.config_entries.async_update_entry(
@@ -352,12 +353,12 @@ async def test_daily_refresh_expires_old_day_without_guessing_next_value(
 
 
 async def test_unknown_snapshot_and_shutdown_do_not_invent_or_poll(
-    hass, consumption_factory, controller, freezer
+    hass, consumption_factory, controller, coordinator, freezer
 ):
     """Keep an unqueried sensor unavailable and remove all calendar work on shutdown."""
     # 1. No response has ever established a consumption reading.
     history = consumption_factory("Europe/Brussels")
-    sensor = MczYesterdayConsumptionSensor(history)
+    sensor = MczYesterdayConsumptionSensor(history, coordinator)
     assert not sensor.available
     assert sensor.native_value is None
     assert sensor.extra_state_attributes is None
@@ -405,7 +406,7 @@ async def test_real_platform_discovers_history_later_and_keeps_one_entity(
     registry = er.async_get(hass)
     unique_id = "SERIAL-001-consumption_yesterday"
     assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is None
-    history = entry.runtime_data.consumption_coordinators["SERIAL-001"]
+    history = entry.runtime_data.coordinator.consumption_coordinators["SERIAL-001"]
 
     # 2. Empty history still proves nothing; a later exact zero creates the sensor.
     controller.get_consumption_for_stove.side_effect = None
@@ -456,6 +457,83 @@ async def test_real_platform_discovers_history_later_and_keeps_one_entity(
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
     assert controller.get_consumption_for_stove.await_count == request_count_at_unload
+
+
+@pytest.mark.parametrize("polling_disabled", [False, True])
+@pytest.mark.parametrize("history_state", ["valid", "failed", "missing", "stale"])
+async def test_history_availability_follows_cloud_without_extra_requests(
+    hass, entry, controller, freezer, polling_disabled, history_state
+):
+    """Restore only valid cached history after cloud recovery, without fetching it on live updates."""
+    # 1. Discover yesterday's genuine zero through the normal startup request.
+    freezer.move_to("2026-11-13T12:00:00+00:00")
+    hass.config_entries.async_update_entry(entry, pref_disable_polling=polling_disabled)
+    controller.get_consumption_for_stove.return_value = history_for(
+        date(2026, 11, 12), 0
+    )
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    account = entry.runtime_data.coordinator
+    history = account.consumption_coordinators["SERIAL-001"]
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, "SERIAL-001-consumption_yesterday"
+    )
+    assert hass.states.get(entity_id).state == "0.0"
+    controller.get_consumption_for_stove.assert_awaited_once()
+
+    # 2. A live cloud failure hides history immediately without another history request.
+    controller.get_stove_state_for_stove.side_effect = MaestroConnectionException(
+        "cloud unavailable"
+    )
+    await account.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unavailable"
+    controller.get_consumption_for_stove.assert_awaited_once()
+
+    # 3. History can independently fail, lose its reading, or belong to an older day.
+    if history_state == "failed":
+        controller.get_consumption_for_stove.side_effect = MaestroConnectionException(
+            "history unavailable"
+        )
+        await history.async_refresh()
+    elif history_state == "missing":
+        controller.get_consumption_for_stove.return_value = history_for(
+            date(2026, 11, 13), 12
+        )
+        await history.async_refresh()
+    elif history_state == "stale":
+        history.async_set_updated_data(
+            replace(history.data, date=history.yesterday - timedelta(days=1))
+        )
+    requests_before_recovery = controller.get_consumption_for_stove.await_count
+
+    # 4. Cloud recovery shows only still-valid history, even if the physical stove is offline.
+    controller.get_stove_state_for_stove.side_effect = None
+    controller.get_stove_status_for_stove.return_value.is_connected = False
+    await account.async_refresh()
+    await hass.async_block_till_done()
+    expected_state = "0.0" if history_state == "valid" else "unavailable"
+    assert account.last_update_success
+    assert not account.stoves["SERIAL-001"].is_connected
+    assert hass.states.get(entity_id).state == expected_state
+    assert controller.get_consumption_for_stove.await_count == requests_before_recovery
+
+    # 5. Removing the integration removes both subscriptions without another history request.
+    assert account._listeners
+    assert history._listeners
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert not account._listeners
+    assert not history._listeners
+    account.async_set_updated_data(None)
+    await hass.async_block_till_done()
+    assert controller.get_consumption_for_stove.await_count == requests_before_recovery
 
 
 @pytest.mark.parametrize("include_newer_stove", [False, True], ids=["m1-only", "mixed"])
@@ -539,7 +617,7 @@ async def test_m1_stoves_are_never_queried_for_consumption(
         await hass.async_block_till_done(wait_background_tasks=True)
     assert setup_succeeded
     registry = er.async_get(hass)
-    assert "SERIAL-001" not in entry.runtime_data.consumption_coordinators
+    assert "SERIAL-001" not in entry.runtime_data.coordinator.consumption_coordinators
     assert registry.async_get_entity_id(
         "sensor", DOMAIN, "SERIAL-001-consumption_yesterday"
     ) is None
@@ -676,7 +754,7 @@ async def test_known_history_is_not_requested_again_with_live_or_hourly_updates(
     assert controller.get_consumption_for_stove.await_count == 1
 
     # 2. Refresh live readings, then advance beyond one ordinary live polling interval.
-    await entry.runtime_data.async_refresh()
+    await entry.runtime_data.coordinator.async_refresh()
     freezer.tick(timedelta(seconds=30))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -696,12 +774,12 @@ async def test_known_history_is_not_requested_again_with_live_or_hourly_updates(
     ids=["not-published", "request-failed", "invalid-response"],
 )
 async def test_history_retries_hourly_until_yesterday_is_available(
-    hass, consumption_factory, controller, freezer, initial_error
+    hass, consumption_factory, controller, coordinator, freezer, initial_error
 ):
     """Retry missing or failed history hourly, then stop once a valid zero is published."""
     # 1. Yesterday is unpublished or its request fails; keep listening for recovery.
     history = consumption_factory()
-    sensor = MczYesterdayConsumptionSensor(history)
+    sensor = MczYesterdayConsumptionSensor(history, coordinator)
     controller.get_consumption_for_stove.side_effect = initial_error
     await history.async_refresh()
     remove_listener = history.async_add_listener(Mock())
