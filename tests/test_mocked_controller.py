@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import date
 import json
 import os
+from threading import get_ident
 from unittest.mock import Mock, patch
 
 import pytest
@@ -156,6 +157,49 @@ async def test_invalid_replay_file_is_reported(replay, tmp_path, caplog):
     discovered_stoves = await replay.retrieve_linked_stove_infos()
     assert discovered_stoves == []
     assert "Mocked controller failed" in caplog.text
+
+
+@pytest.mark.parametrize("valid_report", [True, False], ids=["valid", "broken"])
+async def test_report_loading_runs_off_event_loop_and_closes_file(
+    replay, tmp_path, caplog, valid_report
+):
+    """Keep replay responsive and release report files even when their contents are broken."""
+    # 1. Save a report and track where it is opened and parsed.
+    report_file = tmp_path / "report.json"
+    contents = '{"data": {"devices": {}}}' if valid_report else "not json"
+    report_file.write_text(contents, encoding="utf-8")
+    event_loop_thread = get_ident()
+    opened_on = []
+    parsed_on = []
+    report_handles = []
+    original_load = json.load
+
+    def tracked_open(file_path):
+        opened_on.append(get_ident())
+        handle = open(file_path)
+        report_handles.append(handle)
+        return handle
+
+    def tracked_load(handle):
+        parsed_on.append(get_ident())
+        return original_load(handle)
+
+    # 2. Replay reads the report using the normal executor path.
+    module = "custom_components.maestro_mcz.maestro.controller.mocked_controller"
+    with (
+        patch(f"{module}.open", side_effect=tracked_open, create=True),
+        patch(f"{module}.json.load", side_effect=tracked_load),
+    ):
+        discovered_stoves = await replay.retrieve_linked_stove_infos()
+
+    # 3. Opening and parsing stay off the event loop, and the file is released.
+    assert len(opened_on) == 1
+    assert opened_on[0] != event_loop_thread
+    assert parsed_on == opened_on
+    assert len(report_handles) == 1
+    assert report_handles[0].closed
+    assert discovered_stoves == []
+    assert ("Mocked controller failed" in caplog.text) is not valid_report
 
 
 async def test_missing_replay_directory(replay):
