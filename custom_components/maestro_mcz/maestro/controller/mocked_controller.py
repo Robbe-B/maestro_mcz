@@ -22,6 +22,13 @@ from .responses.stove_info import AccessControl, Node, StoveInfo
 _LOGGER = logging.getLogger(__name__)
 
 
+def _load_mocked_file(file_path: str) -> JsonObject:
+    """Read and parse a saved report, closing it even when parsing fails."""
+    with open(file_path) as file:
+        data: JsonObject = json.load(file)
+    return data
+
+
 class MockedController(MaestroControllerInterface):
     """Class of a MockedController."""
 
@@ -64,8 +71,9 @@ class MockedController(MaestroControllerInterface):
             for _file_path in file_paths:
                 try:
                     loop = asyncio.get_running_loop()
-                    f = await loop.run_in_executor(None, open, _file_path)
-                    data: JsonObject = json.load(f)
+                    data = await loop.run_in_executor(
+                        None, _load_mocked_file, _file_path
+                    )
                     devices = data["data"]["devices"]
                     for stove in list(devices.values()):
                         stove_data = stove["coordinator.stove_data"]
