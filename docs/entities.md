@@ -76,7 +76,7 @@ Statistics refresh at startup and hourly, separately from live controls. Changin
 
 **Yesterday's consumption** shows the Maestro cloud's estimate in kWh. It appears only after the service returns a reading for yesterday, including a genuine zero. It is not available for M1 stoves.
 
-The reading refreshes at startup and at 00:01, separately from live stove updates. If yesterday's reading is missing or the request fails, it retries hourly until a reading is available. The sensor uses the stove's timezone from the cloud, or Home Assistant's timezone if none is provided. Its attributes show the consumption date and the last successful retrieval time.
+The reading refreshes at startup, at 00:01, and hourly, separately from live stove updates. Hourly updates continue even after a reading is available, so later cloud corrections appear automatically. Zero is a valid reading, but the cloud may revise it later. The sensor uses the stove's timezone from the cloud, or Home Assistant's timezone if none is provided. Its attributes show the consumption date and the last successful retrieval time.
 
 The sensor can remain available while the stove itself is offline. It becomes unavailable when the integration detects a cloud connection failure, if the history request fails, or if yesterday's reading is missing. When the cloud connection recovers, a saved reading for yesterday is shown again if the last history request succeeded. The previous day's displayed value may remain until the 00:01 update. The cloud may take longer to publish the next reading; a missing reading does not mean zero consumption or that the stove is unsupported.
 

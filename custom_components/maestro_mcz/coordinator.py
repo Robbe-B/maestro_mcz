@@ -26,7 +26,7 @@ from .maestro.controller.maestro_controller import (
 from .maestro.controller.responses.counters import Counters
 
 _LOGGER = logging.getLogger(__name__)
-CONSUMPTION_RETRY_INTERVAL = timedelta(hours=1)
+CONSUMPTION_UPDATE_INTERVAL = timedelta(hours=1)
 COUNTERS_UPDATE_INTERVAL = timedelta(hours=1)
 
 
@@ -208,7 +208,7 @@ class MczConsumptionCoordinator(DataUpdateCoordinator[ConsumptionData]):
             _LOGGER,
             config_entry=config_entry,
             name=f"{config_entry.title} / {stove.Name} consumption",
-            update_interval=CONSUMPTION_RETRY_INTERVAL,
+            update_interval=CONSUMPTION_UPDATE_INTERVAL,
         )
         self._controller = controller
         self.stove = stove
@@ -234,7 +234,6 @@ class MczConsumptionCoordinator(DataUpdateCoordinator[ConsumptionData]):
                 self._time_zone = dt_util.DEFAULT_TIME_ZONE
             self._schedule_midnight()
         day = self.yesterday
-        self.update_interval = CONSUMPTION_RETRY_INTERVAL
         try:
             history = await self._controller.get_consumption_for_stove(
                 self.stove.UniqueCode, day
@@ -258,8 +257,6 @@ class MczConsumptionCoordinator(DataUpdateCoordinator[ConsumptionData]):
             ) from err
 
         value = history.consumption_for_date(day)
-        if value is not None:
-            self.update_interval = None
         return ConsumptionData(
             date=day,
             value=value,

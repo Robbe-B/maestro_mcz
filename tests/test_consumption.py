@@ -284,6 +284,63 @@ async def test_zero_history_is_available_while_stove_is_offline(
     )
 
 
+@pytest.mark.parametrize(
+    ("first_estimate", "revised_estimate"),
+    [(0, 18.5), (7.5, 18.5), (0, 0), (7.5, 0)],
+    ids=["zero-revised", "nonzero-revised", "genuine-zero", "revised-to-zero"],
+)
+async def test_midnight_estimate_is_refreshed_when_cloud_history_changes(
+    hass,
+    consumption_factory,
+    controller,
+    coordinator,
+    freezer,
+    first_estimate,
+    revised_estimate,
+):
+    """Pick up later cloud corrections without treating every midnight zero as wrong."""
+    # 1. Before local midnight, the sensor shows the previous day's dated estimate.
+    freezer.move_to("2026-11-13T22:59:00+00:00")
+    history = consumption_factory("Europe/Brussels")
+    controller.get_consumption_for_stove.return_value = history_for(
+        date(2026, 11, 12), 10
+    )
+    await history.async_refresh()
+    sensor = MczYesterdayConsumptionSensor(history, coordinator)
+    remove_listener = history.async_add_listener(Mock())
+    assert sensor.native_value == 10
+
+    # 2. At 00:01, accept the newly completed day's first estimate, including zero.
+    controller.get_consumption_for_stove.return_value = history_for(
+        date(2026, 11, 13), first_estimate
+    )
+    freezer.move_to("2026-11-13T23:01:00+00:00")
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sensor.available
+    assert sensor.native_value == first_estimate
+    assert sensor.extra_state_attributes["consumption_date"] == "2026-11-13"
+
+    # 3. The cloud later revises that same date without an integration reload.
+    controller.get_consumption_for_stove.return_value = history_for(
+        date(2026, 11, 13), revised_estimate
+    )
+    freezer.tick(timedelta(hours=1, seconds=1))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    # 4. Hourly polling corrects either initial value, while genuine zeros remain valid.
+    assert controller.get_consumption_for_stove.await_count == 3
+    assert sensor.available
+    assert sensor.native_value == revised_estimate
+    assert sensor.extra_state_attributes["consumption_date"] == "2026-11-13"
+    controller.get_consumption_for_stove.assert_awaited_with(
+        "SERIAL-001", date(2026, 11, 13)
+    )
+    assert history.data.last_updated == dt_util.utcnow()
+    remove_listener()
+
+
 @pytest.mark.parametrize("polling_disabled", [False, True])
 async def test_daily_refresh_expires_old_day_without_guessing_next_value(
     hass, entry, consumption_factory, controller, coordinator, freezer, polling_disabled
@@ -298,10 +355,8 @@ async def test_daily_refresh_expires_old_day_without_guessing_next_value(
     await history.async_refresh()
     sensor = MczYesterdayConsumptionSensor(history, coordinator)
     changed = Mock()
+    hass.config_entries.async_update_entry(entry, pref_disable_polling=polling_disabled)
     remove_listener = history.async_add_listener(changed)
-    hass.config_entries.async_update_entry(
-        entry, pref_disable_polling=polling_disabled
-    )
     assert sensor.available
 
     # 2. Midnight arrives before the service has published the newly completed day.
@@ -344,11 +399,13 @@ async def test_daily_refresh_expires_old_day_without_guessing_next_value(
     assert sensor.available is not polling_disabled
     assert sensor.native_value == (None if polling_disabled else 0)
 
-    # 6. Once that day's reading is known, further hourly requests stop.
+    # 6. Even a known zero keeps refreshing, unless automatic polling is disabled.
     freezer.tick(timedelta(hours=1, seconds=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
+    expected_requests = 1 if polling_disabled else 4
     assert controller.get_consumption_for_stove.await_count == expected_requests
+    assert sensor.native_value == (None if polling_disabled else 0)
     remove_listener()
 
 
@@ -641,16 +698,17 @@ async def test_m1_stoves_are_never_queried_for_consumption(
     freezer.tick(timedelta(hours=1, seconds=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
-    expected_requests = 1 if include_newer_stove else 0
+    expected_requests = 2 if include_newer_stove else 0
     assert controller.get_consumption_for_stove.await_count == expected_requests
     freezer.move_to("2026-11-14T00:00:00+00:00")
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
+    expected_requests = 3 if include_newer_stove else 0
     assert controller.get_consumption_for_stove.await_count == expected_requests
     freezer.tick(timedelta(minutes=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
-    expected_requests = 2 if include_newer_stove else 0
+    expected_requests = 4 if include_newer_stove else 0
     assert controller.get_consumption_for_stove.await_count == expected_requests
     for request in controller.get_consumption_for_stove.await_args_list:
         assert request.args[0] == "SERIAL-002"
@@ -736,10 +794,10 @@ async def test_history_failure_is_isolated_to_one_stove(
 
 
 @pytest.mark.parametrize("consumption", [0, 10])
-async def test_known_history_is_not_requested_again_with_live_or_hourly_updates(
+async def test_known_history_refreshes_hourly_but_not_with_live_updates(
     hass, entry, controller, freezer, consumption
 ):
-    """Keep a known yesterday reading, including zero, without unnecessary cloud requests."""
+    """Refresh cloud estimates hourly without coupling them to frequent live updates."""
     # 1. Load a stove with a known estimate and record the single initial history request.
     freezer.move_to("2026-11-13T12:00:00+00:00")
     controller.get_consumption_for_stove.return_value = history_for(
@@ -760,11 +818,19 @@ async def test_known_history_is_not_requested_again_with_live_or_hourly_updates(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert controller.get_consumption_for_stove.await_count == 1
 
-    # 3. Reaching the next hour does not retrieve the same completed day again.
+    # 3. Reaching the next hour retrieves the same completed day, even for a real zero.
     freezer.tick(timedelta(hours=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert controller.get_consumption_for_stove.await_count == 1
+    assert controller.get_consumption_for_stove.await_count == 2
+    controller.get_consumption_for_stove.assert_awaited_with(
+        "SERIAL-001", date(2026, 11, 12)
+    )
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, "SERIAL-001-consumption_yesterday"
+    )
+    assert float(hass.states.get(entity_id).state) == consumption
     await hass.config_entries.async_unload(entry.entry_id)
 
 
@@ -773,10 +839,10 @@ async def test_known_history_is_not_requested_again_with_live_or_hourly_updates(
     [None, MaestroConnectionException("offline"), ValueError("broken response")],
     ids=["not-published", "request-failed", "invalid-response"],
 )
-async def test_history_retries_hourly_until_yesterday_is_available(
+async def test_history_retries_hourly_and_keeps_refreshing_after_recovery(
     hass, consumption_factory, controller, coordinator, freezer, initial_error
 ):
-    """Retry missing or failed history hourly, then stop once a valid zero is published."""
+    """Recover missing or failed history without freezing the first successful estimate."""
     # 1. Yesterday is unpublished or its request fails; keep listening for recovery.
     history = consumption_factory()
     sensor = MczYesterdayConsumptionSensor(history, coordinator)
@@ -809,11 +875,13 @@ async def test_history_retries_hourly_until_yesterday_is_available(
     assert sensor.available
     assert sensor.native_value == 0
 
-    # 4. Further hours keep the recorded reading without more cloud traffic.
+    # 4. Further hours still check the recorded reading for cloud corrections.
     freezer.tick(timedelta(hours=1, seconds=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert controller.get_consumption_for_stove.await_count == 3
+    assert controller.get_consumption_for_stove.await_count == 4
+    assert sensor.available
+    assert sensor.native_value == 0
     remove_listener()
 
 
