@@ -15,6 +15,10 @@
                 "data": {
                     "password": "Password",
                     "username": "Username"
+                },
+                "data_description": {
+                    "password": "The password for your Maestro account in the official MCZ app, not your Home Assistant password.",
+                    "username": "The username for your Maestro account in the official MCZ app, not your Home Assistant username."
                 }
             },
             "reauth_confirm": {
@@ -25,15 +29,6 @@
                 },
                 "data_description": {
                     "password": "Your current Maestro account password."
-                }
-            }
-        }
-    },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "polling_interval": "Polling Interval (seconds)"
                 }
             }
         }

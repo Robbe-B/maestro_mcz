@@ -10,6 +10,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant.common import MockConfigEntry
 
+from custom_components.maestro_mcz.config_flow import MCZConfigFlow
 from custom_components.maestro_mcz.const import DOMAIN
 from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
@@ -97,6 +98,7 @@ async def test_user_error_and_recovery(hass, controller, exception, error):
             {"username": "new-user", "password": "corrected-password"},
         )
         assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["result"].unique_id == "new-user"
         await hass.async_block_till_done()
 
 
@@ -118,6 +120,7 @@ async def test_mock_import_and_duplicate(hass):
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["title"] == "Hub (MockedHost)"
         assert result["data"] == data
+        assert result["result"].unique_id == "MockedHost"
         # 3. Importing the same account again should be rejected.
         duplicate = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_IMPORT}, data=data
@@ -126,8 +129,8 @@ async def test_mock_import_and_duplicate(hass):
 
 
 async def test_reauth_preserves_account_devices_and_options(hass, entry, controller):
-    """Replace a changed password without losing the user's stove or saved settings."""
-    # 1. Load a working account with a custom name and refresh interval.
+    """Replace a changed password without losing the user's stove or saved account details."""
+    # 1. Load a working account with a custom name and an old refresh setting.
     hass.config_entries.async_update_entry(
         entry, title="My stove account", options={"polling_interval": 60}
     )
@@ -179,7 +182,7 @@ async def test_reauth_preserves_account_devices_and_options(hass, entry, control
         )
         await hass.async_block_till_done(wait_background_tasks=True)
 
-    # 3. HA reloads the same entry once and keeps its identity and custom settings.
+    # 3. HA reloads the same entry once and keeps its identity and stored account details.
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert hass.config_entries.async_entries(DOMAIN) == [entry]
@@ -322,47 +325,17 @@ async def test_reauth_skips_saved_diagnostic_accounts(hass, source, extra_data):
     cloud_controller.assert_not_called()
 
 
-async def test_options_defaults_and_save(hass, entry):
-    """Keep refresh settings usable: sensible defaults, safe limits, and saved choices."""
-    # 1. Open options for an account that has no saved refresh interval.
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["type"] is FlowResultType.FORM
-    assert result["data_schema"]({}) == {"polling_interval": 10}
-    # 2. Check the minimum, ordinary values, maximum, and numeric text.
-    for entered_interval, expected_interval in (
-        (1, 10),
-        (10, 10),
-        (30, 30),
-        (45, 45),
-        (999, 300),
-        ("60", 60),
-    ):
-        validated_options = result["data_schema"](
-            {"polling_interval": entered_interval}
+@pytest.mark.parametrize("polling_interval", [None, 60])
+async def test_polling_options_not_offered(hass, entry, polling_interval):
+    """Hide refresh settings for new and existing accounts so polling stays consistent."""
+    # 1. Keep a new account's defaults or an interval saved by an older installation.
+    if polling_interval is not None:
+        hass.config_entries.async_update_entry(
+            entry, options={"polling_interval": polling_interval}
         )
-        assert validated_options == {"polling_interval": expected_interval}
 
-    # 3. Choose one minute and verify that HA remembers it.
-    with patch.object(
-        hass.config_entries, "async_reload", new_callable=AsyncMock
-    ) as reload_entry:
-        saved = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"polling_interval": 60}
-        )
-        await hass.async_block_till_done()
-    assert saved["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == {"polling_interval": 60}
-    reload_entry.assert_awaited_once_with(entry.entry_id)
+    # 2. Ask whether Home Assistant should offer an integration options form.
+    supports_options = MCZConfigFlow.async_supports_options_flow(entry)
 
-
-@pytest.mark.parametrize("polling_interval", [10, 30, 120])
-async def test_options_existing_value(hass, polling_interval):
-    """Respect an existing refresh choice instead of silently replacing it with the default."""
-    # 1. Give the account the saved interval chosen by this test case.
-    entry = MockConfigEntry(
-        domain=DOMAIN, options={"polling_interval": polling_interval}
-    )
-    entry.add_to_hass(hass)
-    # 2. Reopening options should show that same saved value.
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["data_schema"]({}) == {"polling_interval": polling_interval}
+    # 3. Neither account should offer the removed polling setting.
+    assert supports_options is False

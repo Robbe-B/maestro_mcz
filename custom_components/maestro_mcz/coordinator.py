@@ -15,7 +15,7 @@ from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL, DOMAIN
+from .const import DEFAULT_POLLING_INTERVAL, DOMAIN
 from .maestro import MaestroStove
 from .maestro.account import MaestroAccount
 from .maestro.controller.controller_interface import MaestroControllerInterface
@@ -57,11 +57,7 @@ class MczAccountCoordinator(DataUpdateCoordinator[None]):
             logger=_LOGGER,
             config_entry=config_entry,
             name=name,
-            update_interval=timedelta(
-                seconds=config_entry.options.get(
-                    CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL
-                )
-            ),
+            update_interval=timedelta(seconds=DEFAULT_POLLING_INTERVAL),
         )
         self._account = account
         self.consumption_coordinators: dict[str, MczConsumptionCoordinator] = {}
@@ -146,7 +142,7 @@ class MczCountersCoordinator(DataUpdateCoordinator[CountersData]):
         controller: MaestroControllerInterface,
         stove: MaestroStove,
     ) -> None:
-        """Use an hourly schedule separate from the live polling option."""
+        """Use an hourly schedule separate from live stove updates."""
         super().__init__(
             hass,
             _LOGGER,

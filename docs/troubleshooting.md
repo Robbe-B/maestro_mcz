@@ -39,7 +39,7 @@ If you changed your Maestro password, confirm that the new password works in the
 2. Open the sign-in prompt and enter the current password for the account shown.
 3. Submit the form. Home Assistant checks the password and reloads the integration.
 
-Your account, devices, entities, and polling settings are kept; you do not need to remove and re-add the integration. If the password is rejected, correct it and try again. A connection error means Home Assistant could not reach the service; check internet access and try again later.
+Your account, devices, and entities are kept; you do not need to remove and re-add the integration. If the password is rejected, correct it and try again. A connection error means Home Assistant could not reach the service; check internet access and try again later.
 
 ## Entities are unavailable or values stop updating
 
@@ -69,7 +69,7 @@ If you report an unsupported feature, include the stove model, the app screen sh
 
 Commands travel through the Maestro cloud and updated values arrive separately. Allow several seconds for the post-command refreshes, and longer if the cloud or stove is slow.
 
-Compare the result in the official app before repeatedly sending the same command. A lower polling interval cannot eliminate cloud delay. See [updates and response time](configuration.md#updates-and-response-time).
+Compare the result in the official app before repeatedly sending the same command. More frequent updates cannot eliminate cloud delay. See [updates and response time](configuration.md#updates-and-response-time).
 
 Signing in, reading values and sending commands each use up to three attempts for temporary connection or server problems, with short, increasing waits. If the cloud asks for a longer wait, Home Assistant delays the next update instead.
 

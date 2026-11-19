@@ -23,32 +23,19 @@ Removal is manual, not automatic. After removal, the integration reloads that ac
 
 ## Polling interval
 
-The polling interval controls how often Home Assistant requests updated stove data from the cloud.
+Home Assistant normally requests updated stove data from the cloud every 10 seconds. This interval is the same for every account. There is no polling setting in the integration's options, and intervals saved in older versions no longer apply.
 
-1. Go to **Settings > Devices & services**.
-2. Find **Maestro MCZ** and open the options for your account entry, usually labeled **Configure** or shown as a settings icon.
-3. Change **Polling Interval (seconds)** and save.
+The [lifetime statistics](entities.md#lifetime-statistics) and [consumption history](entities.md#consumption-history) refresh hourly on separate schedules. Consumption history also refreshes at 00:05 in the stove's timezone.
 
-Saving options reloads the integration. A brief interruption while it reloads is expected.
-
-| Version | Default | Accepted range |
-|---|---|---|
-| `1.0.5` (older release) | 30 seconds | 30-300 seconds |
-| Current version | 10 seconds | 10-300 seconds |
-
-Existing saved options can override the default. The options form constrains values to the range supported by that version.
-
-A shorter interval increases cloud requests; it does not make the stove respond instantly. Start with your version's default and increase it if you do not need frequent updates.
-
-The [lifetime statistics](entities.md#lifetime-statistics) and [consumption history](entities.md#consumption-history) have separate update schedules. Changing the live polling interval does not affect them.
+For a different schedule, follow Home Assistant's [custom polling instructions](https://www.home-assistant.io/common-tasks/general/#defining-a-custom-polling-interval). Turning off **Enable polling for changes** in the account's **System options** also stops automatic statistics and consumption requests; include those sensors in your automation if you still want them to refresh.
 
 ## Updates and response time
 
 This integration reads updates through the cloud, not directly from the stove.
 
-After changing a setting, allow several seconds for the displayed value to update. Slow internet or cloud responses can add to the delay. A shorter polling interval does not guarantee a faster response to commands.
+After changing a setting, allow several seconds for the displayed value to update. Slow internet or cloud responses can add to the delay. More frequent updates do not guarantee a faster response to commands.
 
-Allow the state to settle before repeating a command. If the official app also shows stale information, investigate the stove or cloud connection rather than only reducing the polling interval.
+Allow the state to settle before repeating a command. If the official app also shows stale information, check the stove or cloud connection.
 
 ## Operating modes and controls
 
