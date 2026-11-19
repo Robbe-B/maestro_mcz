@@ -310,11 +310,11 @@ async def test_midnight_estimate_is_refreshed_when_cloud_history_changes(
     remove_listener = history.async_add_listener(Mock())
     assert sensor.native_value == 10
 
-    # 2. At 00:01, accept the newly completed day's first estimate, including zero.
+    # 2. At 00:05, accept the newly completed day's first estimate, including zero.
     controller.get_consumption_for_stove.return_value = history_for(
         date(2026, 11, 13), first_estimate
     )
-    freezer.move_to("2026-11-13T23:01:00+00:00")
+    freezer.move_to("2026-11-13T23:05:00+00:00")
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
     assert sensor.available
@@ -345,7 +345,7 @@ async def test_midnight_estimate_is_refreshed_when_cloud_history_changes(
 async def test_daily_refresh_expires_old_day_without_guessing_next_value(
     hass, entry, consumption_factory, controller, coordinator, freezer, polling_disabled
 ):
-    """Notify sensors at 00:01 without inventing a reading, even with polling disabled."""
+    """Notify sensors at 00:05 without inventing a reading, even with polling disabled."""
     # 1. The stove is one minute from midnight and yesterday's estimate is known.
     freezer.move_to("2026-11-13T22:59:00+00:00")
     history = consumption_factory("Europe/Brussels")
@@ -364,16 +364,17 @@ async def test_daily_refresh_expires_old_day_without_guessing_next_value(
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    # 3. Neither the daily notification nor its history request runs before 00:01.
+    # 3. Neither the old 00:01 schedule nor the last second before 00:05 triggers work.
     assert not changed.called
     assert controller.get_consumption_for_stove.await_count == 1
-    freezer.tick(timedelta(seconds=59))
-    async_fire_time_changed(hass, dt_util.utcnow())
-    await hass.async_block_till_done(wait_background_tasks=True)
-    assert not changed.called
-    assert controller.get_consumption_for_stove.await_count == 1
+    for instant in ("2026-11-13T23:01:00+00:00", "2026-11-13T23:04:59+00:00"):
+        freezer.move_to(instant)
+        async_fire_time_changed(hass, dt_util.utcnow())
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert not changed.called
+        assert controller.get_consumption_for_stove.await_count == 1
 
-    # 4. At 00:01 the old reading expires; only enabled polling requests history.
+    # 4. At 00:05 the old reading expires; only enabled polling requests history.
     freezer.tick(timedelta(seconds=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -694,7 +695,7 @@ async def test_m1_stoves_are_never_queried_for_consumption(
     else:
         controller.get_consumption_for_stove.assert_not_awaited()
 
-    # 3. Hourly timers and the next midnight must never query the M1 stove either.
+    # 3. Hourly timers and the next 00:05 refresh must never query the M1 stove either.
     freezer.tick(timedelta(hours=1, seconds=1))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -705,7 +706,7 @@ async def test_m1_stoves_are_never_queried_for_consumption(
     await hass.async_block_till_done(wait_background_tasks=True)
     expected_requests = 3 if include_newer_stove else 0
     assert controller.get_consumption_for_stove.await_count == expected_requests
-    freezer.tick(timedelta(minutes=1))
+    freezer.tick(timedelta(minutes=5))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
     expected_requests = 4 if include_newer_stove else 0
