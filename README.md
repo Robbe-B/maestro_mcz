@@ -20,7 +20,7 @@ Monitor your stove and control its supported settings from Home Assistant using 
 
 **Open the repository with the button above, then confirm the download in Home Assistant.** Depending on your Home Assistant version, the button opens the repository in HACS or Marketplace; it does not install or configure the integration automatically.
 
-You need **Home Assistant 2026.3.0 or newer**, a Maestro account, and a stove already linked to that account and working in the official app.
+You need **Home Assistant 2026.11.0 or newer**, a Maestro account, and a stove already linked to that account and working in the official app.
 
 1. Download **Maestro MCZ (cloud)** and restart Home Assistant.
 2. Go to **Settings > Devices & services > Add integration**, search for **Maestro MCZ**, and sign in with your Maestro credentials.

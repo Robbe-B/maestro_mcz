@@ -68,7 +68,7 @@ Water and puffer (buffer tank) readings are available only on supported stoves. 
 
 Where supported, **Ignition count**, **Total operating time**, and **Operating time at power 1** through **5** show the stove's lifetime totals. Operating times are displayed in whole hours; more precise readings are kept for history. These sensors appear under the stove's diagnostic entities only after the cloud supplies a reading; a missing reading is not treated as zero.
 
-Statistics refresh at startup and hourly, separately from live controls. Changing the live polling interval does not change this hourly schedule. Disabling polling in Home Assistant also stops scheduled statistics updates. A statistics failure does not interrupt heating controls. These sensors become unavailable when the integration detects a cloud connection failure, and show their saved readings again when the connection recovers, provided the last statistics request succeeded. They can remain readable while the stove itself is offline.
+Statistics refresh at startup and hourly, separately from the ten-second live updates. Disabling polling in Home Assistant also stops scheduled statistics updates. A statistics failure does not interrupt heating controls. These sensors become unavailable when the integration detects a cloud connection failure, and show their saved readings again when the connection recovers, provided the last statistics request succeeded. They can remain readable while the stove itself is offline.
 
 **Next Maintenance** follows live stove updates, not the hourly statistics schedule.
 

@@ -11,21 +11,13 @@ from homeassistant.config_entries import (
     SOURCE_IMPORT,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlow,
-    OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import (
-    CONF_POLLING_INTERVAL,
-    DEFAULT_POLLING_INTERVAL,
-    DOMAIN,
-    MOCKED_FOLDER,
-)
-from .coordinator import MczConfigEntry
+from .const import DOMAIN, MOCKED_FOLDER
 from .maestro.controller.controller_interface import MaestroControllerInterface
 from .maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
@@ -152,35 +144,6 @@ class MCZConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=f"Hub ({import_data[CONF_HOST]})", data=import_data
         )
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: MczConfigEntry) -> OptionsFlow:
-        """Get the options flow for this handler."""
-        return OptionsFlowHandler()
-
-
-class OptionsFlowHandler(OptionsFlowWithReload):
-    """Handle a option flow for MCZ."""
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle options flow."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        polling_interval = self.config_entry.options.get(
-            CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL
-        )
-
-        base_schema = {
-            vol.Optional(CONF_POLLING_INTERVAL, default=polling_interval): vol.All(
-                vol.Coerce(int), vol.Clamp(min=DEFAULT_POLLING_INTERVAL, max=300)
-            )
-        }
-
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(base_schema))
 
 
 class CannotConnect(HomeAssistantError):

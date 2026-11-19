@@ -1,0 +1,166 @@
+# Bronze self-assessment for this custom integration, not an awarded Core tier.
+# Documentation evidence refers to the repository guides linked by manifest.json.
+# Higher tiers are unassessed placeholders required by the upstream file schema.
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: >-
+      No integration-specific actions are registered. Controls use Home Assistant's
+      standard entity actions; __init__.py only sets up accounts and platforms.
+  appropriate-polling:
+    status: done
+    comment: >-
+      coordinator.py uses a fixed 10-second interval to keep power, mode and fan
+      feedback responsive, with independent hourly counters/history and a local
+      00:05 history refresh. Cloud retry delays and disabled polling are respected.
+      See const.py and
+      tests/test_setup.py, tests/test_counters.py, and tests/test_consumption.py.
+  brands:
+    status: done
+    comment: >-
+      Icon and logo are published at
+      https://github.com/home-assistant/brands/tree/master/custom_integrations/maestro_mcz.
+      The matching files are also bundled in brand/ for custom integration branding.
+  common-modules:
+    status: done
+    comment: >-
+      All three coordinators and shared runtime types live in coordinator.py.
+      There is no integration-wide base entity to move; entity classes remain in
+      their respective platform modules.
+  config-flow:
+    status: done
+    comment: >-
+      config_flow.py validates Maestro credentials and stores connection details
+      in entry.data. strings.json and translations/en.json and nl.json explain
+      both login fields. Polling is not configurable through the flow.
+  config-flow-test-coverage:
+    status: done
+    comment: >-
+      tests/test_config_flow.py covers user/import creation, duplicates, every
+      displayed error and recovery, reauthentication, and created-entry unique IDs.
+      Full-suite branch coverage for config_flow.py is 100%.
+  dependency-transparency:
+    status: exempt
+    comment: >-
+      No separately installed device library is used: the Maestro client is
+      bundled source under maestro/, covered by this public repository's
+      Apache-2.0 license and tests. An import audit finds only the standard
+      library and Home Assistant-provided homeassistant, aiohttp, and probatio;
+      there is no external client package whose PyPI release must be verified.
+  docs-actions:
+    status: exempt
+    comment: >-
+      The integration defines no custom actions. Standard entity controls are
+      explained in docs/entities.md.
+  docs-conditions:
+    status: exempt
+    comment: >-
+      The integration provides no custom condition or device-condition platform;
+      users can use Home Assistant's standard entity-state conditions.
+  docs-high-level-description:
+    status: done
+    comment: >-
+      README.md and docs/README.md identify MCZ stoves, the Maestro cloud service,
+      supported control and monitoring, and the need for an internet connection.
+  docs-installation-instructions:
+    status: done
+    comment: >-
+      docs/installation.md lists the supported Home Assistant version, account,
+      linked stove and connectivity prerequisites, installation methods, and
+      step-by-step account setup. README.md and hacs.json agree on 2026.11.0.
+  docs-removal-instructions:
+    status: done
+    comment: >-
+      docs/installation.md explains removing the entry before uninstalling its
+      files, and warns that the stove remains linked to the Maestro account.
+  docs-triggers:
+    status: exempt
+    comment: >-
+      The integration provides no custom trigger or device-trigger platform;
+      users can use Home Assistant's standard entity-state triggers.
+  entity-event-setup:
+    status: done
+    comment: >-
+      Entities inherit CoordinatorEntity's lifecycle-managed subscriptions.
+      sensor.py adds its extra listeners in async_added_to_hass with
+      async_on_remove, and binds discovery listeners to entry.async_on_unload.
+      tests/test_counters.py and tests/test_consumption.py verify cleanup.
+  entity-unique-id:
+    status: done
+    comment: >-
+      Every entity uses the stove's cloud UniqueCode, with a stable feature key
+      where needed. Existing IDs are preserved, including connectivity sensors.
+      See tests/test_entities.py and tests/test_integration.py registry scenarios.
+  has-entity-name:
+    status: done
+    comment: >-
+      Every platform entity class sets _attr_has_entity_name = True. Feature names
+      omit the stove name; climate.py sets the main control's name to None.
+      tests/test_counters.py also checks the device-prefixed displayed name.
+  runtime-data:
+    status: done
+    comment: >-
+      __init__.py stores MczRuntimeData in entry.runtime_data. coordinator.py
+      defines MczConfigEntry; platforms and diagnostics use that typed entry.
+      tests/test_setup.py verifies separate account ownership.
+  test-before-configure:
+    status: done
+    comment: >-
+      config_flow.py retrieves linked stoves with the entered cloud credentials
+      before creating a user entry and reports authentication/connection errors.
+      The import flow only creates local diagnostic replay accounts.
+      tests/test_config_flow.py covers failed login and successful retry.
+  test-before-setup:
+    status: done
+    comment: >-
+      __init__.py discovers the account and awaits the first coordinator refresh
+      before forwarding platforms. Authentication failures raise
+      ConfigEntryAuthFailed; connection failures become ConfigEntryNotReady.
+      tests/test_setup.py covers discovery, model and live-refresh failures.
+  unique-config-entry:
+    status: done
+    comment: >-
+      config_flow.py checks the account username, or the fixed diagnostic import
+      identity, with async_set_unique_id and _abort_if_unique_id_configured.
+      tests/test_config_flow.py verifies both duplicate flows and saved identities.
+
+  # Silver: not assessed in this Bronze review.
+  action-exceptions: todo
+  config-entry-unloading: todo
+  docs-configuration-parameters: todo
+  docs-installation-parameters: todo
+  entity-unavailable: todo
+  integration-owner: todo
+  log-when-unavailable: todo
+  parallel-updates: todo
+  reauthentication-flow: todo
+  test-coverage: todo
+
+  # Gold: not assessed in this Bronze review.
+  devices: todo
+  diagnostics: todo
+  discovery: todo
+  discovery-update-info: todo
+  docs-data-update: todo
+  docs-examples: todo
+  docs-known-limitations: todo
+  docs-supported-devices: todo
+  docs-supported-functions: todo
+  docs-troubleshooting: todo
+  docs-use-cases: todo
+  dynamic-devices: todo
+  entity-category: todo
+  entity-device-class: todo
+  entity-disabled-by-default: todo
+  entity-translations: todo
+  exception-translations: todo
+  icon-translations: todo
+  reconfiguration-flow: todo
+  repair-issues: todo
+  stale-devices: todo
+
+  # Platinum: not assessed in this Bronze review.
+  async-dependency: todo
+  inject-websession: todo
+  strict-typing: todo

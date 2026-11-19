@@ -101,4 +101,4 @@ Removing the integration from Home Assistant does not unlink the stove from your
 
 ---
 
-**Next:** [Configure your account and polling interval](configuration.md)
+**Next:** [Account setup and update schedules](configuration.md)

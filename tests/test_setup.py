@@ -107,8 +107,8 @@ async def test_mock_folder_detection(hass, tmp_path, monkeypatch, exists):
 async def test_setup_entry_initializes_coordinator_and_platforms(
     hass, entry, controller, mocked, polling_interval
 ):
-    """Load the right data source and refresh interval so the account's controls work."""
-    # 1. Prepare the saved options and choose live cloud data or offline replay.
+    """Use ten-second live updates even when an older installation saved another interval."""
+    # 1. Prepare any old refresh setting and choose live cloud data or offline replay.
     if polling_interval is not None:
         hass.config_entries.async_update_entry(
             entry, options={"polling_interval": polling_interval}
@@ -148,8 +148,11 @@ async def test_setup_entry_initializes_coordinator_and_platforms(
     assert (
         account.stoves["SERIAL-001"] is entry.runtime_data.account.stoves["SERIAL-001"]
     )
-    expected_interval = 10 if polling_interval is None else polling_interval
-    assert account.update_interval == timedelta(seconds=expected_interval)
+    assert account.update_interval == timedelta(seconds=10)
+    counters = account.counters_coordinators["SERIAL-001"]
+    consumption = account.consumption_coordinators["SERIAL-001"]
+    assert counters.update_interval == timedelta(hours=1)
+    assert consumption.update_interval == timedelta(hours=1)
     setup_platforms.assert_awaited_once_with(entry, PLATFORMS)
     controller.get_stove_model_for_stove.assert_awaited_once_with(
         "model-1", "Living Room"

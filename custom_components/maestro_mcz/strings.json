@@ -5,6 +5,10 @@
         "data": {
           "username": "[%key:common::config_flow::data::username%]",
           "password": "[%key:common::config_flow::data::password%]"
+        },
+        "data_description": {
+          "username": "The username for your Maestro account in the official MCZ app, not your Home Assistant username.",
+          "password": "The password for your Maestro account in the official MCZ app, not your Home Assistant password."
         }
       },
       "reauth_confirm": {
@@ -27,15 +31,6 @@
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
       "unique_id_mismatch": "Sign in with the Maestro account already configured for this entry.",
       "reauth_not_supported": "Saved diagnostic reports do not use a cloud password. They cannot be reauthenticated."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "data": {
-          "polling_interval": "Polling Interval (seconds)"
-        }
-      }
     }
   },
   "exceptions": {
