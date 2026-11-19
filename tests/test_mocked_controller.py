@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import date
 import json
 import os
+from pathlib import Path
 from threading import get_ident
 from unittest.mock import Mock, patch
 
@@ -200,6 +201,61 @@ async def test_report_loading_runs_off_event_loop_and_closes_file(
     assert report_handles[0].closed
     assert discovered_stoves == []
     assert ("Mocked controller failed" in caplog.text) is not valid_report
+
+
+async def test_file_discovery_runs_off_event_loop(replay, tmp_path):
+    """Keep replay responsive while filtering directories and ordering saved reports."""
+    # 1. Create two reports and a directory that must not be replayed as a file.
+    older_report = tmp_path / "older.json"
+    newer_report = tmp_path / "newer.json"
+    older_report.write_text("{}", encoding="utf-8")
+    newer_report.write_text("{}", encoding="utf-8")
+    ignored_directory = tmp_path / "ignored"
+    ignored_directory.mkdir()
+    os.utime(older_report, (100, 100))
+    os.utime(newer_report, (200, 200))
+
+    event_loop_thread = get_ident()
+    list_threads = []
+    file_check_threads = []
+    sort_threads = []
+    original_listdir = os.listdir
+    original_is_file = Path.is_file
+    original_getmtime = os.path.getmtime
+
+    def tracked_listdir(folder):
+        list_threads.append(get_ident())
+        return original_listdir(folder)
+
+    def tracked_is_file(path):
+        file_check_threads.append(get_ident())
+        return original_is_file(path)
+
+    def tracked_getmtime(path):
+        sort_threads.append(get_ident())
+        return original_getmtime(path)
+
+    module = "custom_components.maestro_mcz.maestro.controller.mocked_controller"
+    with (
+        patch(f"{module}.os.listdir", side_effect=tracked_listdir),
+        patch(f"{module}.Path.is_file", autospec=True, side_effect=tracked_is_file),
+        patch(f"{module}.os.path.getmtime", side_effect=tracked_getmtime),
+    ):
+        # 2. Discover reports using the normal replay path.
+        report_files = await replay.get_mocked_files()
+
+    # 3. Listing, filtering, and sorting all happen off-loop and ignore directories.
+    assert report_files == [str(older_report), str(newer_report)]
+    assert list_threads
+    assert file_check_threads
+    assert sort_threads
+    assert len(list_threads) == 1
+    worker_thread = list_threads[0]
+    assert list_threads[0] != event_loop_thread
+    assert all(thread != event_loop_thread for thread in file_check_threads)
+    assert all(thread != event_loop_thread for thread in sort_threads)
+    assert all(thread == worker_thread for thread in file_check_threads)
+    assert all(thread == worker_thread for thread in sort_threads)
 
 
 async def test_missing_replay_directory(replay):
