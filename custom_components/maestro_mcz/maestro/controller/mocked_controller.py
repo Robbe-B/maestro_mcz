@@ -29,6 +29,16 @@ def _load_mocked_file(file_path: str) -> JsonObject:
     return data
 
 
+def _get_mocked_files(folder_path: str) -> list[str]:
+    """List, filter, and sort saved reports from a folder."""
+    file_paths = []
+    for file in os.listdir(folder_path):
+        full_path = Path(folder_path) / file
+        if full_path.is_file():
+            file_paths.append(str(full_path))
+    return sorted(file_paths, key=lambda path: (os.path.getmtime(path), path))
+
+
 class MockedController(MaestroControllerInterface):
     """Class of a MockedController."""
 
@@ -118,25 +128,12 @@ class MockedController(MaestroControllerInterface):
         try:
             loop = asyncio.get_running_loop()
             folder_path = self._folder_path
-            assert folder_path is not None
-            files_in_dir = await loop.run_in_executor(None, os.listdir, folder_path)
-            if files_in_dir is not None:
-                # Only return regular files, ignore directories
-                result: list[str] = []
-                for file in files_in_dir:
-                    full_path = Path(folder_path) / file
-                    if full_path.is_file():
-                        result.append(str(full_path))
-                return await loop.run_in_executor(
-                    None,
-                    lambda: sorted(
-                        result, key=lambda path: (os.path.getmtime(path), path)
-                    ),
-                )
+            if folder_path is None:
+                return None
+            return await loop.run_in_executor(None, _get_mocked_files, folder_path)
         except Exception as e:  # noqa: BLE001
             _LOGGER.debug("Failed to check mocked files: %s", e)
             return None
-        return None
 
     async def do_ping_for_stove(self, device_id: str, device_name: str) -> None:
         """Pings the stove to check connectivity."""
