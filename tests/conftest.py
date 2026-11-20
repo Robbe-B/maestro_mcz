@@ -215,8 +215,9 @@ def controller(stove_info_payload, model_payload):
             "secondi": 10,
             "giorno_sett": 4,
             "am_pm": True,
-            "sm_nome_app": "app",
-            "sm_vs_app": 2,
+            "sm_nome_app": "DM2.AIR",
+            "sm_sn": "BOARD-001",
+            "sm_vs_app": "01.02.003",
             "mc_vs_app": "3",
             "nome_banca_dati_sel": "database",
         }

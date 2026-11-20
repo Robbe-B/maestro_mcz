@@ -23,9 +23,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _load_mocked_file(file_path: str) -> JsonObject:
-    """Read and parse a saved report, closing it even when parsing fails."""
+    """Read a saved report and normalize legacy firmware before replay."""
     with open(file_path) as file:
         data: JsonObject = json.load(file)
+    for device in data["data"]["devices"].values():
+        saved_status = device["coordinator.stove_data"]["Status"]
+        firmware = saved_status.get("sm_vs_app")
+        if type(firmware) is int:
+            saved_status["sm_vs_app"] = str(firmware)
     return data
 
 

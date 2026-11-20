@@ -13,7 +13,6 @@ from custom_components.maestro_mcz.maestro.controller.responses.stove_info impor
     StoveInfo,
 )
 
-
 # The cloud sometimes spells a field differently from our Python attribute.
 STATE_ALIASES = {
     "mode": "mod_lav_att",
@@ -95,10 +94,47 @@ def declared_payload_field_cases():
 def test_each_declared_payload_field(response_type, attribute, wire_name):
     """Put a cloud reading in the right place, rather than discarding or renaming it."""
     # 1. Send one field with an easily recognizable example value.
-    parsed = response_type({wire_name: 17})
+    example_value = "01.02.003" if attribute == "sm_vs_app" else 17
+    parsed = response_type({wire_name: example_value})
     # 2. It belongs in its expected attribute, not the unknown-fields collection.
-    assert getattr(parsed, attribute) == 17
+    assert getattr(parsed, attribute) == example_value
     assert parsed.unknown_fields is None
+
+
+@pytest.mark.parametrize("from_saved_report", [False, True])
+@pytest.mark.parametrize("firmware", [0, 2, False, {}])
+def test_status_rejects_non_string_firmware(firmware, from_saved_report):
+    """Keep typed responses string-only; legacy conversion belongs to report import."""
+    # 1. Supply a value that is invalid for this live response or saved report.
+    payload = {"sm_vs_app": firmware}
+
+    # 2. Read the report through the normal status parser.
+    with pytest.raises(TypeError) as raised:
+        Status(payload, from_mocked_response=from_saved_report)
+
+    # 3. The invalid value is reported, not converted into a displayed version.
+    assert str(raised.value) == "sm_vs_app must be a string or null"
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_firmware"),
+    [
+        ({"sm_vs_app": "01.02.003"}, "01.02.003"),
+        ({"sm_vs_app": None}, None),
+        ({}, None),
+    ],
+)
+def test_saved_status_preserves_string_or_missing_firmware(payload, expected_firmware):
+    """Preserve reported version text and missing values after importing a report."""
+    # 1. Keep a copy of the imported data.
+    original_payload = dict(payload)
+
+    # 2. Read already imported data through the typed response parser.
+    parsed = Status(payload, from_mocked_response=True)
+
+    # 3. Firmware has its canonical type without modifying the original report.
+    assert parsed.sm_vs_app == expected_firmware
+    assert payload == original_payload
 
 
 @pytest.mark.parametrize(

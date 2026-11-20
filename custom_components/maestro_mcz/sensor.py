@@ -213,6 +213,26 @@ class MczSensorEntity(CoordinatorEntity[MczAccountCoordinator], SensorEntity):
             self._attr_native_value = value
 
 
+class MczSystemInfoSensor(MczSensorEntity):
+    """Expose text diagnostics on the existing stove's live update schedule."""
+
+    def __init__(
+        self,
+        coordinator: MczAccountCoordinator,
+        stove_unique_code: str,
+        supported_sensor: models_types.SensorMczConfigItem,
+    ) -> None:
+        """Reuse live sensor identity, availability and diagnostic settings."""
+        super().__init__(coordinator, stove_unique_code, supported_sensor)
+        del self._attr_name
+
+    def _handle_coordinator_update_internal(self) -> None:
+        assert self._prop is not None
+        self._attr_native_value = self._stove.device_metadata.get_sensor_value(
+            self._prop
+        )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: MczConfigEntry,
@@ -220,10 +240,23 @@ async def async_setup_entry(
 ) -> None:
     """Set up sensor entities from a config entry."""
     coordinator: MczAccountCoordinator = entry.runtime_data.coordinator
+    discovered_system_info: set[tuple[str, str]] = set()
     entities = []
     for stove in coordinator.stoves.values():
         entities.extend(_getStoveSensorEntities(coordinator, stove))
+    entities.extend(_get_new_system_info_entities(coordinator, discovered_system_info))
     async_add_entities(entities)
+
+    @callback
+    def async_discover_system_info() -> None:
+        """Add each text diagnostic once when the stove first reports its value."""
+        new_entities = _get_new_system_info_entities(
+            coordinator, discovered_system_info
+        )
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(async_discover_system_info))
 
     discovered: set[str] = set()
 
@@ -288,6 +321,29 @@ async def async_setup_entry(
             counters.async_refresh(),
             name=f"{counters.name} initial refresh",
         )
+
+
+def _get_new_system_info_entities(
+    coordinator: MczAccountCoordinator,
+    discovered: set[tuple[str, str]],
+) -> list[MczSystemInfoSensor]:
+    """Discover text diagnostics without duplicating existing stove entities."""
+    entities = []
+    for stove in coordinator.stoves.values():
+        for definition in model_definitions.supported_system_info_sensors:
+            assert definition.sensor_get_name is not None
+            identity = (stove.UniqueCode, definition.sensor_get_name)
+            if identity in discovered:
+                continue
+            if (
+                stove.device_metadata.get_sensor_value(definition.sensor_get_name)
+                is not None
+            ):
+                discovered.add(identity)
+                entities.append(
+                    MczSystemInfoSensor(coordinator, stove.UniqueCode, definition)
+                )
+    return entities
 
 
 def _getStoveSensorEntities(

@@ -8,9 +8,13 @@ from unittest.mock import AsyncMock, Mock, call, patch
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.maestro_mcz.const import DOMAIN
 from custom_components.maestro_mcz.coordinator import MczAccountCoordinator
 from custom_components.maestro_mcz.fan import get_supported_fan_configurations
-from custom_components.maestro_mcz.maestro import MaestroStove
+from custom_components.maestro_mcz.maestro import (
+    MaestroStove,
+    MaestroStoveDeviceMetadata,
+)
 from custom_components.maestro_mcz.maestro.account import MaestroAccount
 from custom_components.maestro_mcz.maestro.controller import maestro_controller
 from custom_components.maestro_mcz.maestro.controller.const import (
@@ -29,6 +33,7 @@ from custom_components.maestro_mcz.maestro.controller.responses.model import (
     Model,
     ModelConfiguration,
 )
+from custom_components.maestro_mcz.maestro.controller.responses.status import Status
 from custom_components.maestro_mcz.maestro.model_value_reader import get_response_value
 from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
 
@@ -1203,7 +1208,7 @@ async def test_mixed_generation_account_keeps_ping_requests_separate(
 
 
 async def test_stove_identity_connectivity_and_device_info(stove):
-    """Identify the correct stove in HA and report disconnection without losing its identity."""
+    """Keep the stove's identity and last known motherboard details when it goes offline."""
     # 1. Check the connected living-room stove's account and model identifiers.
     assert stove.Id == "device-1"
     assert stove.ModelId == "model-1"
@@ -1213,14 +1218,168 @@ async def test_stove_identity_connectivity_and_device_info(stove):
 
     # 2. HA's device information should show this stove and its supplied software details.
     device_info = stove.get_device_info()
-    assert device_info["identifiers"] == {("maestro_mcz", "SERIAL-001")}
-    assert device_info["model"] == "Synthetic Air Stove"
-    assert device_info["sw_version"] == "app.2, Panel:3, DB:database"
+    assert device_info.identifiers == {("maestro_mcz", "SERIAL-001")}
+    assert device_info.model == "Synthetic Air Stove"
+    assert device_info.serial_number == "BOARD-001"
+    assert device_info.sw_version == "DM2.AIR.01.02.003"
 
-    # 3. A disconnected stove reports that state instead of claiming a live connection.
+    # 3. Going offline changes availability, not the known serial or firmware.
     stove._is_stove_connected_to_cloud = False
     assert not stove.is_connected
-    assert stove.get_device_info()["sw_version"] == "Device Disconnected"
+    assert stove.get_device_info() == device_info
+
+
+@pytest.mark.parametrize(
+    ("serial_number", "board_type", "firmware", "expected_metadata"),
+    [
+        (
+            "BOARD-002",
+            "DM2.AIR",
+            "01.02.003",
+            {"serial_number": "BOARD-002", "sw_version": "DM2.AIR.01.02.003"},
+        ),
+        (None, "DM2.AIR", "16", {"sw_version": "DM2.AIR.16"}),
+        (None, None, "01.02.003", {"sw_version": "01.02.003"}),
+        (None, "", "01.02.003", {"sw_version": "01.02.003"}),
+        (None, " ", "01.02.003", {"sw_version": "01.02.003"}),
+        ("BOARD-002", "DM2.AIR", None, {"serial_number": "BOARD-002"}),
+        (None, None, None, {}),
+        ("", "", "", {}),
+        (" ", " ", " ", {}),
+    ],
+)
+async def test_device_info_uses_only_reported_motherboard_details(
+    controller, serial_number, board_type, firmware, expected_metadata
+):
+    """Combine board type and firmware without inventing serials or adding panel/database versions."""
+    # 1. A newly discovered stove may report either, both, or neither motherboard detail.
+    controller.get_stove_status_for_stove.return_value = Status(
+        {
+            "IsConnected": True,
+            "sm_sn": serial_number,
+            "sm_vs_app": firmware,
+            "sm_nome_app": board_type,
+            "mc_vs_app": "Panel version",
+            "nome_banca_dati_sel": "Database name",
+        }
+    )
+    living_room_stove = MaestroStove(
+        controller, controller.retrieve_linked_stove_infos.return_value[0]
+    )
+
+    # 2. Read the stove normally before building its Home Assistant device information.
+    await living_room_stove.async_init()
+    await living_room_stove.refresh()
+    device_info = living_room_stove.get_device_info()
+    motherboard_details = {
+        key: value
+        for key, value in device_info.as_dict().items()
+        if key in {"serial_number", "sw_version", "hw_version"}
+    }
+
+    # 3. Firmware text stays intact, missing details stay absent, and identity stays stable.
+    assert motherboard_details == expected_metadata
+    assert device_info.identifiers == {(DOMAIN, "SERIAL-001")}
+
+
+@pytest.mark.parametrize(
+    ("sensor_set_type_id", "expected_firmware"),
+    [
+        (
+            (
+                "7c201fd8-42bd-4333-914d-0f5822070757\u00a7"
+                "00000000-0000-0000-0000-000000000000\u00a7"
+                "314b03b8-f4ed-11eb-a33c-0242ac120003"
+            ),
+            "M1.Air.01.02.003",
+        ),
+        (
+            (
+                "7c201fd8-42bd-4333-914d-0f5822070757\u00a7"
+                "2132564a-aa41-46be-a31c-7e26f94692ce\u00a7"
+                "8f90d262-2818-4054-b3ec-5f71f0e90466"
+            ),
+            "M1.Hydro.01.02.003",
+        ),
+        ("unknown-m1-sensor-set", "01.02.003"),
+    ],
+)
+async def test_m1_board_type_uses_sensor_set_mapping(
+    controller, m1_ping, sensor_set_type_id, expected_firmware
+):
+    """Use known Air/Hydro labels, never a guess from an older stove's name."""
+    # 1. An M1 stove reports an arbitrary board name and a known or unknown sensor set.
+    stove_info = deepcopy(controller.retrieve_linked_stove_infos.return_value[0])
+    stove_info.node.sensor_set_type_id = sensor_set_type_id
+    controller.get_stove_status_for_stove.return_value.sm_nome_app = "Not an M1 label"
+    older_stove = MaestroStove(controller, stove_info)
+    await older_stove.async_init()
+
+    # 2. Refresh metadata without waiting for unrelated ping requests.
+    with patch.object(older_stove, "_ping", new_callable=AsyncMock):
+        await older_stove.refresh()
+
+    # 3. Only recognized labels accompany the unchanged firmware; hardware stays unset.
+    device_info = older_stove.get_device_info()
+    assert device_info.sw_version == expected_firmware
+    assert "hw_version" not in device_info.as_dict()
+
+
+async def test_board_type_arriving_later_combines_with_known_firmware(controller):
+    """Show newly reported board details without erasing a previously reported version."""
+    # 1. The first report has firmware but no board type.
+    controller.get_stove_status_for_stove.return_value = Status(
+        {"IsConnected": True, "sm_vs_app": "0016"}
+    )
+    living_room_stove = MaestroStove(
+        controller, controller.retrieve_linked_stove_infos.return_value[0]
+    )
+    await living_room_stove.async_init()
+    await living_room_stove.refresh()
+    assert living_room_stove.get_device_info().sw_version == "0016"
+
+    # 2. A later report supplies only board type.
+    controller.get_stove_status_for_stove.return_value = Status(
+        {"IsConnected": True, "sm_nome_app": "DM2.AIR"}
+    )
+    await living_room_stove.refresh()
+
+    # 3. Both known details remain visible, including the version's leading zeros.
+    assert living_room_stove.get_device_info().sw_version == "DM2.AIR.0016"
+
+
+@pytest.mark.parametrize(
+    ("generation", "reported", "expected"),
+    [
+        (models_types.MczStoveModelGeneration.M1, 1, "TA08"),
+        (models_types.MczStoveModelGeneration.M1, 27, "SC24-HYD"),
+        (models_types.MczStoveModelGeneration.M1, 49, "VALMO-BR"),
+        (models_types.MczStoveModelGeneration.M1, "Already named", "Already named"),
+        (models_types.MczStoveModelGeneration.M1, 0, None),
+        (models_types.MczStoveModelGeneration.M1, 999, None),
+        (models_types.MczStoveModelGeneration.M1, False, None),
+        (models_types.MczStoveModelGeneration.M1, 27.0, None),
+        (models_types.MczStoveModelGeneration.M1, "27", None),
+        (models_types.MczStoveModelGeneration.M1, None, None),
+        (models_types.MczStoveModelGeneration.M1, " ", None),
+        (models_types.MczStoveModelGeneration.M2_PLUS, "DB-001", "DB-001"),
+        (models_types.MczStoveModelGeneration.M2_PLUS, 27, None),
+    ],
+)
+def test_active_database_resolves_names_without_showing_unmapped_numbers(
+    generation, reported, expected
+):
+    """Display actual database names instead of exposing an unmapped numeric identifier."""
+    # 1. Status reports either a database name, a numeric identifier or no usable value.
+    metadata = MaestroStoveDeviceMetadata()
+    status = Status({"nome_banca_dati_sel": reported})
+
+    # 2. Metadata prepares the diagnostic while processing the normal status update.
+    metadata.update_from_status(status, "sensors-1", generation)
+    database_name = metadata.get_sensor_value("nome_banca_dati_sel")
+
+    # 3. Known numeric identifiers are named only for older stoves; text is preserved.
+    assert database_name == expected
 
 
 async def test_stove_refresh_and_command_contract(stove, controller):
@@ -1646,8 +1805,8 @@ async def test_multiple_stoves_keep_identity_and_commands_separate(
     account = MaestroAccount(controller, [stove, kitchen_stove])
     coordinator = MczAccountCoordinator(hass, entry, "two-stoves", account)
     assert set(coordinator.stoves) == {"SERIAL-001", "SERIAL-002"}
-    living_room_identifiers = stove.get_device_info()["identifiers"]
-    kitchen_identifiers = kitchen_stove.get_device_info()["identifiers"]
+    living_room_identifiers = stove.get_device_info().identifiers
+    kitchen_identifiers = kitchen_stove.get_device_info().identifiers
     assert living_room_identifiers != kitchen_identifiers
     # 2. Change the kitchen temperature; its own device ID must be addressed.
     await kitchen_stove.activateProgram("target", "temperature-config", 23.5)

@@ -59,6 +59,15 @@
       }
     },
     "sensor": {
+      "motherboard_firmware": {
+        "default": "mdi:chip"
+      },
+      "active_database": {
+        "default": "mdi:database"
+      },
+      "panel_firmware": {
+        "default": "mdi:tablet-dashboard"
+      },
       "consumption_yesterday": {
         "default": "mdi:fire"
       },

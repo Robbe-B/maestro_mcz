@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -107,6 +108,20 @@ class MczAccountCoordinator(DataUpdateCoordinator[None]):
                 translation_placeholders={"error": str(err)},
                 retry_after=err.retry_after,
             ) from err
+
+        assert self.config_entry is not None
+        registry = dr.async_get(self.hass)
+        for stove in self.stoves.values():
+            device = registry.async_get_device_by_identifier(
+                (DOMAIN, stove.UniqueCode), self.config_entry.entry_id
+            )
+            if device is not None:
+                device_info = stove.get_device_info()
+                registry.async_update_device(
+                    device.id,
+                    serial_number=device_info.serial_number,
+                    sw_version=device_info.sw_version,
+                )
 
     async def update_data_after_set(
         self,
