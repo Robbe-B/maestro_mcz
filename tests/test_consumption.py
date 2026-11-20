@@ -431,7 +431,7 @@ async def test_unknown_snapshot_and_shutdown_do_not_invent_or_poll(
     controller.get_consumption_for_stove.assert_not_awaited()
 
 
-@pytest.mark.parametrize("model_name", ["M1 example", "Maestro+ example"])
+@pytest.mark.parametrize("model_name", ["M1 example", "M2 example"])
 @pytest.mark.parametrize("power_sensor", ["com_on_off", "unrecognized"])
 @pytest.mark.parametrize("has_ping", [True, False], ids=["known-ping", "missing-ping"])
 async def test_real_platform_discovers_history_later_and_keeps_one_entity(

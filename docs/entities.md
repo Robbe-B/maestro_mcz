@@ -64,6 +64,12 @@ Numeric ranges and steps are read from the cloud model. Consult your stove's man
 
 Water and puffer (buffer tank) readings are available only on supported stoves. A sensor listed here may not appear for your model.
 
+### System information
+
+**Firmware motherboard** combines the board type and software version shown on the device page. **Active database** shows the name of the stove's active settings database. M2 stoves can also show **Firmware panel** when reported; M1 stoves do not have this sensor.
+
+These read-only diagnostic sensors appear when the stove first supplies usable details. They are enabled by default so Home Assistant can keep their changes in history, unless you exclude them from recording. They use the normal live updates and become unavailable when the stove or cloud connection is lost. A missing database or panel reading shows as unknown, not as an invented value.
+
 ### Lifetime statistics
 
 Where supported, **Ignition count**, **Total operating time**, and **Operating time at power 1** through **5** show the stove's lifetime totals. Operating times are displayed in whole hours; more precise readings are kept for history. These sensors appear under the stove's diagnostic entities only after the cloud supplies a reading; a missing reading is not treated as zero.

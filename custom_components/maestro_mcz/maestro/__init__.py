@@ -3,11 +3,13 @@
 import asyncio
 import logging
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import ClassVar
 
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from ..const import DOMAIN, MANUFACTURER
+from ..const import DOMAIN, M1_BOARD_TYPES, MANUFACTURER
 from .controller.controller_interface import MaestroControllerInterface
 from .controller.maestro_controller import (
     MaestroAuthenticationException,
@@ -28,7 +30,6 @@ from .models.models_types import (
     MczStoveModelGeneration,
 )
 
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -48,6 +49,151 @@ def get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
     return tuple(name for name in names if name is not None)
 
 
+@dataclass
+class MaestroStoveDeviceMetadata:
+    """Prepare device details and read-only system diagnostics for one stove."""
+
+    _DATABASE_NAMES: ClassVar[dict[int, str]] = dict(
+        enumerate(
+            (
+                "TA08",
+                "TC08",
+                "SA10",
+                "SC10",
+                "SC12",
+                "SC14",
+                "SL08",
+                "SA08",
+                "TA08-BRI",
+                "SC08",
+                "IK70-BRI",
+                "IK80-BRI",
+                "SC12-BRI",
+                "LU10-BRI",
+                "SL07",
+                "LO08",
+                " BT60",
+                "BT70",
+                "PH14",
+                "IS07-BRI",
+                "CO09",
+                "ST12",
+                "SC14-BRI",
+                "TE06",
+                "CUTHDE08",
+                "SC14-MAT",
+                "SC24-HYD",
+                "SC16-HYD",
+                "SC12-HYD",
+                "IPV60",
+                "IPV70",
+                "JZ30-HYD",
+                "VI09",
+                "VI11",
+                "FPC09",
+                "FPC11",
+                "FLOW10",
+                "AKI16-HY",
+                "AKI24-HY",
+                "GR14",
+                "VI90-H24",
+                "AV12-BRI",
+                "VI90-H16",
+                "SL07-C",
+                "IS07-B-C",
+                "SA08-C",
+                "SA08-C",
+                "PH14-C",
+                "VALMO-BR",
+            ),
+            start=1,
+        )
+    )
+
+    serial_number: str | None = None
+    board_type: str | None = None
+    firmware_version: str | None = None
+    active_database: str | None = None
+    panel_firmware: str | None = None
+
+    @property
+    def software_version(self) -> str | None:
+        """Combine known board type and firmware without inventing a version."""
+        if self.firmware_version is None:
+            return None
+        if self.board_type is not None:
+            return f"{self.board_type}.{self.firmware_version}"
+        return self.firmware_version
+
+    def update_from_status(
+        self,
+        status: Status | None,
+        sensor_set_type_id: str,
+        model_generation: MczStoveModelGeneration,
+    ) -> None:
+        """Retain motherboard identity and refresh the currently reported diagnostics."""
+        self.active_database = None
+        self.panel_firmware = None
+        if status is None:
+            return
+        serial_number = status.sm_sn
+        if isinstance(serial_number, str) and serial_number.strip():
+            self.serial_number = serial_number
+        board_type = M1_BOARD_TYPES.get(sensor_set_type_id)
+        if board_type is None and model_generation is not MczStoveModelGeneration.M1:
+            board_type = status.sm_nome_app
+        if isinstance(board_type, str) and board_type.strip():
+            self.board_type = board_type
+        firmware = status.sm_vs_app
+        if isinstance(firmware, str) and firmware.strip():
+            self.firmware_version = firmware
+        is_m1 = (
+            model_generation is MczStoveModelGeneration.M1
+            or sensor_set_type_id in M1_BOARD_TYPES
+        )
+        self.active_database = self._get_database_name(
+            status.nome_banca_dati_sel, is_m1
+        )
+        if not is_m1 and isinstance(status.mc_vs_app, str) and status.mc_vs_app.strip():
+            self.panel_firmware = status.mc_vs_app
+
+    def _get_database_name(self, value: str | int | None, is_m1: bool) -> str | None:
+        """Resolve supported numeric identifiers or preserve a reported database name."""
+        if type(value) is int and is_m1:
+            return self._DATABASE_NAMES.get(value)
+        if isinstance(value, str) and value.strip() and not value.strip().isdecimal():
+            return value
+        return None
+
+    def get_device_info(
+        self, *, unique_code: str, name: str, model_name: str | None
+    ) -> DeviceInfo:
+        """Map stove identity and retained motherboard details to Home Assistant."""
+        device_info = DeviceInfo(
+            identifiers={(DOMAIN, unique_code)},
+            name=name,
+            manufacturer=MANUFACTURER,
+            model=model_name,
+        )
+        if self.serial_number is not None:
+            device_info.serial_number = self.serial_number
+        if self.software_version is not None:
+            device_info.sw_version = self.software_version
+        return device_info
+
+    def get_sensor_value(self, name: str) -> str | None:
+        """Return a prepared diagnostic without exposing response or model handling."""
+        match name:
+            case "sm_vs_app":
+                return self.software_version
+            case "nome_banca_dati_sel":
+                return self.active_database
+            case "mc_vs_app":
+                return self.panel_firmware
+            case _:
+                raise ValueError(f"Unknown system information sensor: {name}")
+
+
 class MaestroStove:
     """Class to represent a Maestro Stove. (One instance per device)."""
 
@@ -64,6 +210,7 @@ class MaestroStove:
         self._model: Model | None = None
         self._state: State | None = None
         self._status: Status | None = None
+        self._device_metadata = MaestroStoveDeviceMetadata()
         self._is_integration_connected_to_cloud = False
         self._is_stove_connected_to_cloud = False
 
@@ -241,6 +388,9 @@ class MaestroStove:
         self._status = await self._controller.get_stove_status_for_stove(
             self.Id, self.Name
         )
+        self._device_metadata.update_from_status(
+            self._status, self.SensorSetTypeId, self.model_generation
+        )
 
     async def _getStoveState(self) -> None:
         self._state = await self._controller.get_stove_state_for_stove(
@@ -316,27 +466,18 @@ class MaestroStove:
         )
 
     def get_device_info(self) -> DeviceInfo:
-        """Return device info."""
+        """Return the stove's identity and retained motherboard details."""
         assert self.Model is not None
-        sw_version = ""
-
-        if self.is_connected:
-            assert self.Status is not None
-            sw_version = (
-                f"{self.Status.sm_nome_app}.{self.Status.sm_vs_app}"
-                f", Panel:{self.Status.mc_vs_app}"
-                f", DB:{self.Status.nome_banca_dati_sel}"
-            )
-        else:
-            sw_version = "Device Disconnected"
-
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.UniqueCode)},
+        return self._device_metadata.get_device_info(
+            unique_code=self.UniqueCode,
             name=self.Name,
-            manufacturer=MANUFACTURER,
-            model=self.Model.model_name,
-            sw_version=sw_version,
+            model_name=self.Model.model_name,
         )
+
+    @property
+    def device_metadata(self) -> MaestroStoveDeviceMetadata:
+        """Return the stove's prepared device details and diagnostic readings."""
+        return self._device_metadata
 
     def get_model_configuration_by_model_configuration_name(
         self, model_configuration_name: str

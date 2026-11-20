@@ -516,6 +516,45 @@ supported_binary_sensors = [
     ),
 ]
 
+supported_system_info_sensors = [
+    SensorMczConfigItem(
+        user_friendly_name="Firmware motherboard",
+        sensor_get_name="sm_vs_app",
+        translation_key="motherboard_firmware",
+        unit=None,
+        display_precision=None,
+        category=EntityCategory.DIAGNOSTIC,
+        device_class=None,
+        state_class=None,
+        enabled_by_default=True,
+        value_response_source=MczResponseSource.STATUS,
+    ),
+    SensorMczConfigItem(
+        user_friendly_name="Active database",
+        sensor_get_name="nome_banca_dati_sel",
+        translation_key="active_database",
+        unit=None,
+        display_precision=None,
+        category=EntityCategory.DIAGNOSTIC,
+        device_class=None,
+        state_class=None,
+        enabled_by_default=True,
+        value_response_source=MczResponseSource.STATUS,
+    ),
+    SensorMczConfigItem(
+        user_friendly_name="Firmware panel",
+        sensor_get_name="mc_vs_app",
+        translation_key="panel_firmware",
+        unit=None,
+        display_precision=None,
+        category=EntityCategory.DIAGNOSTIC,
+        device_class=None,
+        state_class=None,
+        enabled_by_default=True,
+        value_response_source=MczResponseSource.STATUS,
+    ),
+]
+
 supported_sensors = [
     SensorMczConfigItem(
         "Last Alarm Code",

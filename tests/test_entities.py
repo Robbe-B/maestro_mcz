@@ -364,7 +364,7 @@ def test_all_platforms_discover_supported_entities_and_keep_legacy_ids(entities)
     # 3. All controls belong to the same physical stove in HA.
     for platform_entities in entities.values():
         for item in platform_entities:
-            assert item.device_info["identifiers"] == {("maestro_mcz", "SERIAL-001")}
+            assert item.device_info.identifiers == {("maestro_mcz", "SERIAL-001")}
 
 
 def test_catalogue_icons_cover_every_custom_entity_and_temperature_defaults():
@@ -387,6 +387,7 @@ def test_catalogue_icons_cover_every_custom_entity_and_temperature_defaults():
         ],
         "sensor": [
             *model_definitions.supported_sensors,
+            *model_definitions.supported_system_info_sensors,
             *model_definitions.supported_counters,
         ],
         "switch": model_definitions.supported_switches,
@@ -488,20 +489,29 @@ async def test_alarm_reset_is_a_configuration_button(
 async def test_empty_model_does_not_invent_controls(
     hass, entry, coordinator, stove, platform
 ):
-    """Avoid showing controls a stove does not support, while retaining connection indicators."""
+    """Avoid unsupported controls while retaining connection indicators and known firmware."""
     # 1. Remove all supported controls and available readings from the model.
     stove.Model.model_configurations = []
     stove._state = SimpleNamespace()
     stove._status = SimpleNamespace()
+    stove.device_metadata.update_from_status(
+        None, stove.SensorSetTypeId, stove.model_generation
+    )
     stove._is_stove_connected_to_cloud = False
     module = importlib.import_module(f"custom_components.maestro_mcz.{platform}")
     # 2. Set up the selected HA platform for this empty model.
     add_entities = Mock()
     await module.async_setup_entry(hass, entry, add_entities)
     discovered_entities = add_entities.call_args.args[0]
-    # 3. Only the two connection indicators may exist without model data.
+    # 3. Connection indicators and already known firmware do not invent new readings.
     if platform == "binary_sensor":
         assert len(discovered_entities) == 2
+    elif platform == "sensor":
+        assert len(discovered_entities) == 1
+        firmware_sensor = discovered_entities[0]
+        assert firmware_sensor.unique_id == "SERIAL-001-sm_vs_app"
+        assert firmware_sensor.native_value == "DM2.AIR.01.02.003"
+        assert not firmware_sensor.available
     else:
         assert len(discovered_entities) == 0
 
@@ -516,7 +526,8 @@ def test_regular_entities_require_coordinator_and_stove_connectivity(
         control
         for control in entities[platform]
         if not isinstance(
-            control, (MczCloudStatusBinarySensorEntity, MczStoveStatusBinarySensorEntity)
+            control,
+            (MczCloudStatusBinarySensorEntity, MczStoveStatusBinarySensorEntity),
         )
     ]
     assert regular_controls
@@ -657,7 +668,7 @@ def test_older_tones_do_not_stringify_null_or_use_another_response(
     status_present, status_value, state_value, expected
 ):
     """Leave missing tones unknown rather than showing another reply or the word None."""
-    # 1. Supply synthetic replies for a control whose app counterpart is not verified.
+    # 1. Supply conflicting replies with missing or empty tone settings.
     state = SimpleNamespace(toni_buzz=state_value)
     status = SimpleNamespace()
     if status_present:

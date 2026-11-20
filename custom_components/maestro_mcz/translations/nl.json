@@ -79,6 +79,15 @@
   },
   "entity": {
     "sensor": {
+      "motherboard_firmware": {
+        "name": "Firmware moederbord"
+      },
+      "active_database": {
+        "name": "Actieve database"
+      },
+      "panel_firmware": {
+        "name": "Firmware paneel"
+      },
       "ignition_count": {
         "name": "Aantal ontstekingen"
       },

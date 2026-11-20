@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -25,6 +26,302 @@ from custom_components.maestro_mcz.maestro.controller.maestro_controller import 
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     ModelConfiguration,
 )
+from custom_components.maestro_mcz.maestro.controller.responses.status import Status
+
+
+@pytest.mark.parametrize("saved_metadata", [False, True])
+async def test_device_metadata_updates_in_place_and_survives_missing_reports(
+    hass, entry, controller, saved_metadata
+):
+    """Refresh the real device page without losing saved details, names, or another account's data."""
+    # 1. Start without live metadata; another account may share the same stove identifier.
+    controller.get_stove_status_for_stove.return_value = Status({"IsConnected": True})
+    registry = dr.async_get(hass)
+    if saved_metadata:
+        registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "SERIAL-001")},
+            serial_number="SAVED-BOARD",
+            sw_version="01.00",
+        )
+    other_entry = MockConfigEntry(domain=DOMAIN, unique_id="other-account")
+    other_entry.add_to_hass(hass)
+    other_device = registry.async_get_or_create(
+        config_entry_id=other_entry.entry_id,
+        identifiers={(DOMAIN, "SERIAL-001")},
+        serial_number="OTHER-BOARD",
+        sw_version="Other firmware",
+    )
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        device = registry.async_get_device_by_identifier(
+            (DOMAIN, "SERIAL-001"), entry.entry_id
+        )
+        assert device.serial_number == ("SAVED-BOARD" if saved_metadata else None)
+        assert device.sw_version == ("01.00" if saved_metadata else None)
+        device_id = device.id
+        registry.async_update_device(device_id, name_by_user="My living-room stove")
+        entity_registry = er.async_get(hass)
+        original_entities = {
+            entity.id
+            for entity in er.async_entries_for_config_entry(
+                entity_registry, entry.entry_id
+            )
+        }
+        system_info_fields = {"sm_vs_app", "nome_banca_dati_sel", "mc_vs_app"}
+        coordinator = entry.runtime_data.coordinator
+
+        # 2. Motherboard details arrive later, while all original entities remain loaded.
+        controller.get_stove_status_for_stove.return_value = Status(
+            {
+                "IsConnected": True,
+                "sm_sn": "BOARD-001",
+                "sm_nome_app": "DM2.AIR",
+                "sm_vs_app": "01.02.003",
+                "mc_vs_app": "Panel version",
+                "nome_banca_dati_sel": "Database name",
+            }
+        )
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        updated_device = registry.async_get(device_id)
+        assert updated_device.serial_number == "BOARD-001"
+        assert updated_device.sw_version == "DM2.AIR.01.02.003"
+        assert updated_device.hw_version is None
+
+        # 3. Empty offline reports and a failed cloud request must preserve the known details.
+        for missing_report in (
+            Status({"IsConnected": False, "sm_sn": "", "sm_vs_app": ""}),
+            None,
+        ):
+            controller.get_stove_status_for_stove.return_value = missing_report
+            await coordinator.async_refresh()
+            disconnected_device = registry.async_get(device_id)
+            assert disconnected_device.serial_number == "BOARD-001"
+            assert disconnected_device.sw_version == "DM2.AIR.01.02.003"
+        controller.do_ping_for_stove.side_effect = MaestroConnectionException("offline")
+        await coordinator.async_refresh()
+        assert not coordinator.last_update_success
+        assert registry.async_get(device_id).sw_version == "DM2.AIR.01.02.003"
+
+        # 4. Reconnection supplies a changed version but no serial; only firmware changes.
+        controller.do_ping_for_stove.side_effect = None
+        controller.get_stove_status_for_stove.return_value = Status(
+            {"IsConnected": True, "sm_vs_app": "01.02.004"}
+        )
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        reconnected_device = registry.async_get_device_by_identifier(
+            (DOMAIN, "SERIAL-001"), entry.entry_id
+        )
+        assert reconnected_device.id == device_id
+        assert reconnected_device.identifiers == {(DOMAIN, "SERIAL-001")}
+        assert reconnected_device.serial_number == "BOARD-001"
+        assert reconnected_device.sw_version == "DM2.AIR.01.02.004"
+        assert reconnected_device.name_by_user == "My living-room stove"
+        remaining_entities = {
+            entity.id
+            for entity in er.async_entries_for_config_entry(
+                entity_registry, entry.entry_id
+            )
+            if entity.unique_id.removeprefix("SERIAL-001-") not in system_info_fields
+        }
+        assert remaining_entities == original_entities
+        assert registry.async_get(other_device.id).serial_number == "OTHER-BOARD"
+        assert registry.async_get(other_device.id).sw_version == "Other firmware"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    ("sensor_set_type_id", "has_m1_channel", "expected_prefix", "database", "panel"),
+    [
+        ("sensors-1", False, "DM2.AIR", "DB-001", "00.03"),
+        (
+            (
+                "7c201fd8-42bd-4333-914d-0f5822070757\u00a7"
+                "00000000-0000-0000-0000-000000000000\u00a7"
+                "314b03b8-f4ed-11eb-a33c-0242ac120003"
+            ),
+            True,
+            "M1.Air",
+            27,
+            None,
+        ),
+        (
+            (
+                "7c201fd8-42bd-4333-914d-0f5822070757\u00a7"
+                "2132564a-aa41-46be-a31c-7e26f94692ce\u00a7"
+                "8f90d262-2818-4054-b3ec-5f71f0e90466"
+            ),
+            False,
+            "M1.Hydro",
+            "Already named",
+            None,
+        ),
+    ],
+    ids=["m2", "m1-air", "m1-hydro-without-ping"],
+)
+async def test_system_info_sensors_discover_once_and_follow_live_availability(
+    hass,
+    entry,
+    controller,
+    configuration,
+    sensor_set_type_id,
+    has_m1_channel,
+    expected_prefix,
+    database,
+    panel,
+):
+    """Keep useful firmware history on the same device without guessing unsupported readings."""
+    # 1. Initially the stove reports no system details, even though State has an old name.
+    controller.retrieve_linked_stove_infos.return_value[
+        0
+    ].node.sensor_set_type_id = sensor_set_type_id
+    if has_m1_channel:
+        controller.get_stove_model_for_stove.return_value.model_configurations.append(
+            ModelConfiguration(
+                {
+                    "ConfigurationName": "PING STOVE",
+                    "ConfigurationId": "m1-ping",
+                    "Timed": False,
+                    "Limitations": None,
+                    "Configurations": [
+                        configuration(
+                            "m1_cod_for_spe_mqtt",
+                            Mappings={"C|RecuperoParametri": 0, "C|RecuperoInfo": 1},
+                        )
+                    ],
+                }
+            )
+        )
+    controller.get_stove_state_for_stove.return_value.nome_banca_dati_sel = "Old value"
+    controller.get_stove_status_for_stove.return_value = Status({"IsConnected": True})
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+        patch(
+            "custom_components.maestro_mcz.maestro.asyncio.sleep",
+            new_callable=AsyncMock,
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        registry = er.async_get(hass)
+        fields = {"sm_vs_app", "nome_banca_dati_sel", "mc_vs_app"}
+        initial_diagnostics = [
+            item
+            for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+            if item.unique_id.removeprefix("SERIAL-001-") in fields
+        ]
+        assert initial_diagnostics == []
+        coordinator = entry.runtime_data.coordinator
+        stove = coordinator.stoves["SERIAL-001"]
+
+        # 2. Details arrive later; only newer stoves may create a panel sensor.
+        controller.get_stove_status_for_stove.return_value = Status(
+            {
+                "IsConnected": True,
+                "sm_sn": "BOARD-001",
+                "sm_nome_app": "DM2.AIR",
+                "sm_vs_app": "0016",
+                "nome_banca_dati_sel": database,
+                "mc_vs_app": "00.03",
+            }
+        )
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        expected_values = {
+            "sm_vs_app": f"{expected_prefix}.0016",
+            "nome_banca_dati_sel": "SC24-HYD" if database == 27 else database,
+        }
+        if panel is not None:
+            expected_values["mc_vs_app"] = panel
+        diagnostics = {
+            item.unique_id.removeprefix("SERIAL-001-"): item
+            for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+            if item.unique_id.removeprefix("SERIAL-001-") in fields
+        }
+        assert set(diagnostics) == set(expected_values)
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get_device_by_identifier(
+            (DOMAIN, "SERIAL-001"), entry.entry_id
+        )
+        for field, expected_value in expected_values.items():
+            entity = diagnostics[field]
+            state = hass.states.get(entity.entity_id)
+            assert state.state == expected_value
+            assert entity.device_id == device.id
+            assert entity.entity_category is EntityCategory.DIAGNOSTIC
+            assert entity.disabled_by is None
+            assert "unit_of_measurement" not in state.attributes
+            assert "state_class" not in state.attributes
+            assert "device_class" not in state.attributes
+        motherboard_entity_id = diagnostics["sm_vs_app"].entity_id
+        assert hass.states.get(motherboard_entity_id).state == device.sw_version
+        original_entity_ids = {
+            item.id
+            for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        }
+
+        # 3. Later versions retain board type and exact text, without adding duplicates.
+        controller.get_stove_status_for_stove.return_value = Status(
+            {
+                "IsConnected": True,
+                "sm_vs_app": "0017",
+                "nome_banca_dati_sel": "DB-002",
+                "mc_vs_app": "00.04",
+            }
+        )
+        await coordinator.async_refresh()
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        assert hass.states.get(motherboard_entity_id).state == f"{expected_prefix}.0017"
+        assert stove.get_device_info().sw_version == f"{expected_prefix}.0017"
+        database_entity_id = diagnostics["nome_banca_dati_sel"].entity_id
+        assert hass.states.get(database_entity_id).state == "DB-002"
+        if panel is not None:
+            assert hass.states.get(diagnostics["mc_vs_app"].entity_id).state == "00.04"
+
+        # 4. Lost connections make live diagnostics unavailable; missing readings stay unknown.
+        controller.get_stove_status_for_stove.return_value = Status(
+            {"IsConnected": False}
+        )
+        await coordinator.async_refresh()
+        for entity in diagnostics.values():
+            assert hass.states.get(entity.entity_id).state == STATE_UNAVAILABLE
+        controller.get_stove_status_for_stove.return_value = Status(
+            {"IsConnected": True}
+        )
+        await coordinator.async_refresh()
+        assert hass.states.get(motherboard_entity_id).state == f"{expected_prefix}.0017"
+        assert hass.states.get(database_entity_id).state == STATE_UNKNOWN
+        if panel is not None:
+            assert (
+                hass.states.get(diagnostics["mc_vs_app"].entity_id).state
+                == STATE_UNKNOWN
+            )
+        controller.do_ping_for_stove.side_effect = MaestroConnectionException("offline")
+        if has_m1_channel:
+            controller.activate_program_with_commands_for_stove.side_effect = (
+                MaestroConnectionException("offline")
+            )
+        await coordinator.async_refresh()
+        for entity in diagnostics.values():
+            assert hass.states.get(entity.entity_id).state == STATE_UNAVAILABLE
+        remaining_entity_ids = {
+            item.id
+            for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        }
+        assert remaining_entity_ids == original_entity_ids
+        assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.fixture
@@ -394,7 +691,12 @@ async def test_frontend_icons_preserve_registered_names_and_fan_availability(
         )
     )["entity"]
 
-    # 2. New icon keys keep existing names, including the disabled clock's fallback name.
+    # 2. Icons keep existing names; new diagnostics use the selected language.
+    diagnostic_names = {
+        "en": ("Firmware motherboard", "Active database", "Firmware panel"),
+        "nl": ("Firmware moederbord", "Actieve database", "Firmware paneel"),
+    }
+    motherboard_name, database_name, panel_name = diagnostic_names[language]
     for domain, suffix, name, key in [
         (
             "binary_sensor",
@@ -419,6 +721,9 @@ async def test_frontend_icons_preserve_registered_names_and_fan_availability(
         ),
         ("select", "set_pot_man", "Manual Power", "manual_power"),
         ("sensor", "last_alarm", "Last Alarm Code", "last_alarm"),
+        ("sensor", "sm_vs_app", motherboard_name, "motherboard_firmware"),
+        ("sensor", "nome_banca_dati_sel", database_name, "active_database"),
+        ("sensor", "mc_vs_app", panel_name, "panel_firmware"),
         ("switch", "att_eco", "Start / Stop", "start_stop"),
     ]:
         entity_id = registry.async_get_entity_id(domain, DOMAIN, f"SERIAL-001-{suffix}")

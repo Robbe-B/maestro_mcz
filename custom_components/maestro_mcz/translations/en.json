@@ -79,6 +79,15 @@
     },
     "entity": {
       "sensor": {
+        "motherboard_firmware": {
+          "name": "Firmware motherboard"
+        },
+        "active_database": {
+          "name": "Active database"
+        },
+        "panel_firmware": {
+          "name": "Firmware panel"
+        },
         "ignition_count": {
           "name": "Ignition count"
         },

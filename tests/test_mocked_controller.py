@@ -1,14 +1,15 @@
 """Protect the diagnostics replay path used to reproduce cloud stove reports."""
 
-from dataclasses import asdict
-from datetime import date
 import json
 import os
+from dataclasses import asdict
+from datetime import date
 from pathlib import Path
 from threading import get_ident
 from unittest.mock import Mock, patch
 
 import pytest
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.maestro_mcz.const import DOMAIN
@@ -18,6 +19,7 @@ from custom_components.maestro_mcz.maestro.controller.maestro_controller import 
 )
 from custom_components.maestro_mcz.maestro.controller.mocked_controller import (
     MockedController,
+    _load_mocked_file,
 )
 
 
@@ -43,14 +45,27 @@ async def test_replay_does_not_claim_current_cloud_membership(replay):
 
 
 @pytest.mark.parametrize(
-    "consumption,expected_value",
-    [({"value": 12.5}, 12.5), ({"value": 0}, 0), ({"value": None}, None), (None, None)],
+    "consumption,expected_value,firmware,expected_firmware",
+    [
+        ({"value": 12.5}, 12.5, 2, "2"),
+        ({"value": 0}, 0, 0, "0"),
+        ({"value": None}, None, "01.02.003", "01.02.003"),
+        (None, None, None, None),
+    ],
     ids=["recorded", "zero", "no-reading", "older-report"],
 )
 async def test_diagnostics_replay_round_trip(
-    hass, entry, replay, tmp_path, stove, consumption, expected_value
+    hass,
+    entry,
+    replay,
+    tmp_path,
+    stove,
+    consumption,
+    expected_value,
+    firmware,
+    expected_firmware,
 ):
-    """Reproduce a reported stove problem without needing the owner's physical stove."""
+    """Replay old and new report formats without needing the owner's physical stove."""
     # 1. Save an example stove report and a directory that should be ignored.
     payload = {
         "data": {
@@ -63,7 +78,7 @@ async def test_diagnostics_replay_round_trip(
                         "SensorSetTypeId": stove.SensorSetTypeId,
                         "Model": asdict(stove.Model),
                         "State": asdict(stove.State),
-                        "Status": asdict(stove.Status),
+                        "Status": asdict(stove.Status) | {"sm_vs_app": firmware},
                     },
                 }
             }
@@ -89,6 +104,7 @@ async def test_diagnostics_replay_round_trip(
     assert replayed_model.model_name == stove.Model.model_name
     assert replayed_state.temp_amb_install == 20.5
     assert replayed_status.sm_sn == replayed_stove.node.unique_code
+    assert replayed_status.sm_vs_app == expected_firmware
     missing_model = await replay.get_stove_model_for_stove("missing", "unknown")
     missing_state = await replay.get_stove_state_for_stove("missing", "unknown")
     missing_status = await replay.get_stove_status_for_stove("missing", "unknown")
@@ -131,6 +147,14 @@ async def test_diagnostics_replay_round_trip(
         setup_succeeded = await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert setup_succeeded
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, replayed_stove.node.unique_code), entry.entry_id
+    )
+    assert device is not None
+    expected_display = (
+        f"DM2.AIR.{expected_firmware}" if expected_firmware is not None else None
+    )
+    assert device.sw_version == expected_display
     registry = er.async_get(hass)
     entity_id = registry.async_get_entity_id(
         "sensor", DOMAIN, f"{replayed_stove.node.unique_code}-consumption_yesterday"
@@ -148,6 +172,49 @@ async def test_diagnostics_replay_round_trip(
         "device-1", "Living Room"
     )
     assert unloaded_state is None
+
+
+@pytest.mark.parametrize(
+    ("saved_status", "expected_status"),
+    [
+        ({"sm_vs_app": 2}, {"sm_vs_app": "2"}),
+        ({"sm_vs_app": 0}, {"sm_vs_app": "0"}),
+        ({"sm_vs_app": "01.02.003"}, {"sm_vs_app": "01.02.003"}),
+        ({"sm_vs_app": None}, {"sm_vs_app": None}),
+        ({}, {}),
+        ({"sm_vs_app": False}, {"sm_vs_app": False}),
+        ({"sm_vs_app": {}}, {"sm_vs_app": {}}),
+    ],
+)
+def test_report_import_normalizes_only_legacy_integer_firmware(
+    tmp_path, saved_status, expected_status
+):
+    """Handle old firmware at file import without changing unrelated or invalid values."""
+    # 1. Save a report containing old or current firmware and an unrelated numeric reading.
+    status_payload = saved_status | {"mc_vs_app": 3}
+    report = {
+        "data": {
+            "devices": {
+                "Living Room": {
+                    "coordinator.stove_data": {"Status": status_payload}
+                }
+            }
+        }
+    }
+    report_file = tmp_path / "firmware.json"
+    saved_contents = json.dumps(report)
+    report_file.write_text(saved_contents, encoding="utf-8")
+
+    # 2. Import the file before any typed responses or device metadata are constructed.
+    imported_report = _load_mocked_file(str(report_file))
+    imported_status = imported_report["data"]["devices"]["Living Room"][
+        "coordinator.stove_data"
+    ]["Status"]
+
+    # 3. Only exact integer firmware is normalized; the saved report remains untouched.
+    assert imported_status == expected_status | {"mc_vs_app": 3}
+    assert status_payload == saved_status | {"mc_vs_app": 3}
+    assert report_file.read_text(encoding="utf-8") == saved_contents
 
 
 async def test_invalid_replay_file_is_reported(replay, tmp_path, caplog):

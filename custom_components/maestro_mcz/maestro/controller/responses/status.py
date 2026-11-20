@@ -1,7 +1,7 @@
 """Parse live Status fields or restore the attribute names in saved diagnostics."""
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 from ..response_types import JsonObject, require_json_object
 
@@ -19,7 +19,7 @@ class Status:
     is_crono_empty: bool | None = None
     is_ble_connected: bool | None = None
     sm_nome_app: str | None = None
-    sm_vs_app: int | None = None
+    sm_vs_app: str | None = None
     mc_vs_app: str | None = None
     fase_op: str | None = None
     sub_fase_op: str | None = None
@@ -85,7 +85,7 @@ class Status:
     mod_ada_on: bool | None = None
     ssid_wifi: str | None = None
     sm_sn: str | None = None
-    nome_banca_dati_sel: str | None = None
+    nome_banca_dati_sel: str | int | None = None
     cont_fine_pul: bool | None = None
     ing_term_amb1: bool | None = None
     description: str | None = None
@@ -472,3 +472,5 @@ class Status:
                             )
                 if temp_unknown_fields:
                     self.unknown_fields = temp_unknown_fields
+        if self.sm_vs_app is not None and not isinstance(self.sm_vs_app, str):
+            raise TypeError("sm_vs_app must be a string or null")
