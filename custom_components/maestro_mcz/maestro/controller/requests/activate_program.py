@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass
 class ActivateProgramRequest:
-    """Represents a request to activate a program on the stove."""
+    """Describe the wire envelope for addressed commands, without dispatching them."""
 
     ModelId: str
     ConfigurationId: str | None
@@ -28,7 +28,7 @@ class ActivateProgramRequest:
 
 @dataclass
 class ProgramCommand:
-    """Represents a command to be sent to the stove."""
+    """Carry one sensor ID and wire value, without choosing or sending the action."""
 
     SensorId: str | None = None
     Value: object | None = None

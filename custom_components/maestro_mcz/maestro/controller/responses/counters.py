@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, fields
 
 @dataclass
 class Counters:
-    """Keep nullable counters in their original units for diagnostic replay."""
+    """Validate nullable lifetime counters while preserving their reported units."""
 
     num_acc: int | None = None
     cont_tot_h_lavoro: int | None = None

@@ -148,6 +148,20 @@
             }
           }
         }
+      },
+      "room_fan": {
+        "default": "mdi:fan",
+        "state": {
+          "unavailable": "mdi:fan-off"
+        },
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "mdi:fan-auto",
+              "silent": "mdi:fan-off"
+            }
+          }
+        }
       }
     },
     "switch": {

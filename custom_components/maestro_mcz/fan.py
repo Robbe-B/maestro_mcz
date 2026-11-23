@@ -28,7 +28,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class MczFanEntity(CoordinatorEntity[MczAccountCoordinator], FanEntity):
-    """Fan entity for Maestro MCZ stoves."""
+    """Adapt advertised, mode-dependent fan controls to HA presets/percentages.
+
+    Derive features from cached configuration and dispatch through the stove;
+    do not own account polling or rewrite raw mode/response values.
+    """
 
     _attr_has_entity_name = True
     _attr_available: bool = True
@@ -56,7 +60,13 @@ class MczFanEntity(CoordinatorEntity[MczAccountCoordinator], FanEntity):
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_fan.user_friendly_name
+        if supported_fan.translation_key is None:
+            self._attr_name = supported_fan.user_friendly_name
+        else:
+            self._attr_translation_key = supported_fan.translation_key
+        self._attr_translation_placeholders = (
+            supported_fan.translation_placeholders or {}
+        )
         self._attr_unique_id = f"{stove_unique_code}-{supported_fan.sensor_get_name}"
         self._attr_device_info = self._stove.get_device_info()
         self._prop = supported_fan.sensor_get_name

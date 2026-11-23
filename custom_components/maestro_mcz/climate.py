@@ -28,7 +28,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class MczClimateEntity(CoordinatorEntity[MczAccountCoordinator], ClimateEntity):
-    """Representation of a MCZ climate entity."""
+    """Adapt stove readings and advertised controls to HA climate capabilities.
+
+    Present HVAC modes/actions, presets and temperatures; dispatch user actions
+    through the stove. Keep display aliases local rather than modifying shared
+    response/model metadata, and leave polling/retries to their owners.
+    """
 
     _attr_has_entity_name = True
     _attr_hvac_mode: HVACMode | None = None

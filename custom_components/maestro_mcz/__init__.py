@@ -1,4 +1,8 @@
-"""The maestro_mcz integration."""
+"""Compose per-entry clients, accounts, coordinators and Home Assistant platforms.
+
+Own setup, unload and device-removal policy; field interpretation and entity
+behavior belong to their respective adapters, not this composition root.
+"""
 
 from __future__ import annotations
 

@@ -51,8 +51,8 @@ Both sides of the cloud connection matter:
 
 | Indicator | What it represents |
 |---|---|
-| **Cloud Connection Status** | Whether the integration considers its connection to the Maestro cloud authenticated and usable |
-| **Device Connection Status** | Whether the cloud reports the stove connected |
+| **Cloud connection status** | Whether the integration considers its connection to the Maestro cloud authenticated and usable |
+| **Device connection status** | Whether the cloud reports the stove connected |
 
 These indicators show the last reported connection status, which may be out of date. The device indicator can itself be unavailable when the integration cannot reach the cloud. See [connection troubleshooting](troubleshooting.md#entities-are-unavailable-or-values-stop-updating).
 

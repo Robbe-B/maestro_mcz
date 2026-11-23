@@ -1,4 +1,10 @@
-"""Supported and legacy MCZ feature definitions."""
+"""Declare supported/legacy feature bindings and explicit value catalogues.
+
+Schema types live in models_types; cached-field interpretation lives in the
+value reader. HA metadata and translation keys are intentional here, while
+localized labels live in strings/translations. Treat shared definitions as
+read-only, keeping matched controls and per-entity state outside this catalogue.
+"""
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.number import NumberDeviceClass, NumberMode
@@ -27,6 +33,95 @@ from .models_types import (
     SwitchMczConfigItem,
     ThermostatMczConfigItem,
     TimeSyncButtonMczConfigItem,
+)
+
+SUPPORTED_ALARM_CODES = frozenset(
+    {
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A07",
+        "A08",
+        "A09",
+        "A11",
+        "A12",
+        "A13",
+        "A14",
+        "A17",
+        "A18",
+        "A19",
+        "A20",
+        "A21",
+        "A22",
+        "A23",
+        "A24",
+        "A99",
+    }
+)
+
+CURRENT_STATE_ALIASES = {
+    "attesa allarme sicurezze": "safety-alarm-wait",
+    "clean a caldo": "cleaning-hot",
+    "clean a freddo": "cleaning-cold",
+    "load a caldo": "loading-hot",
+    "load a freddo": "loading-cold",
+    "potenza 1": "power-1",
+    "potenza 2": "power-2",
+    "potenza 3": "power-3",
+    "potenza 4": "power-4",
+    "potenza 5": "power-5",
+    "pulizia high": "cleaning-high",
+    "raffreddamento": "cooling-down",
+    "spegnimento": "turning-off",
+    "stabilizzazione": "stabilization",
+    "standby": "standby",
+    "start 1 a caldo": "start-1-hot",
+    "start 1 a freddo": "start-1-cold",
+    "start 2 a freddo": "start-2-cold",
+    "stufa spenta": "off",
+}
+
+SUPPORTED_CURRENT_STATES = (
+    frozenset(
+        {
+            "off",
+            "cleaning",
+            "loading",
+            "start-1",
+            "start-2",
+            "stabilization",
+            "anti-condensation",
+            "on",
+            "turning-off",
+            "cooling-down",
+            "working",
+            "turning-off-1",
+            "turning-off-2",
+            "hypercombustion",
+            "alarm",
+            "cold-test",
+            "feed-screw-loading",
+            "power-on",
+        }
+    )
+    | frozenset(CURRENT_STATE_ALIASES.values())
+    | frozenset(f"alarm-{code.lower()}" for code in SUPPORTED_ALARM_CODES)
+)
+
+CURRENT_STATE_SENSOR = SensorMczConfigItem(
+    "Current state",
+    "state",
+    "current_state",
+    None,
+    None,
+    None,
+    None,
+    None,
+    True,
+    api_value_renames=CURRENT_STATE_ALIASES,
+    raw_text_attribute="raw_state",
 )
 
 supported_power_settings = [
@@ -84,7 +179,7 @@ legacy_climate_recipe_modes = [
 
 supported_thermostats = [
     ThermostatMczConfigItem(
-        user_friendly_name="Ambient Temperature",
+        user_friendly_name="Ambient temperature",
         sensor_get_name="set_amb1",
         sensor_set_name=None,
         sensor_set_config_name="Set_amb_temp",
@@ -93,7 +188,7 @@ supported_thermostats = [
         sensor_set_name_m2="set_amb1",
     ),
     ThermostatMczConfigItem(
-        user_friendly_name="Ambient Temperature 2",
+        user_friendly_name="Ambient temperature 2",
         sensor_get_name="set_amb2",
         sensor_set_name=None,
         sensor_set_config_name="Set_amb_temp",
@@ -103,7 +198,7 @@ supported_thermostats = [
         sensor_set_name_m2="set_amb2",
     ),
     ThermostatMczConfigItem(
-        user_friendly_name="Ambient Temperature 3",
+        user_friendly_name="Ambient temperature 3",
         sensor_get_name="set_amb3",
         sensor_set_name=None,
         sensor_set_config_name="Set_amb_temp",
@@ -116,7 +211,7 @@ supported_thermostats = [
 
 supported_pots = [
     PotMczConfigItem(
-        user_friendly_name="Manual Power",
+        user_friendly_name="Manual power",
         translation_key="manual_power",
         sensor_get_name="set_pot_man",
         sensor_set_name=None,
@@ -130,6 +225,8 @@ supported_pots = [
 supported_fans = [
     FanMczConfigItem(
         user_friendly_name="Fan 1",
+        translation_key="main_fan",
+        translation_placeholders={"number": "1"},
         sensor_get_name="set_vent_v1",
         sensor_set_name=None,
         mode_to_configuration_name_mapping=None,
@@ -156,6 +253,8 @@ supported_fans = [
     ),
     FanMczConfigItem(
         user_friendly_name="Fan 2",
+        translation_key="main_fan",
+        translation_placeholders={"number": "2"},
         sensor_get_name="set_vent_v2",
         sensor_set_name=None,
         mode_to_configuration_name_mapping=None,
@@ -182,6 +281,8 @@ supported_fans = [
     ),
     FanMczConfigItem(
         user_friendly_name="Fan 3",
+        translation_key="main_fan",
+        translation_placeholders={"number": "3"},
         sensor_get_name="set_vent_v3",
         sensor_set_name=None,
         mode_to_configuration_name_mapping=None,
@@ -207,7 +308,8 @@ supported_fans = [
         sensor_set_name_m2="set_vent_v3",
     ),
     FanMczConfigItem(
-        user_friendly_name="Room Fan",
+        user_friendly_name="Room fan",
+        translation_key="room_fan",
         sensor_get_name="set_vent_v1",
         sensor_set_name=None,
         mode_to_configuration_name_mapping=None,
@@ -223,7 +325,7 @@ supported_fans = [
 
 supported_switches = [
     SwitchMczConfigItem(
-        user_friendly_name="Start / Stop",
+        user_friendly_name="Start / stop",
         sensor_get_name="att_eco",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
@@ -249,7 +351,7 @@ supported_switches = [
 supported_numbers = [
     # start/stop
     NumberMczConfigItem(
-        user_friendly_name="Start / Stop - Delay in Ignition",
+        user_friendly_name="Start / stop - delay in ignition",
         sensor_get_name="rit_usc_standby",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
@@ -263,7 +365,7 @@ supported_numbers = [
         sensor_set_name_m2="rit_usc_standby",
     ),
     NumberMczConfigItem(
-        user_friendly_name="Start / Stop - Delay in Shutdown",
+        user_friendly_name="Start / stop - delay in shutdown",
         sensor_get_name="rit_ing_standby",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
@@ -277,7 +379,7 @@ supported_numbers = [
         sensor_set_name_m2="rit_ing_standby",
     ),
     NumberMczConfigItem(
-        user_friendly_name="Start / Stop - Negative Hysteresis",
+        user_friendly_name="Start / stop - negative hysteresis",
         sensor_get_name="ist_eco_neg_amb",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
@@ -291,7 +393,7 @@ supported_numbers = [
         sensor_set_name_m2="ist_eco_neg_amb",
     ),
     NumberMczConfigItem(
-        user_friendly_name="Start / Stop - Positive Hysteresis",
+        user_friendly_name="Start / stop - positive hysteresis",
         sensor_get_name="ist_eco_pos_amb",
         sensor_set_name=None,
         sensor_set_config_name="Start&Stop",
@@ -306,7 +408,7 @@ supported_numbers = [
     ),
     # ambient
     NumberMczConfigItem(
-        user_friendly_name="Ambient - Negative Hysteresis",
+        user_friendly_name="Ambient - negative hysteresis",
         sensor_get_name="ist_neg_amb",
         sensor_set_name=None,
         sensor_set_config_name="Ambiente",
@@ -320,7 +422,7 @@ supported_numbers = [
         sensor_set_name_m2="ist_neg_amb",
     ),
     NumberMczConfigItem(
-        user_friendly_name="Ambient - Positive Hysteresis",
+        user_friendly_name="Ambient - positive hysteresis",
         sensor_get_name="ist_pos_amb",
         sensor_set_name=None,
         sensor_set_config_name="Ambiente",
@@ -335,7 +437,7 @@ supported_numbers = [
     ),
     # HYDRO - circulation pump
     NumberMczConfigItem(
-        user_friendly_name="Circulation Pump - On - Minimum Temperature",
+        user_friendly_name="Circulation pump - on - minimum temperature",
         sensor_get_name="temp_min_circ_on",
         sensor_set_name=None,
         sensor_set_config_name="temp_avanzate",
@@ -360,7 +462,7 @@ supported_selectors = [
         translation_key="tones",
         category=EntityCategory.CONFIG,
         enabled_by_default=True,
-        value_mappings={"0": "Silent", "1": "Normal", "2": "High"},
+        value_mappings={"0": "silent", "1": "normal", "2": "high"},
         sensor_set_name_m1="m1_toni_buzz",
         sensor_set_name_m2="toni_buzz",
     ),
@@ -368,7 +470,7 @@ supported_selectors = [
 
 supported_date_times = [
     DateTimeMczConfigItem(
-        "Date & Time",
+        "Date & time",
         "giorno",
         "giorno",
         "giorno_sett",
@@ -394,7 +496,7 @@ supported_date_times = [
         MczStoveModelGeneration.M2_PLUS,
     ),
     DateTimeMczConfigItem(
-        "Date & Time",
+        "Date & time",
         "giorno",
         "m1_giorno",
         None,
@@ -423,7 +525,7 @@ supported_date_times = [
 
 supported_buttons = [
     ButtonMczConfigItem(
-        user_friendly_name="Alarm Reset",
+        user_friendly_name="Alarm reset",
         sensor_set_name=None,
         sensor_set_config_name="Reset Allarme",
         translation_key="alarm_reset",
@@ -436,7 +538,7 @@ supported_buttons = [
 
 supported_time_sync_buttons = [
     TimeSyncButtonMczConfigItem(
-        "Set System Date & Time",
+        "Set system date & time",
         "giorno",
         "giorno",
         "giorno_sett",
@@ -462,7 +564,7 @@ supported_time_sync_buttons = [
         MczStoveModelGeneration.M2_PLUS,
     ),
     TimeSyncButtonMczConfigItem(
-        "Set System Date & Time",
+        "Set system date & time",
         "giorno",
         "m1_giorno",
         None,
@@ -501,7 +603,7 @@ supported_binary_sensors = [
     # 'sens_liv_pel' is the live reading of the pellet level probe:
     # True = enough pellets, False = pellet reserve warning (stove beeps).
     BinarySensorMczConfigItem(
-        user_friendly_name="Pellet Level Low",
+        user_friendly_name="Pellet level low",
         sensor_get_name="sens_liv_pel",
         translation_key="pellet_level_low",
         category=None,
@@ -518,7 +620,7 @@ supported_binary_sensors = [
 
 supported_system_info_sensors = [
     SensorMczConfigItem(
-        user_friendly_name="Firmware motherboard",
+        user_friendly_name="Motherboard firmware",
         sensor_get_name="sm_vs_app",
         translation_key="motherboard_firmware",
         unit=None,
@@ -542,7 +644,7 @@ supported_system_info_sensors = [
         value_response_source=MczResponseSource.STATUS,
     ),
     SensorMczConfigItem(
-        user_friendly_name="Firmware panel",
+        user_friendly_name="Panel firmware",
         sensor_get_name="mc_vs_app",
         translation_key="panel_firmware",
         unit=None,
@@ -557,7 +659,7 @@ supported_system_info_sensors = [
 
 supported_sensors = [
     SensorMczConfigItem(
-        "Last Alarm Code",
+        "Last alarm code",
         "last_alarm",
         "last_alarm",
         None,
@@ -568,21 +670,11 @@ supported_sensors = [
         True,
         value_response_source=MczResponseSource.STATE,
     ),
+    CURRENT_STATE_SENSOR,
     SensorMczConfigItem(
-        "Current State",
-        "state",
-        "current_state",
-        None,
-        None,
-        None,
-        None,
-        None,
-        True,
-    ),
-    SensorMczConfigItem(
-        "Ambient Temperature",
+        "Ambient temperature",
         "temp_amb_install",
-        None,
+        "ambient_temperature",
         UnitOfTemperature.CELSIUS,
         None,
         None,
@@ -595,7 +687,7 @@ supported_sensors = [
         },
     ),
     SensorMczConfigItem(
-        "Water Temperature",
+        "Water temperature",
         "temp_caldaia",
         "water_temperature",
         UnitOfTemperature.CELSIUS,
@@ -610,7 +702,7 @@ supported_sensors = [
         },
     ),
     SensorMczConfigItem(
-        "Puffer Temperature",
+        "Buffer tank temperature",
         "temp_puffer",
         "puffer_temperature",
         UnitOfTemperature.CELSIUS,
@@ -622,9 +714,9 @@ supported_sensors = [
         value_response_source=MczResponseSource.STATUS,
     ),
     SensorMczConfigItem(
-        "Wi-Fi Probe Temperature",
+        "Wi-Fi probe temperature",
         "sondaWifi",
-        None,
+        "wifi_probe_temperature",
         UnitOfTemperature.CELSIUS,
         None,
         None,
@@ -634,7 +726,7 @@ supported_sensors = [
         value_response_source=MczResponseSource.STATUS,
     ),
     SensorMczConfigItem(
-        "Current Mode",
+        "Current mode",
         "mode",
         "current_mode",
         None,
@@ -646,9 +738,9 @@ supported_sensors = [
         {"dynamic": "auto", "power": "turbo"},
     ),  # renames are needed for first generation M1+ (for consistency in the different modes compaired to other models)
     SensorMczConfigItem(
-        "Exhaust Temperature",
+        "Exhaust temperature",
         "temp_fumi",
-        None,
+        "exhaust_temperature",
         UnitOfTemperature.CELSIUS,
         None,
         EntityCategory.DIAGNOSTIC,
@@ -657,9 +749,9 @@ supported_sensors = [
         True,
     ),
     SensorMczConfigItem(
-        "Board Temperature",
+        "Board temperature",
         "temp_scheda",
-        None,
+        "board_temperature",
         UnitOfTemperature.CELSIUS,
         None,
         EntityCategory.DIAGNOSTIC,
@@ -668,7 +760,7 @@ supported_sensors = [
         True,
     ),
     SensorMczConfigItem(
-        "Exhaust Fan Speed",
+        "Exhaust fan speed",
         "vel_real_ventola_fumi",
         "exhaust_fan_speed",
         REVOLUTIONS_PER_MINUTE,
@@ -679,7 +771,7 @@ supported_sensors = [
         True,
     ),
     SensorMczConfigItem(
-        "Transport Screw Speed",
+        "Auger screw speed",
         "vel_real_coclea",
         "transport_screw_speed",
         REVOLUTIONS_PER_MINUTE,
@@ -690,17 +782,17 @@ supported_sensors = [
         True,
     ),
     SensorMczConfigItem(
-        "Next Maintenance",
+        "Next maintenance",
         "ore_prox_manut",
         "next_maintenance",
         UnitOfTime.HOURS,
         0,
         EntityCategory.DIAGNOSTIC,
-        None,
+        SensorDeviceClass.DURATION,
         SensorStateClass.MEASUREMENT,
         True,
         value_response_source=MczResponseSource.STATUS,
-    ),  # SensorDeviceClass.DURATION
+    ),
 ]
 
 supported_counters = [

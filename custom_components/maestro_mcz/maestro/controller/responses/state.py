@@ -10,7 +10,11 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class State:
-    """Store reported State readings, leaving absent fields at their defaults."""
+    """Represent one State reply, retaining raw values and unknown fields.
+
+    Leave absent fields at their defaults. Response-source selection, operating
+    state normalization and display translation belong outside this wire model.
+    """
 
     vel_imp_ventola_fumi: int | None = None
     vel_real_ventola_fumi: int | None = None

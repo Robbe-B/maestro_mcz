@@ -12,6 +12,7 @@ Start by checking the official Maestro app. Comparing the same stove and account
 | Login fails or no stoves are found | [Setup or sign-in fails](#setup-or-sign-in-fails) |
 | Controls are unavailable or readings are stale | [Connection and update problems](#entities-are-unavailable-or-values-stop-updating) |
 | A control is missing | [Missing devices or entities](#devices-or-entities-are-missing) |
+| Current state is not translated | [Untranslated states](#current-state-is-not-translated) |
 | A command appears not to work immediately | [Delayed commands](#a-command-is-delayed-or-a-value-changes-back) |
 | You need to report a bug | [Collect evidence](#collect-logs-and-diagnostics) |
 
@@ -43,7 +44,7 @@ Your account, devices, and entities are kept; you do not need to remove and re-a
 
 ## Entities are unavailable or values stop updating
 
-Check **Cloud Connection Status** and **Device Connection Status**, then compare with the official app.
+Check **Cloud connection status** and **Device connection status**, then compare with the official app.
 
 | Observation | Interpretation and next step |
 |---|---|
@@ -61,11 +62,17 @@ After correcting a connection problem, try reloading the account entry from **Se
 
 Confirm that the device is linked to the account used in Home Assistant. Reload the integration if you added a stove to the account after setup.
 
-For an individual entity, check whether it is disabled in the entity registry and whether the feature applies to your model and operating mode. **Date & Time** is intentionally disabled by default.
+For an individual entity, check whether it is disabled in the entity registry and whether the feature applies to your model and operating mode. **Date & time** is intentionally disabled by default.
 
 The integration does not expose every app feature. In particular, the **Timer** switch does not provide schedule editing. See the [entity reference](entities.md) before treating a missing control as a regression.
 
 If you report an unsupported feature, include the stove model, the app screen showing the feature, and reviewed diagnostics. Do not include credentials, serial numbers, or network details in screenshots.
+
+## Current state is not translated
+
+An unfamiliar state stays visible as reported by the stove. A missing-translation warning in **Settings > System > Logs** is not itself a stove fault.
+
+Search [existing issues](https://github.com/Robbe-B/maestro_mcz/issues), then report the untranslated text, your stove model, and the warning if it has not been reported. Each distinct untranslated state is logged only once per account until the integration is reloaded. Review logs for private details before sharing them.
 
 ## A command is delayed or a value changes back
 

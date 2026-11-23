@@ -327,6 +327,41 @@ async def test_counters_errors_are_classified(
     assert raised.value.__cause__ is error
 
 
+@pytest.mark.parametrize("maintenance_hours", [937, 0, -3])
+async def test_live_maintenance_is_a_duration_without_changing_reported_hours(
+    hass, entry, controller, maintenance_hours
+):
+    """Treat the maintenance countdown as time without changing zero or overdue readings."""
+    # 1. The stove reports hours until servicing through its usual live response.
+    live_status = controller.get_stove_status_for_stove.return_value
+    live_status.ore_prox_manut = maintenance_hours
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        # 2. Load the real sensor so Home Assistant applies its duration metadata.
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    # 3. Hours and statistics behavior stay intact under the same enabled diagnostic entity.
+    registry = er.async_get(hass)
+    maintenance_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, "SERIAL-001-ore_prox_manut"
+    )
+    registered = registry.async_get(maintenance_id)
+    reading = hass.states.get(maintenance_id)
+    assert registered.translation_key == "next_maintenance"
+    assert registered.entity_category is er.EntityCategory.DIAGNOSTIC
+    assert registered.disabled_by is None
+    assert reading.state == str(maintenance_hours)
+    assert reading.attributes["device_class"] == SensorDeviceClass.DURATION
+    assert reading.attributes["unit_of_measurement"] == UnitOfTime.HOURS
+    assert reading.attributes["state_class"] == SensorStateClass.MEASUREMENT
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
 @pytest.mark.parametrize("polling_disabled", [False, True])
 async def test_discovery_recovery_polling_and_unload(
     hass, entry, controller, counters_payload, freezer, polling_disabled

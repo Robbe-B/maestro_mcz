@@ -14,7 +14,11 @@ from .responses.stove_info import StoveInfo
 
 
 class MaestroControllerInterface(Protocol):
-    """Interface for controller."""
+    """Define the account/device operations shared by live and replay clients.
+
+    Implementations supply parsed responses and command dispatch; callers own
+    stove caches, Home Assistant entity state and polling schedules.
+    """
 
     @property
     def is_authenticated(self) -> bool:

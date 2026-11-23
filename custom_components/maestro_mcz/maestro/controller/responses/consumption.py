@@ -29,7 +29,11 @@ class ConsumptionDay:
 
 @dataclass(frozen=True)
 class ConsumptionHistory:
-    """Validated history without assuming that missing days mean zero."""
+    """Validate dated consumption buckets and support exact-date lookup.
+
+    Missing days remain absent; fetching history and selecting the local
+    reporting period belong to the controller and consumption coordinator.
+    """
 
     days: tuple[ConsumptionDay, ...]
     total: float

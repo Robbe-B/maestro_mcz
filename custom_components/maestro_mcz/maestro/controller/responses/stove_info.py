@@ -10,7 +10,7 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class StoveInfo:
-    """Read a linked stove's device record and account access information."""
+    """Parse linked-device and access records without owning runtime stove state."""
 
     node: Node | None = None
     access_control: AccessControl | None = None
@@ -44,6 +44,8 @@ class StoveInfo:
 
 @dataclass
 class Node:
+    """Store reported device identity, timezone and network metadata."""
+
     id: str | None = None
     class_type: str | None = None
     node_type: str | None = None
@@ -124,6 +126,8 @@ class Node:
 
 @dataclass
 class AccessControl:
+    """Store reported access metadata without enforcing authorization policy."""
+
     id: str | None = None
     source_id: str | None = None
     source_type: str | None = None

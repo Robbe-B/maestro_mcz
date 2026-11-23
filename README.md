@@ -58,6 +58,10 @@ For a problem, start with [troubleshooting](docs/troubleshooting.md), then [open
 
 [Suggest a feature](https://github.com/Robbe-B/maestro_mcz/issues/new?template=feature_request.md) or browse the [milestones](https://github.com/Robbe-B/maestro_mcz/milestones). Documentation corrections are welcome too; see [maintaining the documentation](docs/maintaining-docs.md).
 
+The interface is available in English, Dutch, Italian, Spanish, French, and German. To request another language or report a translation mistake, [open an issue](https://github.com/Robbe-B/maestro_mcz/issues).
+
+Translation contributions and corrections are welcome through pull requests. For a new language, copy the [English translation file](custom_components/maestro_mcz/translations/en.json) and translate its text, keeping the keys and `{placeholders}` unchanged.
+
 Thanks to everyone contributing code, translations, reports, and device information.
 
 [![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/rbprojects)

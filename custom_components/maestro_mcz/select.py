@@ -16,7 +16,11 @@ from .maestro.types.enums import SensorTypeEnum
 
 
 class MczSelectEntity(CoordinatorEntity[MczAccountCoordinator], SelectEntity):
-    """Select entity for Maestro MCZ stoves."""
+    """Adapt a declared control to HA options and route choices through the stove.
+
+    Keep option aliases entity-local; cached API mappings remain reported
+    metadata, not storage for presentation changes.
+    """
 
     _attr_has_entity_name = True
     _attr_current_option = None
@@ -34,7 +38,8 @@ class MczSelectEntity(CoordinatorEntity[MczAccountCoordinator], SelectEntity):
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_selector.user_friendly_name
+        if supported_selector.translation_key is None:
+            self._attr_name = supported_selector.user_friendly_name
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_selector.sensor_get_name}"
         )

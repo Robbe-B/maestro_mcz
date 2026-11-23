@@ -38,6 +38,124 @@ from custom_components.maestro_mcz.maestro.model_value_reader import get_respons
 from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
 
 
+@pytest.mark.parametrize(
+    "raw,unrecognized",
+    [
+        ("off", None),
+        ("Potenza 2", None),
+        ("A24 - Unfamiliar wording", None),
+        ("A06 - Unfamiliar wording", "A06 - Unfamiliar wording"),
+        ("prefix A01 - Ignition", "prefix A01 - Ignition"),
+        (None, None),
+    ],
+)
+async def test_interpreted_readings_preserve_the_account_response(
+    stove, controller, caplog, raw, unrecognized
+):
+    """Interpret values only when used, leaving account refresh and original replies unchanged."""
+    # 1. The cached reply contains a known phase, supported alarm, or unfamiliar value.
+    stove.State.state = raw
+    account = MaestroAccount(controller, [stove])
+
+    # 2. Refreshing the account alone does not produce presentation warnings.
+    await account.async_refresh()
+    assert not [
+        record for record in caplog.records if record.message.startswith("Current state")
+    ]
+
+    # 3. Reading through the stove reports unsupported text without rewriting it.
+    interpreted = stove.get_sensor_value(model_definitions.CURRENT_STATE_SENSOR)
+    warnings = [
+        record for record in caplog.records if record.message.startswith("Current state")
+    ]
+    if unrecognized is None:
+        assert not warnings
+    else:
+        assert len(warnings) == 1
+        assert repr(unrecognized) in warnings[0].message
+        assert interpreted == raw
+    assert stove.State.state == raw
+
+
+async def test_failed_refresh_does_not_diagnose_an_incomplete_reading(
+    coordinator, stove, controller, caplog
+):
+    """Wait for a complete stove refresh before reporting an unfamiliar cached state."""
+    # 1. One reply contains unfamiliar text while the other endpoint is unreachable.
+    stove.State.state = "Unseen phase"
+    controller.get_stove_status_for_stove.side_effect = MaestroConnectionException(
+        "offline"
+    )
+
+    # 2. Reading after failure does not diagnose an incomplete snapshot.
+    await coordinator.async_refresh()
+    assert not coordinator.last_update_success
+    stove.get_sensor_value(model_definitions.CURRENT_STATE_SENSOR)
+    assert not [
+        record for record in caplog.records if record.message.startswith("Current state")
+    ]
+
+    # 3. Once both replies succeed, using the value reports it exactly once.
+    controller.get_stove_status_for_stove.side_effect = None
+    await coordinator.async_refresh()
+    for _ in range(2):
+        stove.get_sensor_value(model_definitions.CURRENT_STATE_SENSOR)
+    warnings = [
+        record for record in caplog.records if record.message.startswith("Current state")
+    ]
+    assert len(warnings) == 1
+    assert repr("Unseen phase") in warnings[0].message
+
+
+async def test_unrecognized_readings_warn_once_per_stove_lifetime(
+    stove, controller, caplog
+):
+    """Keep repeated readings quiet without hiding the same value on another or reloaded stove."""
+    # 1. Two stoves can report the same unfamiliar text independently.
+    other_info = deepcopy(controller.retrieve_linked_stove_infos.return_value[0])
+    other_info.node.unique_code = "OTHER-SERIAL"
+    other_stove = MaestroStove(controller, other_info)
+    await other_stove.async_init()
+    await other_stove.refresh()
+    definition = model_definitions.CURRENT_STATE_SENSOR
+    raw_states = ["Unseen phase", "Other phase"]
+
+    # 2. Each original raw value is reported once, not once per refresh or read.
+    for raw in [raw_states[0], raw_states[0], raw_states[1], raw_states[0]]:
+        stove.State.state = raw
+        await stove.refresh()
+        for _ in range(2):
+            assert stove.get_sensor_value(definition) == raw
+    warnings = [
+        record for record in caplog.records if record.message.startswith("Current state")
+    ]
+    assert len(warnings) == 2
+    for raw, warning in zip(raw_states, warnings, strict=True):
+        assert repr(raw) in warning.message
+        assert "Synthetic Air Stove" in warning.message
+        assert "M2_PLUS" in warning.message
+        assert "does not necessarily indicate a stove fault" in warning.message
+        assert "https://github.com/Robbe-B/maestro_mcz/issues" in warning.message
+        assert warning.levelname == "WARNING"
+    assert stove.Name not in caplog.text
+    assert stove.UniqueCode not in caplog.text
+    assert stove.Id not in caplog.text
+
+    # 3. Another stove and a newly loaded stove each report that value again.
+    reloaded_stove = MaestroStove(
+        controller, controller.retrieve_linked_stove_infos.return_value[0]
+    )
+    await reloaded_stove.async_init()
+    for current in (other_stove, reloaded_stove):
+        await current.refresh()
+        for _ in range(2):
+            assert current.get_sensor_value(definition) == raw_states[0]
+    warnings = [
+        record for record in caplog.records if record.message.startswith("Current state")
+    ]
+    assert len(warnings) == 4
+
+
 @pytest.mark.parametrize("unit,inverted", [(None, False), ("s", True)])
 def test_model_schema_preserves_units_and_alarm_inversion(unit, inverted):
     """Keep units and alarm inversion in configuration records so settings are not lost."""

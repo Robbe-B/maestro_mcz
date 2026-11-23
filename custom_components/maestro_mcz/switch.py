@@ -17,7 +17,10 @@ from .maestro.models import model_definitions, models_types
 
 
 class MczSwitchEntity(CoordinatorEntity[MczAccountCoordinator], SwitchEntity):
-    """Switch entity for Maestro MCZ stoves."""
+    """Expose a cached boolean setting and dispatch explicit on/off commands.
+
+    The stove owns command addressing; the coordinator owns refresh timing.
+    """
 
     _attr_has_entity_name = True
     _attr_is_on = None
@@ -36,7 +39,8 @@ class MczSwitchEntity(CoordinatorEntity[MczAccountCoordinator], SwitchEntity):
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_switch.user_friendly_name
+        if supported_switch.translation_key is None:
+            self._attr_name = supported_switch.user_friendly_name
         self._attr_unique_id = f"{stove_unique_code}-{supported_switch.sensor_get_name}"
         self._attr_translation_key = supported_switch.translation_key
         self._attr_device_info = self._stove.get_device_info()

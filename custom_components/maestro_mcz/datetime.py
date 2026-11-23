@@ -21,7 +21,11 @@ from .maestro.types.enums import SensorTypeEnum
 
 
 class MczDateTimeEntity(CoordinatorEntity[MczAccountCoordinator], DateTimeEntity):
-    """Representation of a date/time entity."""
+    """Adapt configured stove calendar fields to HA datetime reads and writes.
+
+    Use cached replies for reads and the stove for user commands; the
+    coordinator owns refresh timing rather than this entity polling the API.
+    """
 
     _attr_has_entity_name = True
     _attr_native_value = None
@@ -51,7 +55,8 @@ class MczDateTimeEntity(CoordinatorEntity[MczAccountCoordinator], DateTimeEntity
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_date_time.user_friendly_name
+        if supported_date_time.translation_key is None:
+            self._attr_name = supported_date_time.user_friendly_name
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_date_time.sensor_set_name}"
         )

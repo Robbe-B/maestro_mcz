@@ -13,7 +13,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class MaestroAccount:
-    """Keep authentication and stove ownership separate for every account."""
+    """Own one account's linked stoves and account-wide refresh failure policy.
+
+    The controller owns authentication and request retries; each stove owns its
+    cached replies and commands. Entity presentation and translation coverage
+    are integration concerns, not responsibilities of this account client.
+    """
 
     def __init__(
         self,

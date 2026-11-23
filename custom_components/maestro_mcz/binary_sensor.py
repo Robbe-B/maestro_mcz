@@ -47,7 +47,11 @@ def _binary_sensor_enabled(
 class MczBinarySensorEntity(
     CoordinatorEntity[MczAccountCoordinator], BinarySensorEntity
 ):
-    """Generic binary sensor for Maestro MCZ stoves."""
+    """Expose a declared cached boolean with its enable condition and polarity.
+
+    Read through the shared value reader; polling and raw response ownership
+    remain with the coordinator and stove.
+    """
 
     _attr_has_entity_name = True
     _attr_is_on = None
@@ -62,7 +66,8 @@ class MczBinarySensorEntity(
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_binary_sensor.user_friendly_name
+        if supported_binary_sensor.translation_key is None:
+            self._attr_name = supported_binary_sensor.user_friendly_name
         self._attr_device_class = supported_binary_sensor.device_class
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_binary_sensor.sensor_get_name}"
@@ -114,7 +119,11 @@ class MczBinarySensorEntity(
 class MczConnectionStatusBinarySensorEntity(
     CoordinatorEntity[MczAccountCoordinator], BinarySensorEntity
 ):
-    """Binary Sensor to represent the connection status."""
+    """Adapt a selected stove connectivity flag to a diagnostic binary sensor.
+
+    Keep connectivity observable during outages without probing the service;
+    subclasses select the link and its availability policy.
+    """
 
     _attr_has_entity_name = True
     _attr_is_on = None
@@ -124,7 +133,7 @@ class MczConnectionStatusBinarySensorEntity(
     def __init__(
         self,
         coordinator: MczAccountCoordinator,
-        entity_name: str,
+        unique_id_suffix: str,
         translation_key: str,
         stove_field: str,
         stove_unique_code: str,
@@ -133,11 +142,8 @@ class MczConnectionStatusBinarySensorEntity(
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = entity_name
         self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
-        self._attr_unique_id = (
-            f"{stove_unique_code}-{self._attr_name.replace(' ', '_')}"
-        )
+        self._attr_unique_id = f"{stove_unique_code}-{unique_id_suffix}"
         self._stove_field = stove_field
         self._attr_translation_key = translation_key
         self._attr_device_info = self._stove.get_device_info()
@@ -169,7 +175,7 @@ class MczConnectionStatusBinarySensorEntity(
 
 
 class MczCloudStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
-    """Binary Sensor to represent the integration to cloud connection status."""
+    """Show whether the integration can reach Maestro's cloud service."""
 
     _attr_has_entity_name = True
     _attr_is_on = None
@@ -180,7 +186,7 @@ class MczCloudStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
         """Initialize the cloud status binary sensor entity."""
         super().__init__(
             coordinator,
-            "Cloud Connection Status",
+            "Cloud_Connection_Status",
             "cloud_connection",
             "is_integration_connected_to_cloud",
             stove_unique_code,
@@ -188,7 +194,7 @@ class MczCloudStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
 
 
 class MczStoveStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
-    """Binary Sensor to represent the stove to cloud connection status."""
+    """Show the stove-to-cloud link while cloud connectivity is known."""
 
     _attr_has_entity_name = True
     _attr_is_on = None
@@ -199,7 +205,7 @@ class MczStoveStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
         """Initialize the cloud status binary sensor entity."""
         super().__init__(
             coordinator,
-            "Device Connection Status",
+            "Device_Connection_Status",
             "device_connection",
             "is_stove_connected_to_cloud",
             stove_unique_code,
