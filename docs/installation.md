@@ -45,8 +45,8 @@ See the [Marketplace custom repository guide](https://www.home-assistant.io/inte
 
 Use this method if you do not use Marketplace. You will need to install future updates manually too.
 
-1. Download the source archive for the version you want from [Releases](https://github.com/Robbe-B/maestro_mcz/releases). Prefer the latest stable release unless you intentionally want to test a pre-release.
-2. Extract the archive and find `custom_components/maestro_mcz` inside it.
+1. Download **maestro_mcz.zip** for the version you want from [Releases](https://github.com/Robbe-B/maestro_mcz/releases). Prefer the latest stable release unless you intentionally want to test a pre-release.
+2. Extract the archive into a folder named `maestro_mcz`. The files, including `manifest.json`, should sit directly inside that folder.
 3. Locate your [Home Assistant configuration directory](https://www.home-assistant.io/docs/configuration/) - the folder containing `configuration.yaml`.
 4. Create `custom_components` there if needed. Copy the complete `maestro_mcz` folder into it, including all subfolders and assets.
 5. Restart Home Assistant, then continue with [Add your account](#add-your-account).
@@ -67,6 +67,8 @@ The installed layout should look like this:
 
 > [!IMPORTANT]
 > Copy the integration folder, not the whole repository. Avoid an extra nested `maestro_mcz` directory, and do not install the tests or documentation into Home Assistant.
+
+For older releases without **maestro_mcz.zip**, download the source archive and use the `custom_components/maestro_mcz` folder inside it. GitHub's **Source code** downloads and direct branch downloads keep the version stored in the repository; only **maestro_mcz.zip** receives the published release version.
 
 ## Add your account
 
@@ -89,7 +91,7 @@ Make a Home Assistant backup and read the [release notes](https://github.com/Rob
 
 **Marketplace installation:** use **Settings > Updates** or the repository's Marketplace page to install the update, then restart Home Assistant.
 
-**Manual installation:** download the desired release and replace the installed integration files with that release's complete `custom_components/maestro_mcz` folder, then restart Home Assistant. Do not mix files from different releases.
+**Manual installation:** follow the [manual installation steps](#install-manually) for the desired release, replacing the installed `maestro_mcz` folder with the complete downloaded folder, then restart Home Assistant. Do not mix files from different releases.
 
 Keep pre-releases for deliberate testing. Documentation on `main` can describe changes that are not in your installed stable release.
 

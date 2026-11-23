@@ -24,6 +24,27 @@ user-facing pages.
 Preserve valuable technical background in issue artifacts, not the README or
 user guides. Keep agent instructions in this file rather than technical analyses.
 
+# Publishing a release
+
+1. Merge the changes to release, including `.github/workflows/release.yml`, before
+   creating the release tag. Use `1.7.0` format without a prefix; pre-release suffixes
+   such as `b1` and `rc1` are also supported.
+2. Publish a GitHub release for that tag. Publishing a tag alone or saving a
+   draft release does not build the download.
+3. Wait for **Package release** in GitHub Actions to finish and confirm that
+   **maestro_mcz.zip** appears in the release assets. If packaging or upload
+   fails, correct the cause and rerun the workflow.
+
+The workflow checks out the released tag and sets `manifest.json` to the tag's
+version only in the packaging workspace. Do not make a
+manual manifest version-bump commit for a release. The archive contains the
+integration files at its root, ready for HACS and Marketplace. Rerunning the
+workflow replaces the release's existing archive.
+
+Direct branch downloads and GitHub's source archives retain the repository's
+manifest version. Older releases without the ZIP asset are not repackaged
+automatically; enabling ZIP downloads does not add assets to existing releases.
+
 # Home Assistant quality
 
 Aim for Platinum-quality Home Assistant changes. Consult the current
