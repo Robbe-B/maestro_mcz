@@ -1,7 +1,7 @@
 """Setup, coordinator lifecycle, and error propagation regression coverage."""
 
-from datetime import timedelta
 from copy import deepcopy
+from datetime import timedelta
 from pathlib import Path
 from threading import get_ident
 from unittest.mock import AsyncMock, Mock, patch
@@ -21,13 +21,14 @@ from custom_components.maestro_mcz import (
     async_unload_entry,
 )
 from custom_components.maestro_mcz.const import DOMAIN
-from custom_components.maestro_mcz.maestro.account import MaestroAccount
 from custom_components.maestro_mcz.coordinator import (
     MczAccountCoordinator,
     MczConsumptionCoordinator,
     MczCountersCoordinator,
     MczRuntimeData,
 )
+from custom_components.maestro_mcz.maestro import MaestroStove
+from custom_components.maestro_mcz.maestro.account import MaestroAccount
 from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
@@ -618,6 +619,68 @@ async def test_coordinator_maps_update_failures(
         None if error is MaestroAuthenticationException else {"error": "offline"}
     )
     assert raised.value.translation_placeholders == expected_placeholders
+
+
+@pytest.mark.parametrize(
+    "failure_kind", ["connection", "authentication", "backoff", "zero-backoff"]
+)
+@pytest.mark.parametrize("failing_device", ["device-1", "device-2"])
+async def test_multi_stove_account_failure_scope(
+    hass, entry, stove, controller, failure_kind, failing_device
+):
+    """Try every stove during an outage, but stop the account for rejected login or server delays."""
+    # 1. Three already-working stoves let us observe both earlier successes and skipped requests.
+    stoves = [stove]
+    for number in (2, 3):
+        info = deepcopy(controller.retrieve_linked_stove_infos.return_value[0])
+        info.node.id = f"device-{number}"
+        info.node.unique_code = f"SERIAL-00{number}"
+        info.node.name = f"Room {number}"
+        next_stove = MaestroStove(controller, info)
+        await next_stove.async_init()
+        await next_stove.refresh()
+        stoves.append(next_stove)
+    account = MaestroAccount(controller, stoves)
+    coordinator = MczAccountCoordinator(hass, entry, "test-account", account)
+    if failure_kind == "authentication":
+        failure = MaestroAuthenticationException("sign in again")
+        expected = ConfigEntryAuthFailed
+    elif failure_kind == "connection":
+        failure = MaestroConnectionException("unreachable")
+        expected = UpdateFailed
+    else:
+        delay = 0 if failure_kind == "zero-backoff" else 120
+        failure = MaestroConnectionException("wait for cloud", retry_after=delay)
+        expected = UpdateFailed
+
+    async def fail_request(device_id, _name):
+        """A general outage fails every stove; account-wide errors stop at the chosen stove."""
+        if failure_kind == "connection" or device_id == failing_device:
+            raise failure
+
+    controller.do_ping_for_stove.reset_mock()
+    controller.do_ping_for_stove.side_effect = fail_request
+
+    # 2. Refresh the account and retain the original cause and requested delay.
+    with pytest.raises(expected) as raised:
+        await coordinator._async_update_data()
+    assert raised.value.__cause__ is failure
+    if failure_kind != "authentication":
+        assert raised.value.retry_after == failure.retry_after
+
+    # 3. Ordinary failures visit every stove; account-wide failures never contact the next stove.
+    visited_devices = [
+        request.args[0] for request in controller.do_ping_for_stove.await_args_list
+    ]
+    if failure_kind == "connection":
+        assert visited_devices == ["device-1", "device-2", "device-3"]
+        for failed_stove in stoves:
+            assert not failed_stove.is_connected
+    else:
+        expected_devices = ["device-1"]
+        if failing_device == "device-2":
+            expected_devices.append("device-2")
+        assert visited_devices == expected_devices
 
 
 async def test_coordinator_delayed_refresh_contract(coordinator):

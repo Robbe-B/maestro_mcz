@@ -161,6 +161,11 @@ class MczConnectionStatusBinarySensorEntity(
     def _handle_coordinator_update_internal(self) -> None:
         if hasattr(self._stove, self._stove_field):
             self._attr_is_on = getattr(self._stove, self._stove_field)
+            if (
+                self._stove_field == "is_integration_connected_to_cloud"
+                and not self.coordinator.last_update_success
+            ):
+                self._attr_is_on = False
 
 
 class MczCloudStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
@@ -207,7 +212,10 @@ class MczStoveStatusBinarySensorEntity(MczConnectionStatusBinarySensorEntity):
         if not super().available:
             return False
         # Check 2: is the cloud connected
-        return self._stove.is_integration_connected_to_cloud
+        return (
+            self.coordinator.last_update_success
+            and self._stove.is_integration_connected_to_cloud
+        )
 
 
 async def async_setup_entry(

@@ -567,16 +567,21 @@ def test_connectivity_diagnostics_are_independent(entities, coordinator, stove):
     cloud = entity(entities, "binary_sensor", MczCloudStatusBinarySensorEntity)
     device = entity(entities, "binary_sensor", MczStoveStatusBinarySensorEntity)
     # 2. Try a working stove, an offline stove, and an unreachable cloud.
-    for cloud_ok, device_ok in ((True, True), (True, False), (False, False)):
-        coordinator.last_update_success = False
+    for account_ok, cloud_ok, device_ok in (
+        (True, True, True),
+        (True, True, False),
+        (True, False, False),
+        (False, True, True),
+    ):
+        coordinator.last_update_success = account_ok
         stove._is_integration_connected_to_cloud = cloud_ok
         stove._is_stove_connected_to_cloud = device_ok
         cloud._handle_coordinator_update_internal()
         device._handle_coordinator_update_internal()
         # 3. The indicators should explain which link is still reachable.
         assert cloud.available
-        assert cloud.is_on is cloud_ok
-        assert device.available is cloud_ok
+        assert cloud.is_on is (account_ok and cloud_ok)
+        assert device.available is (account_ok and cloud_ok)
         assert device.is_on is device_ok
 
 

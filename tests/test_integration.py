@@ -23,10 +23,129 @@ from custom_components.maestro_mcz.maestro.controller.maestro_controller import 
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
+from custom_components.maestro_mcz.maestro.controller.responses.consumption import (
+    ConsumptionHistory,
+)
+from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
 from custom_components.maestro_mcz.maestro.controller.responses.model import (
     ModelConfiguration,
 )
 from custom_components.maestro_mcz.maestro.controller.responses.status import Status
+from custom_components.maestro_mcz.maestro.controller.responses.stove_info import (
+    StoveInfo,
+)
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    ["do_ping_for_stove", "get_stove_state_for_stove", "get_stove_status_for_stove"],
+)
+async def test_live_failure_isolated_to_one_stove_and_recovers(
+    hass, entry, controller, stove_info_payload, caplog, endpoint
+):
+    """Keep the other stove updating while failed readings and cloud history stay unavailable."""
+    # 1. Both stoves start with live controls, saved statistics, and yesterday's history.
+    bedroom_payload = deepcopy(stove_info_payload)
+    bedroom_payload["Node"].update(
+        {"Id": "device-2", "UniqueCode": "SERIAL-002", "Name": "Bedroom"}
+    )
+    controller.retrieve_linked_stove_infos.return_value.append(
+        StoveInfo(bedroom_payload)
+    )
+    controller.get_counters_for_stove.return_value = Counters({"num_acc": 7})
+    controller.get_consumption_for_stove.side_effect = lambda _code, day: (
+        ConsumptionHistory.from_response(
+            {
+                "Data": [{"Date": day.strftime("%Y%m%d"), "Consumption": 4.5}],
+                "Total": 4.5,
+            }
+        )
+    )
+    with (
+        patch(
+            "custom_components.maestro_mcz.MaestroController", return_value=controller
+        ),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    coordinator = entry.runtime_data.coordinator
+    registry = er.async_get(hass)
+    entity_ids = {}
+    for code in ("SERIAL-001", "SERIAL-002"):
+        entity_ids[code] = {
+            "climate": registry.async_get_entity_id("climate", DOMAIN, code),
+            "cloud": registry.async_get_entity_id(
+                "binary_sensor", DOMAIN, f"{code}-Cloud_Connection_Status"
+            ),
+            "device": registry.async_get_entity_id(
+                "binary_sensor", DOMAIN, f"{code}-Device_Connection_Status"
+            ),
+            "counter": registry.async_get_entity_id(
+                "sensor", DOMAIN, f"{code}-num_acc"
+            ),
+            "history": registry.async_get_entity_id(
+                "sensor", DOMAIN, f"{code}-consumption_yesterday"
+            ),
+        }
+        for entity_id in entity_ids[code].values():
+            assert entity_id is not None
+            assert hass.states.get(entity_id).state != STATE_UNAVAILABLE
+    failing_request = getattr(controller, endpoint)
+    successful_reply = failing_request.return_value
+
+    async def fail_living_room(device_id, _name):
+        """Only the first stove's request fails; the bedroom still returns a reading."""
+        if device_id == "device-1":
+            raise MaestroConnectionException("temporary request failure")
+        return successful_reply
+
+    # 2. Repeat a first-stove failure while a changed bedroom temperature keeps arriving.
+    caplog.set_level("INFO", logger="custom_components.maestro_mcz.maestro.account")
+    caplog.clear()
+    failing_request.side_effect = fail_living_room
+    controller.get_stove_status_for_stove.return_value.temp_amb_install = 24
+    for _ in range(2):
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        assert coordinator.last_update_success
+        assert not coordinator.stoves["SERIAL-001"].is_connected
+        assert coordinator.stoves["SERIAL-002"].is_connected
+        living_room = entity_ids["SERIAL-001"]
+        bedroom = entity_ids["SERIAL-002"]
+        assert hass.states.get(living_room["cloud"]).state == "off"
+        for field in ("climate", "device", "counter", "history"):
+            assert hass.states.get(living_room[field]).state == STATE_UNAVAILABLE
+        assert hass.states.get(bedroom["cloud"]).state == "on"
+        assert hass.states.get(bedroom["device"]).state == "on"
+        bedroom_climate = hass.states.get(bedroom["climate"])
+        assert bedroom_climate.attributes["current_temperature"] == 24
+        assert hass.states.get(bedroom["counter"]).state == "7"
+        assert hass.states.get(bedroom["history"]).state == "4.5"
+    failures = [
+        record
+        for record in caplog.records
+        if "Error refreshing stove" in record.message
+    ]
+    assert len(failures) == 1
+    assert "Living Room" in failures[0].message
+
+    # 3. Successful updates restore the failed stove without repeating recovery messages.
+    failing_request.side_effect = None
+    for _ in range(2):
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+    assert coordinator.stoves["SERIAL-001"].is_connected
+    assert hass.states.get(living_room["cloud"]).state == "on"
+    assert hass.states.get(living_room["device"]).state == "on"
+    recovered_climate = hass.states.get(living_room["climate"])
+    assert recovered_climate.attributes["current_temperature"] == 24
+    assert hass.states.get(living_room["counter"]).state == "7"
+    assert hass.states.get(living_room["history"]).state == "4.5"
+    recoveries = [record for record in caplog.records if "recovered" in record.message]
+    assert len(recoveries) == 1
+    assert "Living Room" in recoveries[0].message
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.parametrize("saved_metadata", [False, True])
