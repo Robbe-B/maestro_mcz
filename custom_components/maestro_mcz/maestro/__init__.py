@@ -403,8 +403,22 @@ class MaestroStove:
             await self._ping()
             self._is_integration_connected_to_cloud = self._controller.is_authenticated
 
-            calls = {self._getStoveStatus(), self._getStoveState()}
-            await asyncio.gather(*calls, return_exceptions=False)
+            results = await asyncio.gather(
+                self._getStoveStatus(), self._getStoveState(), return_exceptions=True
+            )
+            # Do not let a failed reading hide an account-wide rejection or backoff.
+            for result in results:
+                if isinstance(result, MaestroAuthenticationException):
+                    raise result
+            for result in results:
+                if (
+                    isinstance(result, MaestroConnectionException)
+                    and result.retry_after is not None
+                ):
+                    raise result
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
 
             if self.Status is not None and self.Status.is_connected is not None:
                 self._is_stove_connected_to_cloud = self.Status.is_connected

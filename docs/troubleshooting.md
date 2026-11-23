@@ -53,6 +53,8 @@ Check **Cloud Connection Status** and **Device Connection Status**, then compare
 | Both indicators are on, but values look old | They reflect the last reported state; compare values in the app, wait for a refresh, and collect logs if it persists |
 | Only a fan is unavailable | Check whether the current operating mode exposes that fan's controls |
 
+If one stove's update fails, its controls and readings become unavailable while other stoves on the account keep updating. They return automatically after a successful update. Sign-in problems and cloud-requested waiting periods can still affect the whole account.
+
 After correcting a connection problem, try reloading the account entry from **Settings > Devices & services**. Reinstalling files is usually not the first step for a cloud outage.
 
 ## Devices or entities are missing

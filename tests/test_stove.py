@@ -1583,6 +1583,36 @@ async def test_payload_failure_is_not_swallowed(stove, controller, endpoint):
         await stove.refresh()
 
 
+@pytest.mark.parametrize("priority_error", ["authentication", "backoff"])
+@pytest.mark.parametrize("priority_endpoint", ["status", "state"])
+async def test_reading_failure_cannot_hide_account_wide_error(
+    stove, controller, priority_error, priority_endpoint
+):
+    """Honor rejected login and server delays even when the other reading fails first."""
+    # 1. Both readings fail, but one requires stopping requests across the account.
+    failure = (
+        MaestroAuthenticationException("sign in again")
+        if priority_error == "authentication"
+        else MaestroConnectionException("cloud is busy", retry_after=120)
+    )
+    ordinary_failure = MaestroConnectionException("reading unavailable")
+    if priority_endpoint == "status":
+        status_failure, state_failure = failure, ordinary_failure
+    else:
+        status_failure, state_failure = ordinary_failure, failure
+    controller.get_stove_status_for_stove.side_effect = status_failure
+    controller.get_stove_state_for_stove.side_effect = state_failure
+
+    # 2. A complete refresh must preserve the account-wide error, not the ordinary failure.
+    with pytest.raises(type(failure)) as raised:
+        await stove.refresh()
+
+    # 3. The coordinator can act on that exact error and no stale connection is reported.
+    assert raised.value is failure
+    assert not stove.is_integration_connected_to_cloud
+    assert not stove.is_connected
+
+
 def test_model_configuration_lookup_and_missing_values(stove):
     """Find controls despite harmless name differences, without guessing missing controls."""
     # 1. Group names may have different capitalization or surrounding spaces.

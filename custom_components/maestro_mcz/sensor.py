@@ -78,6 +78,7 @@ class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
         """Require cloud access and a successful, nonmissing counter reading."""
         return (
             self._account_coordinator.last_update_success
+            and self.coordinator.stove.is_integration_connected_to_cloud
             and super().available
             and self.native_value is not None
         )
@@ -120,6 +121,7 @@ class MczYesterdayConsumptionSensor(
         data = self.coordinator.data
         return (
             self._account_coordinator.last_update_success
+            and self.coordinator.stove.is_integration_connected_to_cloud
             and super().available
             and data is not None
             and data.date == self.coordinator.yesterday
