@@ -1,0 +1,64 @@
+name: Package release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: 📥 Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: 📦 Set packaged version and create archive
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+          import re
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          version = os.environ["RELEASE_TAG"]
+          if re.fullmatch(
+              r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+              r"(?:(?:a|b|rc)(?:0|[1-9][0-9]*))?",
+              version,
+          ) is None:
+              raise SystemExit(
+                  f"Invalid release tag {version!r}: use 1.7.0 without a prefix, "
+                  "optionally followed by a1, b1, or rc1."
+              )
+
+          integration = Path("custom_components") / "maestro_mcz"
+          manifest_path = integration / "manifest.json"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          manifest["version"] = version
+          manifest_path.write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+          )
+
+          with ZipFile("maestro_mcz.zip", "w", ZIP_DEFLATED) as archive:
+              for path in sorted(integration.rglob("*")):
+                  if path.is_file():
+                      archive.write(path, path.relative_to(integration))
+      - name: 📤 Upload release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release upload "$RELEASE_TAG" maestro_mcz.zip
+          --repo "$GITHUB_REPOSITORY" --clobber
