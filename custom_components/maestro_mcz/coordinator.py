@@ -33,7 +33,7 @@ COUNTERS_UPDATE_INTERVAL = timedelta(hours=1)
 
 @dataclass(frozen=True)
 class MczRuntimeData:
-    """Keep account ownership separate from Home Assistant's polling lifecycle."""
+    """Bundle an entry's account and live coordinator without merging their roles."""
 
     account: MaestroAccount
     coordinator: MczAccountCoordinator
@@ -43,7 +43,12 @@ type MczConfigEntry = ConfigEntry[MczRuntimeData]
 
 
 class MczAccountCoordinator(DataUpdateCoordinator[None]):
-    """MCZ Coordinator."""
+    """Schedule account refreshes and adapt service failures to HA's lifecycle.
+
+    MaestroAccount owns the stoves and their caches; this coordinator owns live
+    polling, delayed post-command refreshes and device-registry synchronization.
+    Field interpretation and entity presentation belong outside this class.
+    """
 
     def __init__(
         self,
@@ -148,7 +153,11 @@ class CountersData:
 
 
 class MczCountersCoordinator(DataUpdateCoordinator[CountersData]):
-    """Poll slow-changing lifetime counters without delaying live stove controls."""
+    """Own one stove's independent statistics polling and HA failure reporting.
+
+    Timestamp parsed counter replies without converting their raw units or
+    delaying live controls; entity readers apply the declared unit divisors.
+    """
 
     def __init__(
         self,
@@ -204,7 +213,12 @@ class ConsumptionData:
 
 
 class MczConsumptionCoordinator(DataUpdateCoordinator[ConsumptionData]):
-    """Fetch one stove's cloud history without affecting its live controls."""
+    """Own dated-history polling, local-day selection and midnight invalidation.
+
+    The controller/history model parses the reply; this coordinator selects
+    yesterday's exact bucket and manages HA scheduling and failure reporting
+    independently of live stove controls.
+    """
 
     def __init__(
         self,

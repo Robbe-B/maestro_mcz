@@ -56,7 +56,11 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
 
 class MCZConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for maestro_mcz."""
+    """Own account setup/import forms, entry identity and reauthentication.
+
+    Validate credentials through a temporary controller; integration setup
+    creates the long-lived account and polling coordinators.
+    """
 
     VERSION = 1
 
@@ -147,8 +151,8 @@ class MCZConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class CannotConnect(HomeAssistantError):
-    """Error to indicate we cannot connect."""
+    """Represent a service connection failure as a config-flow form error."""
 
 
 class InvalidAuth(HomeAssistantError):
-    """Error to indicate there is invalid auth."""
+    """Represent rejected credentials as a config-flow form error."""

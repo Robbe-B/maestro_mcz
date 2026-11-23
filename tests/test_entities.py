@@ -2,9 +2,12 @@
 
 import importlib
 import json
+from collections import Counter
+from copy import copy
 from dataclasses import asdict
 from datetime import UTC, datetime, timezone
 from pathlib import Path
+from string import Formatter
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
@@ -44,10 +47,12 @@ from custom_components.maestro_mcz.maestro.controller.responses.state import Sta
 from custom_components.maestro_mcz.maestro.controller.responses.status import Status
 from custom_components.maestro_mcz.maestro.model_value_reader import (
     get_response_value,
+    normalize_sensor_value,
     read_response_value,
 )
 from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
 from custom_components.maestro_mcz.maestro.types.enums import SensorTypeEnum
+from custom_components.maestro_mcz.sensor import MczSensorEntity
 
 
 @pytest.mark.parametrize("uppercase", [False, True])
@@ -81,7 +86,9 @@ async def test_both_advertised_button_bindings_preserve_ids_and_commands(
     added = Mock()
     await module.async_setup_entry(hass, entry, added)
     buttons = [
-        entity for entity in added.call_args.args[0] if entity.name == "Alarm Reset"
+        entity
+        for entity in added.call_args.args[0]
+        if entity.translation_key == "alarm_reset"
     ]
     commands = []
     for button in buttons:
@@ -367,11 +374,70 @@ def test_all_platforms_discover_supported_entities_and_keep_legacy_ids(entities)
             assert item.device_info.identifiers == {("maestro_mcz", "SERIAL-001")}
 
 
-def test_catalogue_icons_cover_every_custom_entity_and_temperature_defaults():
-    """Keep every catalogue variant linked to an icon or its unchanged temperature default."""
-    # 1. Load the frontend icons alongside every catalogue that creates entities.
+@pytest.mark.parametrize(
+    "language",
+    sorted(
+        path.stem
+        for path in Path("custom_components/maestro_mcz/translations").glob("*.json")
+    ),
+)
+def test_translations_preserve_all_fields_and_placeholders(language):
+    """Keep every language complete and able to display account details, errors and fan numbers."""
+    # 1. Compare every interface field, including setup and errors, with the source.
+    directory = Path("custom_components/maestro_mcz")
+    source = json.loads((directory / "strings.json").read_text(encoding="utf-8"))
+    translated = json.loads(
+        (directory / "translations" / f"{language}.json").read_text(encoding="utf-8")
+    )
+    pending = [((), source, translated)]
+
+    # 2. Each nested section has exactly the same fields and nonempty text.
+    while pending:
+        path, original, localized = pending.pop()
+        if isinstance(original, dict):
+            assert isinstance(localized, dict), path
+            assert original.keys() == localized.keys(), path
+            for key, value in original.items():
+                pending.append(((*path, key), value, localized[key]))
+            continue
+        assert isinstance(localized, str), path
+        assert localized.strip(), path
+
+        # 3. Translations preserve substitutions and resolve shared source labels.
+        original_fields = Counter(
+            (field, spec, conversion)
+            for _, field, spec, conversion in Formatter().parse(original)
+            if field is not None
+        )
+        localized_fields = Counter(
+            (field, spec, conversion)
+            for _, field, spec, conversion in Formatter().parse(localized)
+            if field is not None
+        )
+        assert localized_fields == original_fields, path
+        assert "[%key:" not in localized, path
+
+
+@pytest.mark.parametrize(
+    "language",
+    sorted(
+        path.stem
+        for path in Path("custom_components/maestro_mcz/translations").glob("*.json")
+    ),
+)
+def test_catalogue_names_and_icons_cover_every_entity(language):
+    """Give every supported control a translated name without losing its existing icons."""
+    # 1. Load both naming and icon definitions alongside every entity catalogue.
     icons = json.loads(
         Path("custom_components/maestro_mcz/icons.json").read_text(encoding="utf-8")
+    )["entity"]
+    source = json.loads(
+        Path("custom_components/maestro_mcz/strings.json").read_text(encoding="utf-8")
+    )["entity"]
+    translations = json.loads(
+        (
+            Path("custom_components/maestro_mcz/translations") / f"{language}.json"
+        ).read_text(encoding="utf-8")
     )["entity"]
     catalogues = {
         "binary_sensor": model_definitions.supported_binary_sensors,
@@ -380,6 +446,7 @@ def test_catalogue_icons_cover_every_custom_entity_and_temperature_defaults():
             *model_definitions.supported_time_sync_buttons,
         ],
         "datetime": model_definitions.supported_date_times,
+        "fan": model_definitions.supported_fans,
         "number": model_definitions.supported_numbers,
         "select": [
             *model_definitions.supported_selectors,
@@ -392,15 +459,51 @@ def test_catalogue_icons_cover_every_custom_entity_and_temperature_defaults():
         ],
         "switch": model_definitions.supported_switches,
     }
+    source_states = source["sensor"]["current_state"]["state"]
+    translated_states = translations["sensor"]["current_state"]["state"]
+    assert set(source_states) == model_definitions.SUPPORTED_CURRENT_STATES
+    assert set(translated_states) == model_definitions.SUPPORTED_CURRENT_STATES
+    current_state = next(
+        definition
+        for definition in model_definitions.supported_sensors
+        if definition.translation_key == "current_state"
+    )
+    assert current_state.api_value_renames is not None
+    assert (
+        set(current_state.api_value_renames.values())
+        <= model_definitions.SUPPORTED_CURRENT_STATES
+    )
+    for alias in current_state.api_value_renames:
+        assert alias == alias.casefold()
+    if language == "en":
+        assert translated_states == source_states
+    for token, label in translated_states.items():
+        if token.startswith("alarm-a"):
+            assert token.removeprefix("alarm-").upper() in label.split()
+    for labels in (source_states, translated_states):
+        alarm_codes = [
+            token.split("-")[1] for token in labels if token.startswith("alarm-a")
+        ]
+        assert alarm_codes == sorted(alarm_codes)
+        assert len(alarm_codes) == len(set(alarm_codes))
 
-    # 2. Each custom icon is reachable; ordinary temperature readings retain HA defaults.
+    # 2. Names cover every variant, including numbered fans and distinct temperatures.
     for domain, definitions in catalogues.items():
         for definition in definitions:
-            if definition.translation_key is None:
+            key = definition.translation_key
+            assert key is not None
+            placeholders = getattr(definition, "translation_placeholders", None) or {}
+            source_name = source[domain][key]["name"].format(**placeholders)
+            translated_name = translations[domain][key]["name"].format(**placeholders)
+            assert source_name == definition.user_friendly_name
+            assert translated_name
+            if language == "en":
+                assert translated_name == source_name
+            if key not in icons[domain]:
                 assert domain == "sensor"
                 assert definition.device_class == "temperature"
             else:
-                assert icons[domain][definition.translation_key]["default"]
+                assert icons[domain][key]["default"]
             assert not hasattr(definition, "icon")
             assert not hasattr(definition, "unavailable_icon")
 
@@ -692,6 +795,32 @@ def test_older_tones_do_not_stringify_null_or_use_another_response(
     # 3. Keep False as a reading, while absent and null values stay unknown.
     assert reading == expected
     assert type(reading) is type(expected)
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("A21 - Allarme Pressostati (sic 3)", "alarm-a21"),
+        ("A24 - Unfamiliar wording", "alarm-a24"),
+        ("A06 - Unfamiliar wording", "A06 - Unfamiliar wording"),
+        ("Potenza 2", "power-2"),
+    ],
+)
+def test_sensor_interpretation_preserves_the_cloud_response(raw, expected):
+    """Interpret stove readings independently of entity names while retaining the original reply."""
+    # 1. A cached stove reply is paired with an unrelated presentation label.
+    definition = copy(model_definitions.CURRENT_STATE_SENSOR)
+    definition.translation_key = "another_display_name"
+    cloud_state = State({"state": raw})
+
+    # 2. Read and interpret the value without a platform or a running coordinator.
+    original = get_response_value(definition, cloud_state, None)
+    interpreted = normalize_sensor_value(definition, original)
+
+    # 3. Only the interpreted value changes; the API reply stays untouched.
+    assert interpreted == expected
+    assert original == raw
+    assert cloud_state.state == raw
 
 
 def test_unconfigured_response_name_is_not_guessed():
@@ -1048,7 +1177,7 @@ async def test_original_m1_hydro_boiler_descriptor_routes_room_fan(
     assert (
         room_fan._fixed_fan_configuration.configuration.sensor_name == "m1_set_vent_v1"
     )
-    assert room_fan.name == "Room Fan"
+    assert room_fan.translation_key == "room_fan"
     assert room_fan.speed_count == 5
     assert room_fan.preset_modes == ["auto", "silent"]
     assert room_fan.available is available
@@ -1064,6 +1193,83 @@ async def test_original_m1_hydro_boiler_descriptor_routes_room_fan(
             room_fan._current_fan_configuration.configuration.mappings["silent"] == -1
         )
         assert activation.args[2] == "captured-boiler-test"
+
+
+@pytest.mark.parametrize("raw", [None, "", "  ", "unknown", "unavailable"])
+async def test_missing_current_states_do_not_warn(coordinator, stove, caplog, raw):
+    """Keep absent readings quiet instead of asking users to report a missing translation."""
+    # 1. A previously reported stove phase is replaced by an absent reading.
+    definition = next(
+        sensor
+        for sensor in model_definitions.supported_sensors
+        if sensor.translation_key == "current_state"
+    )
+    stove.State.state = "on"
+    item = MczSensorEntity(coordinator, stove.UniqueCode, definition)
+    stove.State.state = raw
+    caplog.clear()
+
+    # 2. Repeated updates keep the original absence value.
+    for _ in range(2):
+        await coordinator._async_update_data()
+        item._handle_coordinator_update_internal()
+
+    # 3. No missing-translation warning is emitted for absence sentinels.
+    expected_attributes = {"raw_state": raw} if isinstance(raw, str) else {}
+    assert item.native_value == raw
+    assert item.extra_state_attributes == expected_attributes
+    assert not [
+        record
+        for record in caplog.records
+        if record.message.startswith("Current state")
+    ]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Potenza 6",
+        "Start 2 a Caldo",
+        "A06 - OSTRUZIONE",
+        "prefix A02 - NO FIAMMA",
+        "A02-NO FIAMMA",
+        "_EVT_2 - NO FIAMMA",
+        "A02",
+        "A02 - ",
+        "A02 - \t ",
+        "A02 - Description\nextra",
+        "A02 - Description\r",
+    ],
+)
+async def test_unrecognized_or_malformed_states_stay_visible(
+    coordinator, stove, caplog, raw
+):
+    """Keep unknown codes and malformed readings visible so users can report their exact text."""
+    # 1. The stove reports an unsupported phase/code or an incomplete alarm message.
+    definition = next(
+        sensor
+        for sensor in model_definitions.supported_sensors
+        if sensor.translation_key == "current_state"
+    )
+    item = MczSensorEntity(coordinator, stove.UniqueCode, definition)
+    stove.State.state = raw
+    caplog.clear()
+
+    # 2. Several polls encounter the same unfamiliar detailed state.
+    for _ in range(3):
+        await coordinator._async_update_data()
+        item._handle_coordinator_update_internal()
+
+    # 3. Preserve the text and emit one actionable translation warning.
+    assert item.native_value == raw
+    assert item.extra_state_attributes == {"raw_state": raw}
+    warnings = [
+        record
+        for record in caplog.records
+        if record.message.startswith("Current state")
+    ]
+    assert len(warnings) == 1
+    assert repr(raw) in warnings[0].message
 
 
 @pytest.mark.parametrize(
@@ -1215,21 +1421,21 @@ async def test_switch_commands_are_boolean(entities, controller, coordinator, en
 
 
 async def test_select_options_round_trip(entities, controller, coordinator, stove):
-    """Turn a readable dropdown choice into a stove value and display the returned choice."""
+    """Keep tone values language-independent while sending the correct sound level to the stove."""
     # 1. The tone dropdown starts on its normal setting.
     item = next(selector for selector in entities["select"] if selector._prop == "toni_buzz")
-    assert item.options == ["Normal", "High"]
-    assert item.current_option == "Normal"
-    # 2. Choosing High sends the model's value 2 and requests an updated reading.
-    await item.async_select_option("High")
+    assert item.options == ["normal", "high"]
+    assert item.current_option == "normal"
+    # 2. Choosing the high setting sends value 2 and requests an updated reading.
+    await item.async_select_option("high")
     command = last_sent_command(controller)
     assert command.SensorId == "id-toni_buzz"
     assert command.Value == 2
     coordinator.update_data_after_set.assert_awaited_once()
-    # 3. When the stove reports value 2, HA displays High again.
+    # 3. Reading value 2 back preserves the language-independent high option.
     stove.Status.toni_buzz = 2
     item._handle_coordinator_update_internal()
-    assert item.current_option == "High"
+    assert item.current_option == "high"
 
 
 async def test_manual_power_selector_is_numeric(entities, controller):
@@ -1294,7 +1500,7 @@ async def test_command_failures_do_not_trigger_success_refresh(
         ("number", "async_set_native_value", {"value": 20}),
         ("switch", "async_turn_on", {}),
         ("switch", "async_turn_off", {}),
-        ("select", "async_select_option", {"option": "High"}),
+        ("select", "async_select_option", {"option": "high"}),
         ("button", "async_press", {}),
         (
             "datetime",
@@ -1931,7 +2137,7 @@ def test_hydro_room_fan_does_not_require_an_operating_mode(
     assert len(hydro_fans) == 1
     room_fan = hydro_fans[0]
     assert room_fan.available is True
-    assert room_fan.name == "Room Fan"
+    assert room_fan.translation_key == "room_fan"
     assert room_fan.unique_id == "SERIAL-001-set_vent_v1"
     # 2. Change the reported mode without changing the stove's fan controls.
     hydro_stove.State.mode = mode
@@ -2078,9 +2284,9 @@ async def test_hydro_room_fan_shares_one_id_with_mode_based_ventilation(
     await room_fan.async_set_percentage(40)
     # 3. Prefer enabled boiler ventilation; otherwise retain the ordinary air-fan control.
     assert room_fan.unique_id == "SERIAL-001-set_vent_v1"
-    expected_name = "Room Fan" if boiler_enabled else "Fan 1"
+    expected_translation_key = "room_fan" if boiler_enabled else "main_fan"
     expected_group = "BOILER" if boiler_enabled else "Manuale"
-    assert room_fan.name == expected_name
+    assert room_fan.translation_key == expected_translation_key
     command = last_sent_command(controller)
     activation = controller.activate_program_with_commands_for_stove.await_args
     assert command.SensorId == f"fan-sensor-{expected_group}"

@@ -85,6 +85,17 @@ Within `custom_components\maestro_mcz\maestro`:
 - `model_value_reader.py` reads the declared field from the selected cached
   State/Status response; it does not fetch HTTP responses.
 
+# Entity naming
+
+- Use Home Assistant translations for default entity names, not hardcoded overrides.
+- Use sentence case, preserving acronyms and proper names.
+- Keep catalogue names and `strings.json` aligned. When user-facing text or
+  translation keys are added, removed, or changed, update `strings.json` and all
+  shipped locale files in the same change, preserving matching keys and
+  placeholders.
+- Preserve internal keys, existing entity IDs/unique IDs, customized names, and
+  automation-facing state and option values when changing display names.
+
 # Test readability
 
 Write and maintain tests as clear scenarios that a nontechnical reader can

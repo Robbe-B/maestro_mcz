@@ -45,7 +45,11 @@ def _get_mocked_files(folder_path: str) -> list[str]:
 
 
 class MockedController(MaestroControllerInterface):
-    """Class of a MockedController."""
+    """Implement the controller contract from saved reports without HTTP.
+
+    Own replay-file compatibility and simulated command completion, not live
+    account-membership guarantees or Home Assistant entity behavior.
+    """
 
     def __init__(self, folder_path: str | None) -> None:
         """Initialize the MockedController."""
@@ -236,7 +240,7 @@ class MockedController(MaestroControllerInterface):
 
 
 class MockedStove:
-    """Class of a MockedStove."""
+    """Bundle one replay device's parsed replies and optional saved statistics."""
 
     stove_info: StoveInfo
     model: Model

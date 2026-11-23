@@ -4,19 +4,22 @@
 
 The integration provides the controls and readings below. **Not every stove supports every feature.**
 
+The names below are in English. Home Assistant uses its server language for
+default entity names; your custom names and existing entity IDs are kept.
+
 ## At a glance
 
 | Platform | Purpose | Examples, where supported |
 |---|---|---|
 | Climate | Everyday heating controls | Power, target temperature, operating presets |
 | Fan | Ventilation controls | Fan 1, Fan 2, Fan 3 |
-| Select | Choose a supported value | Manual Power, Tones |
-| Switch | Enable or disable a function | Start / Stop, Timer |
+| Select | Choose a supported value | Manual power, Tones |
+| Switch | Enable or disable a function | Start / stop, Timer |
 | Number | Adjust numeric settings | Ignition/shutdown delays, hysteresis, pump threshold |
 | Sensor | Read measurements and status | Temperatures, operating mode, maintenance information |
-| Binary sensor | Read on/off status | Alarm, Pellet Level Low, cloud connection, device connection |
-| Button | Run a one-time command | Alarm Reset, Set System Date & Time |
-| Date/time | Set the stove clock | Date & Time; disabled by default |
+| Binary sensor | Read on/off status | Alarm, Pellet level low, cloud connection, device connection |
+| Button | Run a one-time command | Alarm reset, Set system date & time |
+| Date/time | Set the stove clock | Date & time; disabled by default |
 
 Entity IDs are assigned by Home Assistant and may differ between installations. Use your actual entity IDs in dashboards and automations; the display names here are not fixed IDs.
 
@@ -34,39 +37,41 @@ Some older stoves may show extra presets they do not support. Use **Manual** or 
 
 Up to three fan controls are implemented. Available speeds and presets depend on your stove. On air stoves, fan availability also depends on the current operating mode.
 
-On supported hydro stoves, **Room Fan** controls room ventilation without needing a climate preset. **Auto** and **Silent** are fan settings where supported.
+On supported hydro stoves, **Room fan** controls room ventilation without needing a climate preset. **Auto** and **Silent** are fan settings where supported.
 
-The **Manual Power** select is a separate control for the stove's manual power setting. It is not the same as a fan speed percentage, and its values are model-dependent.
+The **Manual power** select is a separate control for the stove's manual power setting. It is not the same as a fan speed percentage, and its values are model-dependent.
 
 ## Switches and configuration settings
 
 | Entity or group | Purpose |
 |---|---|
-| **Start / Stop** | Enable or disable the stove's eco Start / Stop function; this is not the main power control |
+| **Start / stop** | Enable or disable the stove's eco start / stop function; this is not the main power control |
 | **Timer** | Enable or disable the stove's timer function, not edit its schedule |
-| **Start / Stop - Delay in Ignition / Shutdown** | Adjust the exposed delays, in seconds |
-| **Start / Stop - Negative / Positive Hysteresis** | Adjust the exposed Start / Stop temperature thresholds |
-| **Ambient - Negative / Positive Hysteresis** | Adjust exposed ambient-temperature hysteresis |
-| **Circulation Pump - On - Minimum Temperature** | Adjust the exposed pump-on temperature threshold on applicable hydro models |
+| **Start / stop - delay in ignition / shutdown** | Adjust the exposed delays, in seconds |
+| **Start / stop - negative / positive hysteresis** | Adjust the exposed start / stop temperature thresholds |
+| **Ambient - negative / positive hysteresis** | Adjust exposed ambient-temperature hysteresis |
+| **Circulation pump - on - minimum temperature** | Adjust the exposed pump-on temperature threshold on applicable hydro models |
 | **Tones** | Choose a supported sound level |
 
-Numeric ranges and steps are read from the cloud model. Consult your stove's manual before changing advanced settings; this documentation does not prescribe tuning values.
+Numeric limits are read from the cloud where available. Controls use a fixed adjustment step of 1 in each setting's unit. Consult your stove's manual before changing advanced settings; this documentation does not prescribe tuning values.
 
 ## Measurements and status
 
 | Group | Implemented sensor names |
 |---|---|
-| Room and heating temperatures | Ambient Temperature, Water Temperature, Puffer Temperature, Wi-Fi Probe Temperature |
-| Internal temperatures | Exhaust Temperature, Board Temperature |
-| Operating information | Current State, Current Mode, Last Alarm Code |
-| Mechanical information | Exhaust Fan Speed, Transport Screw Speed |
-| Maintenance | Next Maintenance |
+| Room and heating temperatures | Ambient temperature, Water temperature, Buffer tank temperature, Wi-Fi probe temperature |
+| Internal temperatures | Exhaust temperature, Board temperature |
+| Operating information | Current state, Current mode, Last alarm code |
+| Mechanical information | Exhaust fan speed, Auger screw speed |
+| Maintenance | Next maintenance |
 
-Water and puffer (buffer tank) readings are available only on supported stoves. A sensor listed here may not appear for your model.
+Water and buffer tank readings are available only on supported stoves. A sensor listed here may not appear for your model.
+
+Operating modes and recognized status labels follow your Home Assistant language. Unrecognized statuses are shown as reported by the stove. The **Current state** sensor also provides the original stove-reported text in its attributes.
 
 ### System information
 
-**Firmware motherboard** combines the board type and software version shown on the device page. **Active database** shows the name of the stove's active settings database. M2 stoves can also show **Firmware panel** when reported; M1 stoves do not have this sensor.
+**Motherboard firmware** combines the board type and software version shown on the device page. **Active database** shows the name of the stove's active settings database. M2 stoves can also show **Panel firmware** when reported; M1 stoves do not have this sensor.
 
 These read-only diagnostic sensors appear when the stove first supplies usable details. They are enabled by default so Home Assistant can keep their changes in history, unless you exclude them from recording. They use the normal live updates and become unavailable when the stove or cloud connection is lost. A missing database or panel reading shows as unknown, not as an invented value.
 
@@ -76,7 +81,7 @@ Where supported, **Ignition count**, **Total operating time**, and **Operating t
 
 Statistics refresh at startup and hourly, separately from the ten-second live updates. Disabling polling in Home Assistant also stops scheduled statistics updates. A statistics failure does not interrupt heating controls. These sensors become unavailable when the integration detects a cloud connection failure, and show their saved readings again when the connection recovers, provided the last statistics request succeeded. They can remain readable while the stove itself is offline.
 
-**Next Maintenance** follows live stove updates, not the hourly statistics schedule.
+**Next maintenance** shows the stove-reported hours until servicing and follows live stove updates, not the hourly statistics schedule.
 
 ### Consumption history
 
@@ -90,19 +95,19 @@ This is the app's estimated energy figure, not a measurement of electricity draw
 
 ## Connectivity and alarms
 
-**Cloud Connection Status** and **Device Connection Status** help distinguish the integration-to-cloud connection from the stove-to-cloud connection. See [how to interpret them](configuration.md#connectivity-and-limitations).
+**Cloud connection status** and **Device connection status** help distinguish the integration-to-cloud connection from the stove-to-cloud connection. See [how to interpret them](configuration.md#connectivity-and-limitations).
 
-The **Alarm** binary sensor indicates an error state. **Last Alarm Code** provides the last reported code. Use the stove's manual or MCZ support to interpret a code; this integration is not a fault-diagnosis or safety system.
+The **Alarm** binary sensor indicates an error state. **Last alarm code** provides the last reported code. Use the stove's manual or MCZ support to interpret a code; this integration is not a fault-diagnosis or safety system.
 
-**Pellet Level Low** turns on when the stove's pellet level probe reports that the hopper is running low and turns off when it reports enough pellets. It is only created when the stove reports an enabled probe and provides a reading. If the probe is later disabled or its enabled status is unknown, the entity shows no reading rather than a low-pellet warning. The MCZ app's warning may appear later; the two are not guaranteed to update together. A low-pellet reading does not by itself mean the stove has an alarm.
+**Pellet level low** turns on when the stove's pellet level probe reports that the hopper is running low and turns off when it reports enough pellets. It is only created when the stove reports an enabled probe and provides a reading. If the probe is later disabled or its enabled status is unknown, the entity shows no reading rather than a low-pellet warning. The MCZ app's warning may appear later; the two are not guaranteed to update together. A low-pellet reading does not by itself mean the stove has an alarm.
 
-The **Alarm Reset** button sends a remote reset request when the model exposes one; it cannot clear every alarm. Some alarms require physical intervention and a reset on the stove's own panel. The button cannot bypass that restriction.
+The **Alarm reset** button sends a remote reset request when the model exposes one; it cannot clear every alarm. Some alarms require physical intervention and a reset on the stove's own panel. The button cannot bypass that restriction.
 
 For example, MCZ manual guidance lists **A01, A02, A03, A05, and A21** as alarms that can only be reset from the stove's panel. The applicable codes may differ for your model. Resolve the cause and follow your stove's manual before attempting a reset or restart.
 
 ## Stove clock
 
-**Set System Date & Time** requests synchronization with Home Assistant's system time. **Date & Time** provides a separate editable stove-clock entity, but is **disabled by default**.
+**Set system date & time** requests synchronization with Home Assistant's system time. **Date & time** provides a separate editable stove-clock entity, but is **disabled by default**.
 
 After changing the clock, check it in the official app or on the stove, especially if you rely on the stove's timer.
 

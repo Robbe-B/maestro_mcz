@@ -15,14 +15,21 @@ from .coordinator import (
     MczCountersCoordinator,
 )
 from .maestro import MaestroStove
-from .maestro.model_value_reader import get_counter_value, get_response_value
+from .maestro.model_value_reader import (
+    get_counter_value,
+    get_response_value,
+)
 from .maestro.models import model_definitions, models_types
 
 PARALLEL_UPDATES = 0
 
 
 class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
-    """Expose lifetime statistics while the cloud, but not necessarily the stove, is online."""
+    """Expose declared lifetime counters from the independent statistics cache.
+
+    Apply catalogue unit divisors through the shared reader and require cloud,
+    not stove, connectivity. The statistics coordinator owns fetching.
+    """
 
     _attr_has_entity_name = True
 
@@ -87,7 +94,11 @@ class MczCounterSensor(CoordinatorEntity[MczCountersCoordinator], SensorEntity):
 class MczYesterdayConsumptionSensor(
     CoordinatorEntity[MczConsumptionCoordinator], SensorEntity
 ):
-    """Show a dated cloud estimate, not an accumulating energy meter."""
+    """Expose the consumption coordinator's exact dated estimate, not a meter.
+
+    Keep older snapshots distinct from yesterday and derive availability from
+    existing coordinator data without scheduling additional history requests.
+    """
 
     _attr_has_entity_name = True
     _attr_translation_key = "consumption_yesterday"
@@ -149,7 +160,11 @@ class MczYesterdayConsumptionSensor(
 
 
 class MczSensorEntity(CoordinatorEntity[MczAccountCoordinator], SensorEntity):
-    """Sensor entity for Maestro MCZ stoves."""
+    """Expose a declared cached reading and its configured metadata/attributes.
+
+    Delegate cached value interpretation to the stove and refresh scheduling
+    to the coordinator; do not parse alarms or check translation coverage here.
+    """
 
     _attr_has_entity_name = True
     _attr_native_value: bool | int | float | str | None = None
@@ -164,7 +179,8 @@ class MczSensorEntity(CoordinatorEntity[MczAccountCoordinator], SensorEntity):
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_sensor.user_friendly_name
+        if supported_sensor.translation_key is None:
+            self._attr_name = supported_sensor.user_friendly_name
         self._attr_native_unit_of_measurement = supported_sensor.unit
         self._attr_suggested_display_precision = supported_sensor.display_precision
         self._attr_device_class = supported_sensor.device_class
@@ -176,7 +192,6 @@ class MczSensorEntity(CoordinatorEntity[MczAccountCoordinator], SensorEntity):
         self._supported_sensor = supported_sensor
         self.entity_registry_enabled_default = supported_sensor.enabled_by_default
         self.entity_category = supported_sensor.category
-        self._api_value_renames = supported_sensor.api_value_renames
         self._handle_coordinator_update_internal()  # getting the initial update directly without delay
 
     @property
@@ -198,35 +213,22 @@ class MczSensorEntity(CoordinatorEntity[MczAccountCoordinator], SensorEntity):
         self.async_write_ha_state()
 
     def _handle_coordinator_update_internal(self) -> None:
-        value = get_response_value(
-            self._supported_sensor,
-            self._stove.State,
-            self._stove.Status,
-            self._stove.model_generation,
-        )
-
-        if (
-            self._api_value_renames is not None
-            and isinstance(value, str)
-            and value in self._api_value_renames
-        ):
-            self._attr_native_value = self._api_value_renames[value]
-        else:
-            self._attr_native_value = value
+        self._attr_native_value = self._stove.get_sensor_value(self._supported_sensor)
+        attribute = self._supported_sensor.raw_text_attribute
+        if attribute is not None:
+            value = get_response_value(
+                self._supported_sensor,
+                self._stove.State,
+                self._stove.Status,
+                self._stove.model_generation,
+            )
+            self._attr_extra_state_attributes = (
+                {attribute: value} if isinstance(value, str) else {}
+            )
 
 
 class MczSystemInfoSensor(MczSensorEntity):
-    """Expose text diagnostics on the existing stove's live update schedule."""
-
-    def __init__(
-        self,
-        coordinator: MczAccountCoordinator,
-        stove_unique_code: str,
-        supported_sensor: models_types.SensorMczConfigItem,
-    ) -> None:
-        """Reuse live sensor identity, availability and diagnostic settings."""
-        super().__init__(coordinator, stove_unique_code, supported_sensor)
-        del self._attr_name
+    """Expose prepared device metadata through the generic live sensor lifecycle."""
 
     def _handle_coordinator_update_internal(self) -> None:
         assert self._prop is not None

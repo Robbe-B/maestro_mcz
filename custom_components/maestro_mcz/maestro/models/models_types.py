@@ -1,4 +1,9 @@
-"""Configuration dataclasses and enums for MCZ features."""
+"""Declare feature-configuration schemas, enums and generic defaults.
+
+These are integration definitions, including HA metadata, not API response
+models. Concrete bindings belong in model_definitions; network operations,
+runtime caches and entity behavior do not belong in these schema classes.
+"""
 
 from dataclasses import dataclass
 from enum import Enum
@@ -10,14 +15,14 @@ from homeassistant.const import EntityCategory
 
 
 class MczStoveModelGeneration(Enum):
-    """Stove generations distinguished by the integration."""
+    """Label protocol families for bindings; stove identity is detected separately."""
 
     M1 = 1
     M2_PLUS = 2
 
 
 class MczResponseSource(Enum):
-    """Identify the response supplying a reading."""
+    """Select the single cached API response supplying a feature reading."""
 
     STATUS = 1
     STATE = 2
@@ -25,7 +30,12 @@ class MczResponseSource(Enum):
 
 @dataclass
 class MczConfigItem:
-    """Representation of a generic MCZ config item."""
+    """Describe a feature's API bindings and Home Assistant metadata.
+
+    Shared catalogue instances are read-only definitions, not loaded stoves or
+    entity state. Keep matched controls and derived presentation mappings local
+    to their consumers; honor the declared response source without fallback.
+    """
 
     sensor_get_name: str | None = (
         None  # name used for getting data out of the state and status reponses
@@ -69,7 +79,7 @@ class MczConfigItem:
 
 @dataclass
 class PowerSettingMczConfigItem(MczConfigItem):
-    """Representation of a 'Power Setting' MCZ config item."""
+    """Declare power commands and the primary/phase fields used to read them."""
 
     value_response_source: MczResponseSource = MczResponseSource.STATUS
     bootloader_response_source: MczResponseSource = MczResponseSource.STATUS
@@ -111,7 +121,7 @@ class PowerSettingMczConfigItem(MczConfigItem):
 
 @dataclass
 class ClimateFunctionModeMczConfigItem(MczConfigItem):
-    """Representation of a 'Climate Function Mode' MCZ config item."""
+    """Declare mode-control bindings and canonical preset aliases by command family."""
 
     api_mappings_key_rename: dict[str, str] | None = None
     api_mappings_key_rename_m1: dict[str, str] | None = None
@@ -150,7 +160,7 @@ class ClimateFunctionModeMczConfigItem(MczConfigItem):
 
 @dataclass
 class ThermostatMczConfigItem(MczConfigItem):
-    """Representation of a 'Thermostat' MCZ config item."""
+    """Declare target-temperature controls and temperature response sources."""
 
     current_temperature_response_source: MczResponseSource = MczResponseSource.STATUS
 
@@ -182,8 +192,9 @@ class ThermostatMczConfigItem(MczConfigItem):
 
 @dataclass
 class FanMczConfigItem(MczConfigItem):
-    """Representation of a 'Fan' MCZ config item."""
+    """Declare fan readings, enable flags and mode-dependent command groups."""
 
+    translation_placeholders: dict[str, str] | None = None
     silent_enabled_get_name: str | None = None
     value_response_source: MczResponseSource = MczResponseSource.STATUS
     mode_response_source: MczResponseSource = MczResponseSource.STATUS
@@ -206,6 +217,8 @@ class FanMczConfigItem(MczConfigItem):
         sensor_set_name_m2: str | None = None,
         mode_to_configuration_name_mapping_m1: dict[str, str] | None = None,
         mode_to_configuration_name_mapping_m2: dict[str, str] | None = None,
+        translation_key: str | None = None,
+        translation_placeholders: dict[str, str] | None = None,
     ) -> None:
         """Create a 'Fan' MCZ config item."""
         super().__init__(
@@ -215,6 +228,8 @@ class FanMczConfigItem(MczConfigItem):
             sensor_set_name_m2,
         )
         self.sensor_get_name = sensor_get_name
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
         self.sensor_set_name = sensor_set_name
         self.sensor_set_config_name = sensor_set_config_name
         self.mode_to_configuration_name_mapping = mode_to_configuration_name_mapping  # means we want to find the sensor name in the different mode configs
@@ -231,7 +246,7 @@ class FanMczConfigItem(MczConfigItem):
 
 @dataclass
 class ButtonMczConfigItem(MczConfigItem):
-    """Representation of a 'Button' MCZ config item."""
+    """Declare an action's command binding and button presentation metadata."""
 
     def __init__(
         self,
@@ -261,7 +276,7 @@ class ButtonMczConfigItem(MczConfigItem):
 
 @dataclass
 class SwitchMczConfigItem(MczConfigItem):
-    """Representation of a 'Switch' MCZ config item."""
+    """Declare a boolean control's read/write bindings and entity metadata."""
 
     value_response_source: MczResponseSource = MczResponseSource.STATUS
 
@@ -295,7 +310,7 @@ class SwitchMczConfigItem(MczConfigItem):
 
 @dataclass
 class NumberMczConfigItem(MczConfigItem):
-    """Representation of a 'Number' MCZ config item."""
+    """Declare numeric-control bindings, units and Home Assistant presentation."""
 
     device_class: NumberDeviceClass | None = None
     unit: str | None = None
@@ -339,7 +354,7 @@ class NumberMczConfigItem(MczConfigItem):
 
 @dataclass
 class SelectMczConfigItem(MczConfigItem):
-    """Representation of a 'Select' MCZ config item."""
+    """Declare selectable-control bindings and option aliases, not current choices."""
 
     value_mappings: dict[str, str] | None = None
     map_back_before_sending_to_api: bool | None = (
@@ -380,7 +395,7 @@ class SelectMczConfigItem(MczConfigItem):
 
 @dataclass
 class DateTimeMczConfigItem(MczConfigItem):
-    """Representation of a 'DateTime' MCZ config item."""
+    """Declare calendar read/write fields without constructing dates or commands."""
 
     value_response_source: MczResponseSource = MczResponseSource.STATUS
     sensor_set_name_weekday: str | None = None
@@ -462,7 +477,7 @@ class DateTimeMczConfigItem(MczConfigItem):
 
 @dataclass
 class TimeSyncButtonMczConfigItem(DateTimeMczConfigItem):
-    """Representation of a 'Time sync Button' MCZ config item."""
+    """Reuse calendar-field bindings for a clock-synchronization action."""
 
     def __init__(
         self,
@@ -522,7 +537,7 @@ class TimeSyncButtonMczConfigItem(DateTimeMczConfigItem):
 
 @dataclass
 class PotMczConfigItem(SelectMczConfigItem):
-    """Representation of a 'Pot' MCZ config item."""
+    """Specialize selectable-control bindings for a stove's power-level setting."""
 
     def __init__(
         self,
@@ -554,7 +569,7 @@ class PotMczConfigItem(SelectMczConfigItem):
 
 @dataclass
 class BinarySensorMczConfigItem(MczConfigItem):
-    """Representation of a 'Binary Sensor' MCZ config item."""
+    """Declare a boolean reading's source, enable condition and polarity."""
 
     value_response_source: MczResponseSource = MczResponseSource.STATUS
     device_class: BinarySensorDeviceClass | None = None
@@ -598,13 +613,14 @@ class BinarySensorMczConfigItem(MczConfigItem):
 
 @dataclass
 class SensorMczConfigItem(MczConfigItem):
-    """Representation of a 'Sensor' MCZ config item."""
+    """Declare sensor fields, value aliases, raw-text attributes and HA metadata."""
 
     unit: str | None = None
     display_precision: int | None = None
     device_class: SensorDeviceClass | None = None
     state_class: SensorStateClass | None = None
     api_value_renames: dict[str, str] | None = None
+    raw_text_attribute: str | None = None
 
     def __init__(
         self,
@@ -621,6 +637,7 @@ class SensorMczConfigItem(MczConfigItem):
         value_response_source: (
             MczResponseSource | dict[MczStoveModelGeneration, MczResponseSource]
         ) = MczResponseSource.STATE,
+        raw_text_attribute: str | None = None,
     ) -> None:
         """Create a 'Sensor' MCZ config item."""
         super().__init__(user_friendly_name, None)
@@ -634,6 +651,7 @@ class SensorMczConfigItem(MczConfigItem):
         self.enabled_by_default = enabled_by_default
         self.api_value_renames = api_value_renames
         self.value_response_source = value_response_source
+        self.raw_text_attribute = raw_text_attribute
 
 
 @dataclass(kw_only=True)

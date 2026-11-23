@@ -21,7 +21,10 @@ from .maestro.types.enums import SensorTypeEnum
 
 
 class MczNumberEntity(CoordinatorEntity[MczAccountCoordinator], NumberEntity):
-    """Number entity for Maestro MCZ stoves."""
+    """Expose an advertised numeric setting and route typed writes through the stove.
+
+    Use cached readings and model bounds; the coordinator owns refresh timing.
+    """
 
     _attr_has_entity_name = True
     _attr_native_value = None
@@ -38,7 +41,8 @@ class MczNumberEntity(CoordinatorEntity[MczAccountCoordinator], NumberEntity):
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_number.user_friendly_name
+        if supported_number.translation_key is None:
+            self._attr_name = supported_number.user_friendly_name
         self._attr_native_unit_of_measurement = supported_number.unit
         self._attr_device_class = supported_number.device_class
         self._attr_unique_id = f"{stove_unique_code}-{supported_number.sensor_get_name}"

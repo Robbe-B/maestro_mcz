@@ -10,7 +10,11 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class Status:
-    """Store reported Status readings, leaving absent fields at their defaults."""
+    """Represent one Status reply independently of the State response.
+
+    Retain reported values and unknown fields without filling gaps from State
+    or choosing model-specific entity/command interpretations.
+    """
 
     status: str | None = None
     stato_stufa: int | None = None

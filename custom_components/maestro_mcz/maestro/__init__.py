@@ -25,9 +25,12 @@ from .controller.responses.model import (
 from .controller.responses.state import State
 from .controller.responses.status import Status
 from .controller.responses.stove_info import StoveInfo
+from .model_value_reader import get_response_value, normalize_sensor_value
+from .models.model_definitions import SUPPORTED_CURRENT_STATES
 from .models.models_types import (
     MczConfigItem,
     MczStoveModelGeneration,
+    SensorMczConfigItem,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,7 +54,11 @@ def get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
 
 @dataclass
 class MaestroStoveDeviceMetadata:
-    """Prepare device details and read-only system diagnostics for one stove."""
+    """Retain device identity and derive firmware/database diagnostic metadata.
+
+    Adapt those details to Home Assistant DeviceInfo without fetching replies,
+    scheduling updates or interpreting operating states.
+    """
 
     _DATABASE_NAMES: ClassVar[dict[int, str]] = dict(
         enumerate(
@@ -195,7 +202,13 @@ class MaestroStoveDeviceMetadata:
 
 
 class MaestroStove:
-    """Class to represent a Maestro Stove. (One instance per device)."""
+    """Own cached replies, interpreted readings, model matching and commands.
+
+    Delegate transport and authentication to the controller, account membership
+    to MaestroAccount, and polling to coordinators. Entity presentation must not
+    rewrite the cached response objects or their advertised control metadata.
+    Report unfamiliar operating values when read, once per value for this stove.
+    """
 
     def __init__(
         self,
@@ -213,6 +226,7 @@ class MaestroStove:
         self._device_metadata = MaestroStoveDeviceMetadata()
         self._is_integration_connected_to_cloud = False
         self._is_stove_connected_to_cloud = False
+        self._warned_states: set[str] = set()
 
     async def async_init(self) -> None:
         """Async initialization to retrieve the stove model."""
@@ -285,6 +299,38 @@ class MaestroStove:
     def Model(self) -> Model | None:
         """Return the stove model."""
         return self._model
+
+    def get_sensor_value(
+        self,
+        config: SensorMczConfigItem,
+    ) -> bool | int | float | str | None:
+        """Interpret a cached reading without changing its original response."""
+        raw_value = get_response_value(
+            config,
+            self.State,
+            self.Status,
+            self.model_generation,
+        )
+        value = normalize_sensor_value(config, raw_value)
+        if (
+            config.sensor_get_name == "state"
+            and self.is_integration_connected_to_cloud
+            and isinstance(raw_value, str)
+            and raw_value.strip()
+            and raw_value not in {"unknown", "unavailable"}
+            and value not in SUPPORTED_CURRENT_STATES
+            and raw_value not in self._warned_states
+        ):
+            self._warned_states.add(raw_value)
+            _LOGGER.warning(
+                "Current state %r is unrecognized (model=%r, generation=%s). "
+                "This does not necessarily indicate a stove fault. "
+                "Please report it at https://github.com/Robbe-B/maestro_mcz/issues",
+                raw_value,
+                self.Model.model_name if self.Model is not None else None,
+                self.model_generation.name,
+            )
+        return value
 
     @property
     def model_generation(self) -> MczStoveModelGeneration:

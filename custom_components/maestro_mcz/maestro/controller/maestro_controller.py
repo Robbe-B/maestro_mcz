@@ -90,7 +90,11 @@ def _connection_failure(
 
 
 class MaestroController(MaestroControllerInterface):
-    """Class to control the communication layer between the API and the integration. (One instance per user account)."""
+    """Own one account's HTTP authentication, retries and endpoint parsing.
+
+    Borrow the caller's ClientSession; do not close it or own stove caches,
+    Home Assistant polling, entity labels or feature-selection policy.
+    """
 
     def __init__(
         self, client_session: aiohttp.ClientSession, username: str, password: str
@@ -395,11 +399,11 @@ class MaestroController(MaestroControllerInterface):
 
 
 class MaestroAuthenticationException(Exception):
-    """An attempt to authenticate failed."""
+    """Signal rejected authentication without choosing a Home Assistant action."""
 
 
 class MaestroConnectionException(Exception):
-    """An attempt to connect failed."""
+    """Carry a service failure and an optional server-requested retry delay."""
 
     def __init__(self, message: str, *, retry_after: float | None = None) -> None:
         """Retain a server-requested delay for Home Assistant's recovery scheduler."""

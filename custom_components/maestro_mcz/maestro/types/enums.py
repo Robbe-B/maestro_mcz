@@ -4,7 +4,7 @@ from enum import Enum
 
 
 class SensorTypeEnum(Enum):
-    """Enum for sensor types."""
+    """Identify service control-value types when matching model configurations."""
 
     BOOLEAN = "boolean"
     DOUBLE = "double"

@@ -1,7 +1,8 @@
 {
   "config": {
       "abort": {
-          "already_configured": "Apparaat is reeds geconfigureerd",
+          "already_configured": "Account is al geconfigureerd",
+          "reauth_successful": "Opnieuw aanmelden is geslaagd",
           "unique_id_mismatch": "Meld je aan met het Maestro-account dat al voor deze integratie is ingesteld.",
           "reauth_not_supported": "Opgeslagen diagnoserapporten gebruiken geen cloudwachtwoord. Opnieuw aanmelden is niet mogelijk."
       },
@@ -78,15 +79,185 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarm"
+      },
+      "pellet_level_low": {
+        "name": "Pelletniveau laag"
+      },
+      "cloud_connection": {
+        "name": "Cloudverbindingsstatus"
+      },
+      "device_connection": {
+        "name": "Apparaatverbindingsstatus"
+      }
+    },
+    "button": {
+      "alarm_reset": {
+        "name": "Alarm resetten"
+      },
+      "system_date_time": {
+        "name": "Systeemdatum en -tijd instellen"
+      }
+    },
+    "datetime": {
+      "date_time": {
+        "name": "Datum en tijd"
+      }
+    },
+    "number": {
+      "ignition_delay": {
+        "name": "Start / stop - vertraging bij ontsteken"
+      },
+      "shutdown_delay": {
+        "name": "Start / stop - vertraging bij uitschakelen"
+      },
+      "start_stop_negative_hysteresis": {
+        "name": "Start / stop - negatieve hysterese"
+      },
+      "start_stop_positive_hysteresis": {
+        "name": "Start / stop - positieve hysterese"
+      },
+      "ambient_negative_hysteresis": {
+        "name": "Omgeving - negatieve hysterese"
+      },
+      "ambient_positive_hysteresis": {
+        "name": "Omgeving - positieve hysterese"
+      },
+      "circulation_pump_minimum_temperature": {
+        "name": "Circulatiepomp - aan - minimumtemperatuur"
+      }
+    },
+    "select": {
+      "manual_power": {
+        "name": "Handmatig vermogen"
+      },
+      "tones": {
+        "name": "Geluidssignalen",
+        "state": {
+          "silent": "Stil",
+          "normal": "Normaal",
+          "high": "Hoog"
+        }
+      }
+    },
+    "switch": {
+      "start_stop": {
+        "name": "Start / stop"
+      },
+      "timer": {
+        "name": "Timer"
+      }
+    },
     "sensor": {
+      "last_alarm": {
+        "name": "Laatste alarmcode"
+      },
+      "current_state": {
+        "name": "Huidige status",
+        "state": {
+          "off": "Uit",
+          "cleaning": "Reinigen",
+          "loading": "Laadfase",
+          "start-1": "Opstartfase 1",
+          "start-2": "Opstartfase 2",
+          "stabilization": "Stabilisatie",
+          "anti-condensation": "Anticondensatiefase",
+          "on": "Aan",
+          "turning-off": "Uitschakelen",
+          "cooling-down": "Afkoelen",
+          "working": "In bedrijf",
+          "standby": "Stand-by",
+          "cleaning-hot": "Reiniging (warm)",
+          "cleaning-cold": "Reiniging (koud)",
+          "loading-hot": "Laadfase (warm)",
+          "loading-cold": "Laadfase (koud)",
+          "start-1-hot": "Opstartfase 1 (warm)",
+          "start-1-cold": "Opstartfase 1 (koud)",
+          "start-2-cold": "Opstartfase 2 (koud)",
+          "cleaning-high": "Reiniging (High)",
+          "power-1": "Vermogen 1",
+          "power-2": "Vermogen 2",
+          "power-3": "Vermogen 3",
+          "power-4": "Vermogen 4",
+          "power-5": "Vermogen 5",
+          "safety-alarm-wait": "Wachtfase veiligheidsalarm",
+          "turning-off-1": "Uitschakelfase 1",
+          "turning-off-2": "Uitschakelfase 2",
+          "hypercombustion": "Uitschakeling wegens oververbranding",
+          "alarm": "Alarm",
+          "cold-test": "Koude test",
+          "feed-screw-loading": "Toevoerschroef laden",
+          "power-on": "Inschakeling",
+          "alarm-a01": "A01 - Ontstekingsalarm",
+          "alarm-a02": "A02 - Vlamalarm",
+          "alarm-a03": "A03 - Pelletbeveiligingsalarm",
+          "alarm-a04": "A04 - Alarm rookgastemperatuur",
+          "alarm-a05": "A05 - Verstoppingsalarm",
+          "alarm-a07": "A07 - Watertemperatuuralarm",
+          "alarm-a08": "A08 - Alarm rookgasventilator",
+          "alarm-a09": "A09 - Thermokoppelalarm",
+          "alarm-a11": "A11 - Alarm toevoerschroef",
+          "alarm-a12": "A12 - Alarm sensor reductiemotor",
+          "alarm-a13": "A13 - Alarm printplaattemperatuur",
+          "alarm-a14": "A14 - Alarm Active-sensor",
+          "alarm-a17": "A17 - Alarm blokkering toevoerschroef",
+          "alarm-a18": "A18 - Alarm veiligheidsthermostaat water",
+          "alarm-a19": "A19 - Alarm watersensor",
+          "alarm-a20": "A20 - Alarm hulpsensor",
+          "alarm-a21": "A21 - Veiligheidsalarm",
+          "alarm-a22": "A22 - Alarm kamersensor",
+          "alarm-a23": "A23 - Alarm sluiting branderpot",
+          "alarm-a24": "A24 - Pompstoring",
+          "alarm-a99": "A99 - Alarm stroomvoorziening"
+        }
+      },
+      "ambient_temperature": {
+        "name": "Omgevingstemperatuur"
+      },
+      "water_temperature": {
+        "name": "Watertemperatuur"
+      },
+      "puffer_temperature": {
+        "name": "Buffervattemperatuur"
+      },
+      "wifi_probe_temperature": {
+        "name": "Wi-Fi-sondetemperatuur"
+      },
+      "current_mode": {
+        "name": "Huidige modus",
+        "state": {
+          "manual": "Manueel",
+          "auto": "Automatisch",
+          "overnight": "Nachtmodus",
+          "comfort": "Comfortabel",
+          "turbo": "Krachtig"
+        }
+      },
+      "exhaust_temperature": {
+        "name": "Rookgastemperatuur"
+      },
+      "board_temperature": {
+        "name": "Printplaattemperatuur"
+      },
+      "exhaust_fan_speed": {
+        "name": "Snelheid rookgasventilator"
+      },
+      "transport_screw_speed": {
+        "name": "Snelheid toevoerschroef"
+      },
+      "next_maintenance": {
+        "name": "Volgend onderhoud"
+      },
       "motherboard_firmware": {
-        "name": "Firmware moederbord"
+        "name": "Moederbordfirmware"
       },
       "active_database": {
         "name": "Actieve database"
       },
       "panel_firmware": {
-        "name": "Firmware paneel"
+        "name": "Paneelfirmware"
       },
       "ignition_count": {
         "name": "Aantal ontstekingen"
@@ -138,6 +309,18 @@
     },
     "fan": {
       "main_fan": {
+        "name": "Ventilator {number}",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Automatisch",
+              "silent": "Stil"
+            }
+          }
+        }
+      },
+      "room_fan": {
+        "name": "Kamerventilator",
         "state_attributes": {
           "preset_mode": {
             "state": {

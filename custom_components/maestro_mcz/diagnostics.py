@@ -1,4 +1,8 @@
-"""Diagnostics support for maestro_mcz."""
+"""Export cached account/coordinator snapshots for Home Assistant diagnostics.
+
+Own export layout and configured-field redaction, without refreshing devices,
+sending commands or changing the cached objects used by entity platforms.
+"""
 
 from __future__ import annotations
 

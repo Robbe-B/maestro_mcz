@@ -7,7 +7,11 @@ from ..response_types import JsonObject
 
 @dataclass
 class Configuration:
-    """Parse one control's metadata, using saved attribute names during replay."""
+    """Parse one advertised control, including its raw variants and mappings.
+
+    Support live/replay field names without adding entity aliases to the
+    reported metadata; consumers derive their own presentation mappings.
+    """
 
     sensor_name: str | None = None
     type: str | None = None
@@ -37,7 +41,7 @@ class Configuration:
 
 @dataclass
 class ModelConfiguration:
-    """Group related control definitions without validating their field types."""
+    """Group reported controls under their configuration ID, without type validation."""
 
     timed: bool | None = None
     configuration_name: str | None = None
@@ -66,7 +70,11 @@ class ModelConfiguration:
 
 @dataclass
 class Model:
-    """Read model metadata and controls from live fields or a saved report."""
+    """Parse advertised model metadata and controls from live or replay fields.
+
+    Feature matching and entity selection belong to consumers; this object
+    retains the service's definitions rather than choosing HA capabilities.
+    """
 
     model_configurations: list[ModelConfiguration] | None = None
     model_name: str | None = None
@@ -99,6 +107,8 @@ class Model:
 
 @dataclass
 class SensorConfiguration:
+    """Pair a reported control with the configuration ID needed to address it."""
+
     configuration: Configuration
     configuration_id: str | None
 
@@ -111,6 +121,8 @@ class SensorConfiguration:
 
 @dataclass
 class SensorConfigurationMultipleModes:
+    """Group matched controls by model mode without choosing HA fan presets."""
+
     mode_configurations: dict[str, SensorConfiguration]
 
     def __init__(self, mode_configurations: dict[str, SensorConfiguration]) -> None:

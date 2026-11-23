@@ -17,7 +17,11 @@ from .maestro.types.enums import SensorTypeEnum
 
 
 class MczButtonEntity(CoordinatorEntity[MczAccountCoordinator], ButtonEntity):
-    """Button entity for Maestro MCZ stoves."""
+    """Expose an advertised action and dispatch user presses through the stove.
+
+    Derive identity from the matched control, not its localized display name;
+    transport retries and post-command refresh scheduling have other owners.
+    """
 
     _attr_has_entity_name = True
     _button_configuration: SensorConfiguration | None = None
@@ -33,7 +37,8 @@ class MczButtonEntity(CoordinatorEntity[MczAccountCoordinator], ButtonEntity):
         super().__init__(coordinator)
         self.coordinator: MczAccountCoordinator = coordinator
         self._stove: MaestroStove = coordinator.stoves[stove_unique_code]
-        self._attr_name = supported_button.user_friendly_name
+        if supported_button.translation_key is None:
+            self._attr_name = supported_button.user_friendly_name
         control_name = matching_button_configuration.configuration.sensor_name
         assert control_name is not None
         # Keep the catalogue spelling in entity IDs even if the model uses other casing.
@@ -119,7 +124,11 @@ class MczButtonEntity(CoordinatorEntity[MczAccountCoordinator], ButtonEntity):
 
 
 class MczTimeSyncButtonEntity(CoordinatorEntity[MczAccountCoordinator], ButtonEntity):
-    """Button entity to trigger time synchronization."""
+    """Expose the user action that synchronizes the configured stove clock.
+
+    Clock encoding should be shared independently of another HA entity
+    instance; this button owns the action's presentation, not a datetime entity.
+    """
 
     _attr_has_entity_name = True
     _time_sync_button_configuration: SensorConfiguration | None = None
@@ -143,7 +152,8 @@ class MczTimeSyncButtonEntity(CoordinatorEntity[MczAccountCoordinator], ButtonEn
             matching_time_sync_button_configuration,
         )
 
-        self._attr_name = supported_time_sync_button.user_friendly_name
+        if supported_time_sync_button.translation_key is None:
+            self._attr_name = supported_time_sync_button.user_friendly_name
         self._attr_unique_id = (
             f"{stove_unique_code}-{supported_time_sync_button.sensor_set_name}"
         )

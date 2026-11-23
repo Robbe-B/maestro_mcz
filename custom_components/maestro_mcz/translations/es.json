@@ -1,0 +1,335 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "username": "Nombre de usuario",
+          "password": "Contraseña"
+        },
+        "data_description": {
+          "username": "El nombre de usuario de tu cuenta Maestro en la aplicación oficial de MCZ, no el de Home Assistant.",
+          "password": "La contraseña de tu cuenta Maestro en la aplicación oficial de MCZ, no la de Home Assistant."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Volver a autenticar",
+        "description": "Vuelve a iniciar sesión en tu cuenta Maestro ({username}) con tu contraseña actual. Se conservarán tus dispositivos y ajustes.",
+        "data": {
+          "password": "Contraseña"
+        },
+        "data_description": {
+          "password": "La contraseña actual de tu cuenta Maestro."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se ha podido conectar",
+      "invalid_auth": "Autenticación no válida",
+      "unknown": "Error inesperado"
+    },
+    "abort": {
+      "already_configured": "La cuenta ya está configurada",
+      "reauth_successful": "La nueva autenticación se ha completado correctamente",
+      "unique_id_mismatch": "Inicia sesión con la cuenta Maestro que ya está configurada para esta entrada.",
+      "reauth_not_supported": "Los informes de diagnóstico guardados no usan una contraseña de la nube. No se pueden volver a autenticar."
+    }
+  },
+  "exceptions": {
+    "device_removal_still_linked": {
+      "message": "Esta estufa sigue vinculada a tu cuenta Maestro. Desvincúlala en la aplicación oficial de MCZ antes de intentar eliminarla de Home Assistant."
+    },
+    "device_removal_replay_linked": {
+      "message": "Esta estufa sigue presente en los informes guardados que se han cargado. Actualiza los informes guardados y vuelve a cargar esta cuenta antes de intentarlo de nuevo."
+    },
+    "device_removal_cannot_verify": {
+      "message": "No se ha podido comprobar qué estufas están vinculadas a esta cuenta. El dispositivo no se ha eliminado. Comprueba la conexión de la cuenta y vuelve a intentarlo."
+    },
+    "account_invalid_auth": {
+      "message": "Es necesario volver a iniciar sesión en la cuenta Maestro."
+    },
+    "account_cannot_connect": {
+      "message": "No se ha podido conectar con la nube de Maestro: {error}"
+    },
+    "account_no_stoves": {
+      "message": "No se han encontrado estufas para esta cuenta Maestro."
+    },
+    "command_invalid_auth": {
+      "message": "Es necesario volver a iniciar sesión en la cuenta Maestro antes de enviar este comando."
+    },
+    "command_cannot_connect": {
+      "message": "No se ha podido confirmar el comando de Maestro: {error}. Comprueba el estado de la estufa antes de volver a intentarlo."
+    },
+    "counters_invalid_auth": {
+      "message": "La autenticación ha fallado al obtener las estadísticas de la estufa"
+    },
+    "counters_cannot_connect": {
+      "message": "No se han podido obtener las estadísticas de la estufa: {error}"
+    },
+    "counters_invalid_response": {
+      "message": "El servicio Maestro ha devuelto estadísticas de la estufa no válidas"
+    },
+    "consumption_invalid_auth": {
+      "message": "La autenticación ha fallado al obtener el historial de consumo"
+    },
+    "consumption_cannot_connect": {
+      "message": "No se ha podido obtener el historial de consumo: {error}"
+    },
+    "consumption_invalid_response": {
+      "message": "El servicio Maestro ha devuelto un historial de consumo no válido"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarma"
+      },
+      "pellet_level_low": {
+        "name": "Nivel bajo de pellets"
+      },
+      "cloud_connection": {
+        "name": "Estado de conexión con la nube"
+      },
+      "device_connection": {
+        "name": "Estado de conexión del dispositivo"
+      }
+    },
+    "button": {
+      "alarm_reset": {
+        "name": "Restablecer alarma"
+      },
+      "system_date_time": {
+        "name": "Ajustar fecha y hora del sistema"
+      }
+    },
+    "datetime": {
+      "date_time": {
+        "name": "Fecha y hora"
+      }
+    },
+    "number": {
+      "ignition_delay": {
+        "name": "Arranque / parada - retardo de encendido"
+      },
+      "shutdown_delay": {
+        "name": "Arranque / parada - retardo de apagado"
+      },
+      "start_stop_negative_hysteresis": {
+        "name": "Arranque / parada - histéresis negativa"
+      },
+      "start_stop_positive_hysteresis": {
+        "name": "Arranque / parada - histéresis positiva"
+      },
+      "ambient_negative_hysteresis": {
+        "name": "Ambiente - histéresis negativa"
+      },
+      "ambient_positive_hysteresis": {
+        "name": "Ambiente - histéresis positiva"
+      },
+      "circulation_pump_minimum_temperature": {
+        "name": "Temperatura mínima de activación de la bomba de circulación"
+      }
+    },
+    "select": {
+      "manual_power": {
+        "name": "Potencia manual"
+      },
+      "tones": {
+        "name": "Señales acústicas",
+        "state": {
+          "silent": "Silencioso",
+          "normal": "Normal",
+          "high": "Alto"
+        }
+      }
+    },
+    "switch": {
+      "start_stop": {
+        "name": "Arranque / parada"
+      },
+      "timer": {
+        "name": "Temporizador"
+      }
+    },
+    "sensor": {
+      "last_alarm": {
+        "name": "Código de la última alarma"
+      },
+      "current_state": {
+        "name": "Estado actual",
+        "state": {
+          "off": "Apagada",
+          "cleaning": "Limpieza",
+          "loading": "Fase de carga",
+          "start-1": "Fase de encendido 1",
+          "start-2": "Fase de encendido 2",
+          "stabilization": "Estabilización",
+          "anti-condensation": "Fase anticondensación",
+          "on": "Encendida",
+          "turning-off": "Apagándose",
+          "cooling-down": "Enfriamiento",
+          "working": "En funcionamiento",
+          "standby": "En espera",
+          "cleaning-hot": "Limpieza en caliente",
+          "cleaning-cold": "Limpieza en frío",
+          "loading-hot": "Carga en caliente",
+          "loading-cold": "Carga en frío",
+          "start-1-hot": "Fase de encendido 1 en caliente",
+          "start-1-cold": "Fase de encendido 1 en frío",
+          "start-2-cold": "Fase de encendido 2 en frío",
+          "cleaning-high": "Limpieza intensiva",
+          "power-1": "Potencia 1",
+          "power-2": "Potencia 2",
+          "power-3": "Potencia 3",
+          "power-4": "Potencia 4",
+          "power-5": "Potencia 5",
+          "safety-alarm-wait": "Espera de alarma de seguridad",
+          "turning-off-1": "Fase de apagado 1",
+          "turning-off-2": "Fase de apagado 2",
+          "hypercombustion": "Apagado por combustión excesiva",
+          "alarm": "Alarma",
+          "cold-test": "Prueba en frío",
+          "feed-screw-loading": "Carga del sinfín",
+          "power-on": "Encendido",
+          "alarm-a01": "A01 - Alarma de encendido",
+          "alarm-a02": "A02 - Alarma de llama",
+          "alarm-a03": "A03 - Alarma de seguridad de pellets",
+          "alarm-a04": "A04 - Alarma de temperatura de humos",
+          "alarm-a05": "A05 - Alarma de obstrucción",
+          "alarm-a07": "A07 - Alarma de temperatura del agua",
+          "alarm-a08": "A08 - Alarma del ventilador de humos",
+          "alarm-a09": "A09 - Alarma del termopar",
+          "alarm-a11": "A11 - Alarma del sinfín",
+          "alarm-a12": "A12 - Alarma del sensor del motorreductor",
+          "alarm-a13": "A13 - Alarma de temperatura de la placa electrónica",
+          "alarm-a14": "A14 - Alarma del sensor Active",
+          "alarm-a17": "A17 - Alarma de bloqueo del sinfín",
+          "alarm-a18": "A18 - Alarma del termostato de seguridad del agua",
+          "alarm-a19": "A19 - Alarma de la sonda de agua",
+          "alarm-a20": "A20 - Alarma de la sonda auxiliar",
+          "alarm-a21": "A21 - Alarma de seguridad",
+          "alarm-a22": "A22 - Alarma de la sonda de ambiente",
+          "alarm-a23": "A23 - Alarma de cierre del brasero",
+          "alarm-a24": "A24 - Fallo de la bomba",
+          "alarm-a99": "A99 - Alarma de alimentación eléctrica"
+        }
+      },
+      "ambient_temperature": {
+        "name": "Temperatura ambiente"
+      },
+      "water_temperature": {
+        "name": "Temperatura del agua"
+      },
+      "puffer_temperature": {
+        "name": "Temperatura del depósito de inercia"
+      },
+      "wifi_probe_temperature": {
+        "name": "Temperatura de la sonda Wi-Fi"
+      },
+      "current_mode": {
+        "name": "Modo actual",
+        "state": {
+          "manual": "Manual",
+          "auto": "Auto",
+          "overnight": "Nocturno",
+          "comfort": "Confort",
+          "turbo": "Turbo"
+        }
+      },
+      "exhaust_temperature": {
+        "name": "Temperatura de humos"
+      },
+      "board_temperature": {
+        "name": "Temperatura de la placa electrónica"
+      },
+      "exhaust_fan_speed": {
+        "name": "Velocidad del ventilador de humos"
+      },
+      "transport_screw_speed": {
+        "name": "Velocidad del sinfín"
+      },
+      "next_maintenance": {
+        "name": "Próximo mantenimiento"
+      },
+      "motherboard_firmware": {
+        "name": "Firmware de la placa base"
+      },
+      "active_database": {
+        "name": "Base de datos activa"
+      },
+      "panel_firmware": {
+        "name": "Firmware del panel"
+      },
+      "ignition_count": {
+        "name": "Número de encendidos"
+      },
+      "total_operating_time": {
+        "name": "Tiempo total de funcionamiento"
+      },
+      "operating_time_power_1": {
+        "name": "Tiempo de funcionamiento a potencia 1"
+      },
+      "operating_time_power_2": {
+        "name": "Tiempo de funcionamiento a potencia 2"
+      },
+      "operating_time_power_3": {
+        "name": "Tiempo de funcionamiento a potencia 3"
+      },
+      "operating_time_power_4": {
+        "name": "Tiempo de funcionamiento a potencia 4"
+      },
+      "operating_time_power_5": {
+        "name": "Tiempo de funcionamiento a potencia 5"
+      },
+      "consumption_yesterday": {
+        "name": "Consumo de ayer",
+        "state_attributes": {
+          "consumption_date": {
+            "name": "Fecha del consumo"
+          },
+          "last_successful_update": {
+            "name": "Última actualización correcta"
+          }
+        }
+      }
+    },
+    "climate": {
+      "main_climate": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "manual": "Manual",
+              "auto": "Auto",
+              "overnight": "Nocturno",
+              "comfort": "Confort",
+              "turbo": "Turbo"
+            }
+          }
+        }
+      }
+    },
+    "fan": {
+      "main_fan": {
+        "name": "Ventilador {number}",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Auto",
+              "silent": "Silencioso"
+            }
+          }
+        }
+      },
+      "room_fan": {
+        "name": "Ventilador de ambiente",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Auto",
+              "silent": "Silencioso"
+            }
+          }
+        }
+      }
+    }
+  }
+}

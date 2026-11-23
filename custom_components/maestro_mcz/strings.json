@@ -28,7 +28,8 @@
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "already_configured": "Account is already configured",
+      "reauth_successful": "Reauthentication was successful",
       "unique_id_mismatch": "Sign in with the Maestro account already configured for this entry.",
       "reauth_not_supported": "Saved diagnostic reports do not use a cloud password. They cannot be reauthenticated."
     }
@@ -78,15 +79,185 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarm"
+      },
+      "pellet_level_low": {
+        "name": "Pellet level low"
+      },
+      "cloud_connection": {
+        "name": "Cloud connection status"
+      },
+      "device_connection": {
+        "name": "Device connection status"
+      }
+    },
+    "button": {
+      "alarm_reset": {
+        "name": "Alarm reset"
+      },
+      "system_date_time": {
+        "name": "Set system date & time"
+      }
+    },
+    "datetime": {
+      "date_time": {
+        "name": "Date & time"
+      }
+    },
+    "number": {
+      "ignition_delay": {
+        "name": "Start / stop - delay in ignition"
+      },
+      "shutdown_delay": {
+        "name": "Start / stop - delay in shutdown"
+      },
+      "start_stop_negative_hysteresis": {
+        "name": "Start / stop - negative hysteresis"
+      },
+      "start_stop_positive_hysteresis": {
+        "name": "Start / stop - positive hysteresis"
+      },
+      "ambient_negative_hysteresis": {
+        "name": "Ambient - negative hysteresis"
+      },
+      "ambient_positive_hysteresis": {
+        "name": "Ambient - positive hysteresis"
+      },
+      "circulation_pump_minimum_temperature": {
+        "name": "Circulation pump - on - minimum temperature"
+      }
+    },
+    "select": {
+      "manual_power": {
+        "name": "Manual power"
+      },
+      "tones": {
+        "name": "Tones",
+        "state": {
+          "silent": "Silent",
+          "normal": "Normal",
+          "high": "High"
+        }
+      }
+    },
+    "switch": {
+      "start_stop": {
+        "name": "Start / stop"
+      },
+      "timer": {
+        "name": "Timer"
+      }
+    },
     "sensor": {
+      "last_alarm": {
+        "name": "Last alarm code"
+      },
+      "current_state": {
+        "name": "Current state",
+        "state": {
+          "off": "Off",
+          "cleaning": "Cleaning",
+          "loading": "Loading phase",
+          "start-1": "Startup phase 1",
+          "start-2": "Startup phase 2",
+          "stabilization": "Stabilization",
+          "anti-condensation": "Anti-condensation phase",
+          "on": "On",
+          "turning-off": "Shutting down",
+          "cooling-down": "Cooling down",
+          "working": "Working",
+          "standby": "Standby",
+          "cleaning-hot": "Cleaning (hot)",
+          "cleaning-cold": "Cleaning (cold)",
+          "loading-hot": "Loading phase (hot)",
+          "loading-cold": "Loading phase (cold)",
+          "start-1-hot": "Startup phase 1 (hot)",
+          "start-1-cold": "Startup phase 1 (cold)",
+          "start-2-cold": "Startup phase 2 (cold)",
+          "cleaning-high": "Cleaning (High)",
+          "power-1": "Power 1",
+          "power-2": "Power 2",
+          "power-3": "Power 3",
+          "power-4": "Power 4",
+          "power-5": "Power 5",
+          "safety-alarm-wait": "Safety alarm wait",
+          "turning-off-1": "Shutdown phase 1",
+          "turning-off-2": "Shutdown phase 2",
+          "hypercombustion": "Over-firing shutdown",
+          "alarm": "Alarm",
+          "cold-test": "Cold test",
+          "feed-screw-loading": "Feed screw loading",
+          "power-on": "Power on",
+          "alarm-a01": "A01 - Ignition alarm",
+          "alarm-a02": "A02 - Flame alarm",
+          "alarm-a03": "A03 - Pellet safety alarm",
+          "alarm-a04": "A04 - Flue-gas temperature alarm",
+          "alarm-a05": "A05 - Obstruction alarm",
+          "alarm-a07": "A07 - Water temperature alarm",
+          "alarm-a08": "A08 - Flue-gas fan alarm",
+          "alarm-a09": "A09 - Thermocouple alarm",
+          "alarm-a11": "A11 - Auger alarm",
+          "alarm-a12": "A12 - Gear motor sensor alarm",
+          "alarm-a13": "A13 - Circuit board temperature alarm",
+          "alarm-a14": "A14 - Active sensor alarm",
+          "alarm-a17": "A17 - Auger lock alarm",
+          "alarm-a18": "A18 - Water safety thermostat alarm",
+          "alarm-a19": "A19 - Water sensor alarm",
+          "alarm-a20": "A20 - Auxiliary sensor alarm",
+          "alarm-a21": "A21 - Safety alarm",
+          "alarm-a22": "A22 - Room sensor alarm",
+          "alarm-a23": "A23 - Brazier closure alarm",
+          "alarm-a24": "A24 - Pump fault",
+          "alarm-a99": "A99 - Power supply alarm"
+        }
+      },
+      "ambient_temperature": {
+        "name": "Ambient temperature"
+      },
+      "water_temperature": {
+        "name": "Water temperature"
+      },
+      "puffer_temperature": {
+        "name": "Buffer tank temperature"
+      },
+      "wifi_probe_temperature": {
+        "name": "Wi-Fi probe temperature"
+      },
+      "current_mode": {
+        "name": "Current mode",
+        "state": {
+          "manual": "Manual",
+          "auto": "Auto",
+          "overnight": "Overnight",
+          "comfort": "Comfort",
+          "turbo": "Turbo"
+        }
+      },
+      "exhaust_temperature": {
+        "name": "Exhaust temperature"
+      },
+      "board_temperature": {
+        "name": "Board temperature"
+      },
+      "exhaust_fan_speed": {
+        "name": "Exhaust fan speed"
+      },
+      "transport_screw_speed": {
+        "name": "Auger screw speed"
+      },
+      "next_maintenance": {
+        "name": "Next maintenance"
+      },
       "motherboard_firmware": {
-        "name": "Firmware motherboard"
+        "name": "Motherboard firmware"
       },
       "active_database": {
         "name": "Active database"
       },
       "panel_firmware": {
-        "name": "Firmware panel"
+        "name": "Panel firmware"
       },
       "ignition_count": {
         "name": "Ignition count"
@@ -138,6 +309,18 @@
     },
     "fan": {
       "main_fan": {
+        "name": "Fan {number}",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Auto",
+              "silent": "Silent"
+            }
+          }
+        }
+      },
+      "room_fan": {
+        "name": "Room fan",
         "state_attributes": {
           "preset_mode": {
             "state": {
