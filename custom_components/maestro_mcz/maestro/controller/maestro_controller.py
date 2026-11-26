@@ -152,7 +152,7 @@ class MaestroController(MaestroControllerInterface):
                     self._token = token
                     _LOGGER.debug("Login successful, token acquired")
                     return
-                if resp.status in (401, 403):
+                if resp.status in (400, 401, 403):
                     raise MaestroAuthenticationException(
                         f"Failed to login with status {resp.status}"
                     )

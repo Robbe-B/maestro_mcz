@@ -83,6 +83,7 @@ async def test_login_sends_credentials_and_keeps_token(api):
 @pytest.mark.parametrize(
     ("context", "exception", "attempts"),
     [
+        (response(status=400), MaestroAuthenticationException, 1),
         (response(status=401), MaestroAuthenticationException, 1),
         (response(status=403), MaestroAuthenticationException, 1),
         (response(status=500), MaestroConnectionException, 3),
@@ -266,13 +267,16 @@ async def test_login_connection_failure_propagates_without_retry(api, expired_to
 
 
 @pytest.mark.parametrize("expired_token", [False, True])
-async def test_rejected_password_propagates_during_requests(api, expired_token):
+@pytest.mark.parametrize("login_status", [400, 401, 403])
+async def test_rejected_password_propagates_during_requests(
+    api, expired_token, login_status
+):
     """Tell HA the password must change even when failure happens during token renewal."""
     # 1. Start logged out, or with a token that the service will reject.
     if expired_token:
         api._token = "expired-test-token"
         api._session.request.return_value = response(status=401)
-    api._session.post.return_value = response(status=401)
+    api._session.post.return_value = response(status=login_status)
     # 2. Request an update using the old saved password.
     with pytest.raises(MaestroAuthenticationException):
         await api.make_request("GET", "https://example.test")
@@ -280,6 +284,32 @@ async def test_rejected_password_propagates_during_requests(api, expired_token):
     assert not api.is_authenticated
     api._session.post.assert_called_once()
     assert api._session.request.call_count == int(expired_token)
+
+
+async def test_rejected_login_400_starts_automatic_setup_reauth(api, hass, entry):
+    """Ask for the changed password automatically instead of repeatedly retrying setup."""
+    # 1. The cloud rejects the saved password with HTTP 400 during real account login.
+    api._session.post.return_value = response(status=400)
+    saved_account_data = dict(entry.data)
+    with (
+        patch("custom_components.maestro_mcz.MaestroController", return_value=api),
+        patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
+    ):
+        # 2. Let Home Assistant set up the account without a manual recovery trigger.
+        setup_succeeded = await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    # 3. Recovery targets the same account and leaves its saved credentials unchanged.
+    assert setup_succeeded is False
+    pending_flows = hass.config_entries.flow.async_progress()
+    assert len(pending_flows) == 1
+    recovery_flow = pending_flows[0]
+    assert recovery_flow["step_id"] == "reauth_confirm"
+    assert recovery_flow["context"]["source"] == "reauth"
+    assert recovery_flow["context"]["entry_id"] == entry.entry_id
+    assert entry.data == saved_account_data
+    api._session.post.assert_called_once()
+    api._session.request.assert_not_called()
 
 
 @pytest.mark.parametrize("already_authenticated", [False, True])
