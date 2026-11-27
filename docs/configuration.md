@@ -35,6 +35,8 @@ This integration reads updates through the cloud, not directly from the stove.
 
 After changing a setting, allow several seconds for the displayed value to update. Slow internet or cloud responses can add to the delay. More frequent updates do not guarantee a faster response to commands.
 
+Commands are sent immediately. Changes made close together share the same follow-up updates, while displayed values remain based on what the cloud reports.
+
 Allow the state to settle before repeating a command. If the official app also shows stale information, check the stove or cloud connection.
 
 ## Operating modes and controls

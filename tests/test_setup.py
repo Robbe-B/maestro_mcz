@@ -1,5 +1,7 @@
 """Setup, coordinator lifecycle, and error propagation regression coverage."""
 
+import asyncio
+from contextlib import suppress
 from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
@@ -698,3 +700,114 @@ async def test_coordinator_delayed_refresh_contract(coordinator):
     # 3. Both follow-up reads retain their three-second settling delay.
     assert [args.args for args in sleep.await_args_list] == [(3,), (3,)]
     assert refresh.await_count == 2
+
+
+async def test_overlapping_commands_share_refreshes(coordinator):
+    """Share follow-up reads without delaying commands or multiplying cloud requests."""
+    # 1. Hold the first cloud read open while another command requests updates.
+    refresh_started = asyncio.Event()
+    release_refresh = asyncio.Event()
+
+    async def read_cloud():
+        refresh_started.set()
+        await release_refresh.wait()
+
+    with (
+        patch(
+            "custom_components.maestro_mcz.coordinator.asyncio.sleep",
+            new_callable=AsyncMock,
+        ) as sleep,
+        patch.object(coordinator, "async_refresh", side_effect=read_cloud) as refresh,
+    ):
+        first_caller = asyncio.create_task(
+            MczAccountCoordinator.update_data_after_set(coordinator)
+        )
+        await refresh_started.wait()
+        # 2. Join the running sequence rather than starting another pair of reads.
+        second_caller = asyncio.create_task(
+            MczAccountCoordinator.update_data_after_set(coordinator)
+        )
+        release_refresh.set()
+        await asyncio.gather(first_caller, second_caller)
+
+        # 3. Both callers share two reads; a later command gets a fresh sequence.
+        assert refresh.await_count == 2
+        assert [call.args for call in sleep.await_args_list] == [(3,), (3,)]
+        await MczAccountCoordinator.update_data_after_set(coordinator)
+        assert refresh.await_count == 4
+        assert coordinator._command_refresh_task is None
+
+
+async def test_cancelled_caller_does_not_cancel_shared_refreshes(coordinator):
+    """Keep refreshing for another command when one service caller goes away."""
+    # 1. Pause a shared cloud read so one caller can be cancelled midway.
+    refresh_started = asyncio.Event()
+    release_refresh = asyncio.Event()
+
+    async def read_cloud():
+        refresh_started.set()
+        await release_refresh.wait()
+
+    with (
+        patch(
+            "custom_components.maestro_mcz.coordinator.asyncio.sleep",
+            new_callable=AsyncMock,
+        ),
+        patch.object(coordinator, "async_refresh", side_effect=read_cloud) as refresh,
+    ):
+        first_caller = asyncio.create_task(
+            MczAccountCoordinator.update_data_after_set(coordinator)
+        )
+        await refresh_started.wait()
+        second_caller = asyncio.create_task(
+            MczAccountCoordinator.update_data_after_set(coordinator)
+        )
+        # 2. Cancelling one caller must not cancel the shared work.
+        first_caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first_caller
+        release_refresh.set()
+        await second_caller
+
+    # 3. The other caller still receives both scheduled reads.
+    assert refresh.await_count == 2
+    assert coordinator._command_refresh_task is None
+
+
+@pytest.mark.parametrize("during_refresh", [False, True])
+async def test_shared_refreshes_stop_on_unload(coordinator, during_refresh):
+    """Stop pending waits and active reads on unload, with no follow-up work afterward."""
+    # 1. Pause either the propagation wait or the cloud read.
+    work_started = asyncio.Event()
+    never_released = asyncio.Event()
+
+    async def pause_work(*_args):
+        work_started.set()
+        await never_released.wait()
+
+    with (
+        patch(
+            "custom_components.maestro_mcz.coordinator.asyncio.sleep",
+            side_effect=None if during_refresh else pause_work,
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            coordinator,
+            "async_refresh",
+            side_effect=pause_work if during_refresh else None,
+            new_callable=AsyncMock,
+        ) as refresh,
+    ):
+        caller = asyncio.create_task(
+            MczAccountCoordinator.update_data_after_set(coordinator)
+        )
+        await work_started.wait()
+        # 2. Unload the coordinator while the shared sequence is still running.
+        await coordinator.async_shutdown()
+        with suppress(asyncio.CancelledError):
+            await caller
+        await MczAccountCoordinator.update_data_after_set(coordinator)
+
+    # 3. No second read or new sequence may survive unload.
+    assert refresh.await_count == int(during_refresh)
+    assert coordinator._command_refresh_task is None

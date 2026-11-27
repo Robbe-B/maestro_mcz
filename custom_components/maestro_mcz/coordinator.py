@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, tzinfo
 
@@ -68,6 +69,8 @@ class MczAccountCoordinator(DataUpdateCoordinator[None]):
         self._account = account
         self.consumption_coordinators: dict[str, MczConsumptionCoordinator] = {}
         self.counters_coordinators: dict[str, MczCountersCoordinator] = {}
+        self._command_refresh_task: asyncio.Task[None] | None = None
+        self._commands_stopped = False
 
     async def _async_setup(self) -> None:
         """Set up the coordinator."""
@@ -128,15 +131,40 @@ class MczAccountCoordinator(DataUpdateCoordinator[None]):
                     sw_version=device_info.sw_version,
                 )
 
-    async def update_data_after_set(
-        self,
-    ) -> None:  # should be revised in the future to be more efficient
-        """Force refresh of data from API endpoint after a SET was executed."""
-        # we need to wait here because there is an actual delay between sending a SET and receiving the updated value from the polled MCZ database
-        await asyncio.sleep(3)
-        await self.async_refresh()
-        await asyncio.sleep(3)
-        await self.async_refresh()
+    async def update_data_after_set(self) -> None:
+        """Share the existing delayed refresh sequence across overlapping commands."""
+        if self._commands_stopped:
+            return
+        if self._command_refresh_task is None:
+            assert self.config_entry is not None
+            self._command_refresh_task = self.config_entry.async_create_background_task(
+                self.hass,
+                self._async_refresh_after_set(),
+                name=f"{self.name} post-command refresh",
+                eager_start=False,
+            )
+        # Cancelling one service caller must not cancel another caller's refreshes.
+        await asyncio.shield(self._command_refresh_task)
+
+    async def _async_refresh_after_set(self) -> None:
+        """Allow the cloud to propagate a change before each of the two reads."""
+        try:
+            await asyncio.sleep(3)
+            await self.async_refresh()
+            await asyncio.sleep(3)
+            await self.async_refresh()
+        finally:
+            self._command_refresh_task = None
+
+    async def async_shutdown(self) -> None:
+        """Cancel shared post-command work along with ordinary polling on unload."""
+        self._commands_stopped = True
+        if (task := self._command_refresh_task) is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._command_refresh_task = None
+        await super().async_shutdown()
 
     @property
     def stoves(self) -> Mapping[str, MaestroStove]:
