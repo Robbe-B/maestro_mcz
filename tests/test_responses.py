@@ -4,10 +4,10 @@ from dataclasses import asdict, fields
 
 import pytest
 
-from custom_components.maestro_mcz.maestro.controller.responses.model import Model
-from custom_components.maestro_mcz.maestro.controller.responses.state import State
-from custom_components.maestro_mcz.maestro.controller.responses.status import Status
-from custom_components.maestro_mcz.maestro.controller.responses.stove_info import (
+from custom_components.maestro_mcz.maestro.cloud.responses.model import Model
+from custom_components.maestro_mcz.maestro.cloud.responses.state import State
+from custom_components.maestro_mcz.maestro.cloud.responses.status import Status
+from custom_components.maestro_mcz.maestro.cloud.responses.stove_info import (
     AccessControl,
     Node,
     StoveInfo,

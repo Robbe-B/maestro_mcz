@@ -1,10 +1,10 @@
 """Consumption history stays dated, optional, and separate from live controls."""
 
 import asyncio
+import json
 from copy import deepcopy
 from dataclasses import replace
 from datetime import date, timedelta
-import json
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -15,20 +15,20 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant.common import async_fire_time_changed
 
-from custom_components.maestro_mcz.coordinator import MczConsumptionCoordinator
 from custom_components.maestro_mcz.const import DOMAIN
+from custom_components.maestro_mcz.coordinator import MczConsumptionCoordinator
 from custom_components.maestro_mcz.diagnostics import async_get_config_entry_diagnostics
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.consumption import (
+from custom_components.maestro_mcz.maestro.cloud.responses.consumption import (
     ConsumptionHistory,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.model import (
+from custom_components.maestro_mcz.maestro.cloud.responses.model import (
     ModelConfiguration,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.stove_info import StoveInfo
+from custom_components.maestro_mcz.maestro.cloud.responses.stove_info import StoveInfo
 from custom_components.maestro_mcz.sensor import MczYesterdayConsumptionSensor
 
 
@@ -624,7 +624,7 @@ async def test_m1_stoves_are_never_queried_for_consumption(
                 sensor_configuration.sensor_name = power_sensor
     # Skip command delays already covered by stove tests; this clock is frozen.
     monkeypatch.setattr(
-        "custom_components.maestro_mcz.maestro.cloud_provider.CloudStoveProvider.async_ping_m1_configuration",
+        "custom_components.maestro_mcz.maestro.cloud.provider.CloudStoveProvider.async_ping_m1_configuration",
         AsyncMock(),
     )
     older_model.model_configurations.append(

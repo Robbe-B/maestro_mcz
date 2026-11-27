@@ -15,13 +15,13 @@ from homeassistant.util.percentage import (
 )
 
 from .coordinator import MczAccountCoordinator, MczConfigEntry
-from .maestro import MaestroStove, get_control_names
-from .maestro.controller.responses.model import (
+from .maestro.cloud.model_value_reader import get_response_value, read_response_value
+from .maestro.cloud.responses.model import (
     SensorConfiguration,
     SensorConfigurationMultipleModes,
 )
-from .maestro.model_value_reader import get_response_value, read_response_value
 from .maestro.models import model_definitions, models_types
+from .maestro.stove import MaestroStove, get_control_names
 from .maestro.types.enums import SensorTypeEnum
 
 _LOGGER = logging.getLogger(__name__)

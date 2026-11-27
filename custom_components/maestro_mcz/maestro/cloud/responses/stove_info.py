@@ -1,7 +1,7 @@
 """Parse account-linked stove records and their nested device/access metadata."""
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 from ..response_types import JsonObject
 

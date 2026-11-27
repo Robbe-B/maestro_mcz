@@ -4,15 +4,15 @@ import asyncio
 import logging
 from collections.abc import Callable
 
-from .controller.controller_interface import MaestroControllerInterface
-from .controller.maestro_controller import (
+from .controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
-from .controller.requests.activate_program import ProgramCommand
-from .controller.responses.model import SensorConfiguration
-from .controller.responses.state import State
-from .controller.responses.status import Status
+from .controller.controller_interface import MaestroControllerInterface
+from .requests.activate_program import ProgramCommand
+from .responses.model import SensorConfiguration
+from .responses.state import State
+from .responses.status import Status
 
 _LOGGER = logging.getLogger(__name__)
 

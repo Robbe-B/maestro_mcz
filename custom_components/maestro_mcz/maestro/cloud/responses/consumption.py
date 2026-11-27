@@ -1,8 +1,8 @@
 """Dated consumption estimates returned by the Maestro history service."""
 
+import math
 from dataclasses import dataclass
 from datetime import date, datetime
-import math
 from typing import Self
 
 

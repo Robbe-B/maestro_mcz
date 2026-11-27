@@ -16,26 +16,30 @@ from custom_components.maestro_mcz.maestro import (
     MaestroStoveDeviceMetadata,
 )
 from custom_components.maestro_mcz.maestro.account import MaestroAccount
-from custom_components.maestro_mcz.maestro.cloud_provider import CloudStoveProvider
-from custom_components.maestro_mcz.maestro.controller import maestro_controller
-from custom_components.maestro_mcz.maestro.controller.const import (
+from custom_components.maestro_mcz.maestro.cloud.const import (
     ACTIVATE_PROGRAM_URL,
     PING_URL,
 )
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller import (
+    controller as maestro_controller,
+)
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
     MaestroController,
 )
-from custom_components.maestro_mcz.maestro.controller.requests.activate_program import (
+from custom_components.maestro_mcz.maestro.cloud.model_value_reader import (
+    get_response_value,
+)
+from custom_components.maestro_mcz.maestro.cloud.provider import CloudStoveProvider
+from custom_components.maestro_mcz.maestro.cloud.requests.activate_program import (
     ProgramCommand,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.model import (
+from custom_components.maestro_mcz.maestro.cloud.responses.model import (
     Model,
     ModelConfiguration,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.status import Status
-from custom_components.maestro_mcz.maestro.model_value_reader import get_response_value
+from custom_components.maestro_mcz.maestro.cloud.responses.status import Status
 from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
 
 
@@ -736,7 +740,7 @@ async def test_m1_refresh_requests_parameters_then_info(stove, controller, m1_pi
 
     controller.activate_program_with_commands_for_stove.side_effect = record_activation
     with patch(
-        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
         side_effect=record_wait,
     ):
         # 2. Run one normal refresh, with the waits recorded rather than performed.
@@ -793,7 +797,7 @@ async def test_m1_refresh_ignores_empty_ping_and_overview_groups(
 
     # 2. Refresh normally, recording the pauses rather than waiting in real time.
     with patch(
-        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
         new_callable=AsyncMock,
     ) as sleep:
         await stove.refresh()
@@ -832,7 +836,7 @@ async def test_m1_cloud_request_serialization_and_rejection(
             side_effect=None if accepted else failure,
         ) as request,
         patch(
-            "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+            "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
             new_callable=AsyncMock,
         ),
     ):
@@ -931,7 +935,7 @@ async def test_m1_ping_failure_stops_refresh(
     with (
         patch.object(stove, "_on_authentication_failed") as start_reauth,
         patch(
-            "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+            "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
             new_callable=AsyncMock,
         ) as sleep,
         pytest.raises(error, match="ping rejected"),
@@ -1008,7 +1012,7 @@ async def test_m2_refresh_uses_only_dedicated_ping(
     controller.activate_program_with_commands_for_stove.side_effect = record_activation
     controller.do_ping_for_stove.side_effect = record_cloud_ping
     with patch(
-        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
         new_callable=AsyncMock,
     ) as sleep:
         # 2. Refresh the stove and record any attempted ping operations.
@@ -1354,7 +1358,7 @@ async def test_m1_read_failure_recovers_on_next_cycle(
         activation_results.insert(0, None)
     controller.activate_program_with_commands_for_stove.side_effect = activation_results
     with patch(
-        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
         new_callable=AsyncMock,
     ):
         # 2. Observe the failure, then allow the cloud to respond normally again.
@@ -1387,7 +1391,7 @@ async def test_m1_descriptor_takes_priority_over_m2(stove, controller, m1_ping, 
     group.configurations.append(m2_ping)
     controller.reset_mock()
     with patch(
-        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
         new_callable=AsyncMock,
     ):
         # 2. Run one refresh without waiting in real time.
@@ -1418,7 +1422,7 @@ async def test_mixed_generation_account_keeps_ping_requests_separate(
     coordinator = MczAccountCoordinator(hass, entry, "mixed", account)
     controller.reset_mock()
     with patch(
-        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
         new_callable=AsyncMock,
     ) as sleep:
         # 2. Refresh both stoves through their shared account.

@@ -34,22 +34,22 @@ from custom_components.maestro_mcz.fan import (
     MczFanEntity,
     get_supported_fan_configurations,
 )
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.model import (
-    Configuration,
-    ModelConfiguration,
-    SensorConfiguration,
-)
-from custom_components.maestro_mcz.maestro.controller.responses.state import State
-from custom_components.maestro_mcz.maestro.controller.responses.status import Status
-from custom_components.maestro_mcz.maestro.model_value_reader import (
+from custom_components.maestro_mcz.maestro.cloud.model_value_reader import (
     get_response_value,
     normalize_sensor_value,
     read_response_value,
 )
+from custom_components.maestro_mcz.maestro.cloud.responses.model import (
+    Configuration,
+    ModelConfiguration,
+    SensorConfiguration,
+)
+from custom_components.maestro_mcz.maestro.cloud.responses.state import State
+from custom_components.maestro_mcz.maestro.cloud.responses.status import Status
 from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
 from custom_components.maestro_mcz.maestro.types.enums import SensorTypeEnum
 from custom_components.maestro_mcz.sensor import MczSensorEntity

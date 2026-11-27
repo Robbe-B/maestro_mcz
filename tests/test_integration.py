@@ -19,21 +19,21 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maestro_mcz import async_remove_config_entry_device
 from custom_components.maestro_mcz.const import DOMAIN
-from custom_components.maestro_mcz.maestro.cloud_provider import CloudStoveProvider
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.consumption import (
+from custom_components.maestro_mcz.maestro.cloud.provider import CloudStoveProvider
+from custom_components.maestro_mcz.maestro.cloud.responses.consumption import (
     ConsumptionHistory,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
-from custom_components.maestro_mcz.maestro.controller.responses.model import (
+from custom_components.maestro_mcz.maestro.cloud.responses.counters import Counters
+from custom_components.maestro_mcz.maestro.cloud.responses.model import (
     Configuration,
     ModelConfiguration,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.status import Status
-from custom_components.maestro_mcz.maestro.controller.responses.stove_info import (
+from custom_components.maestro_mcz.maestro.cloud.responses.status import Status
+from custom_components.maestro_mcz.maestro.cloud.responses.stove_info import (
     StoveInfo,
 )
 
@@ -329,7 +329,7 @@ async def test_system_info_sensors_discover_once_and_follow_live_availability(
         ),
         patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
         patch(
-            "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+            "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
             new_callable=AsyncMock,
         ),
     ):

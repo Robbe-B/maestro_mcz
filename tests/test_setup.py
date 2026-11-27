@@ -31,7 +31,7 @@ from custom_components.maestro_mcz.coordinator import (
 )
 from custom_components.maestro_mcz.maestro import MaestroStove
 from custom_components.maestro_mcz.maestro.account import MaestroAccount
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
     MaestroController,

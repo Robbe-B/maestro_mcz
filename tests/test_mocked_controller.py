@@ -14,10 +14,10 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.maestro_mcz.const import DOMAIN
 from custom_components.maestro_mcz.maestro import MaestroStove
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroConnectionException,
 )
-from custom_components.maestro_mcz.maestro.controller.mocked_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.mocked_controller import (
     MockedController,
     _load_mocked_file,
 )
@@ -253,7 +253,7 @@ async def test_report_loading_runs_off_event_loop_and_closes_file(
         return original_load(handle)
 
     # 2. Replay reads the report using the normal executor path.
-    module = "custom_components.maestro_mcz.maestro.controller.mocked_controller"
+    module = "custom_components.maestro_mcz.maestro.cloud.controller.mocked_controller"
     with (
         patch(f"{module}.open", side_effect=tracked_open, create=True),
         patch(f"{module}.json.load", side_effect=tracked_load),
@@ -302,7 +302,7 @@ async def test_file_discovery_runs_off_event_loop(replay, tmp_path):
         sort_threads.append(get_ident())
         return original_getmtime(path)
 
-    module = "custom_components.maestro_mcz.maestro.controller.mocked_controller"
+    module = "custom_components.maestro_mcz.maestro.cloud.controller.mocked_controller"
     with (
         patch(f"{module}.os.listdir", side_effect=tracked_listdir),
         patch(f"{module}.Path.is_file", autospec=True, side_effect=tracked_is_file),
@@ -329,7 +329,7 @@ async def test_missing_replay_directory(replay):
     """Handle a missing report folder without pretending there are available stoves."""
     # 1. Pretend the report directory cannot be opened.
     with patch(
-        "custom_components.maestro_mcz.maestro.controller.mocked_controller.os.listdir",
+        "custom_components.maestro_mcz.maestro.cloud.controller.mocked_controller.os.listdir",
         side_effect=OSError("missing"),
     ):
         # 2. There are no files or stoves to replay.
@@ -438,7 +438,7 @@ async def test_duplicate_reports_use_the_newest_file(
 
     # 2. Load files in either directory order and refresh the single virtual stove.
     with patch(
-        "custom_components.maestro_mcz.maestro.controller.mocked_controller.os.listdir",
+        "custom_components.maestro_mcz.maestro.cloud.controller.mocked_controller.os.listdir",
         return_value=directory_order,
     ):
         stove_infos = await replay.retrieve_linked_stove_infos()

@@ -14,12 +14,12 @@ from .coordinator import (
     MczConsumptionCoordinator,
     MczCountersCoordinator,
 )
-from .maestro import MaestroStove
-from .maestro.model_value_reader import (
+from .maestro.cloud.model_value_reader import (
     get_counter_value,
     get_response_value,
 )
 from .maestro.models import model_definitions, models_types
+from .maestro.stove import MaestroStove
 
 PARALLEL_UPDATES = 0
 

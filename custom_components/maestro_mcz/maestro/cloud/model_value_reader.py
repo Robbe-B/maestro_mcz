@@ -8,17 +8,17 @@ coverage diagnostics and logging policy belong to callers outside this reader.
 import re
 from typing import cast
 
-from .controller.responses.counters import Counters
-from .controller.responses.state import State
-from .controller.responses.status import Status
-from .models.model_definitions import SUPPORTED_ALARM_CODES
-from .models.models_types import (
+from ..models.model_definitions import SUPPORTED_ALARM_CODES
+from ..models.models_types import (
     CounterMczConfigItem,
     MczConfigItem,
     MczResponseSource,
     MczStoveModelGeneration,
     SensorMczConfigItem,
 )
+from .responses.counters import Counters
+from .responses.state import State
+from .responses.status import Status
 
 
 def read_response_value(

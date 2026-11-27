@@ -10,9 +10,9 @@ from homeassistant.util import dt as dt_util
 
 from .coordinator import MczAccountCoordinator, MczConfigEntry
 from .datetime import MczDateTimeEntity
-from .maestro import MaestroStove
-from .maestro.controller.responses.model import SensorConfiguration
+from .maestro.cloud.responses.model import SensorConfiguration
 from .maestro.models import model_definitions, models_types
+from .maestro.stove import MaestroStove
 from .maestro.types.enums import SensorTypeEnum
 
 

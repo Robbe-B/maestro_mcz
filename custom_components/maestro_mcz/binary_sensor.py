@@ -12,9 +12,9 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import MczAccountCoordinator, MczConfigEntry
-from .maestro import MaestroStove
-from .maestro.model_value_reader import get_response_value
+from .maestro.cloud.model_value_reader import get_response_value
 from .maestro.models import model_definitions, models_types
+from .maestro.stove import MaestroStove
 
 
 def _binary_sensor_enabled(

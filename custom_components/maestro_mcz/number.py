@@ -13,10 +13,10 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import MczAccountCoordinator, MczConfigEntry
-from .maestro import MaestroStove
-from .maestro.controller.responses.model import SensorConfiguration
-from .maestro.model_value_reader import get_response_value
+from .maestro.cloud.model_value_reader import get_response_value
+from .maestro.cloud.responses.model import SensorConfiguration
 from .maestro.models import model_definitions, models_types
+from .maestro.stove import MaestroStove
 from .maestro.types.enums import SensorTypeEnum
 
 
