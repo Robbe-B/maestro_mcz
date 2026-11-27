@@ -33,13 +33,13 @@ from .coordinator import (
     MczRuntimeData,
 )
 from .maestro.account import MaestroAccount
-from .maestro.controller.controller_interface import MaestroControllerInterface
-from .maestro.controller.maestro_controller import (
+from .maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
     MaestroController,
 )
-from .maestro.controller.mocked_controller import MockedController
+from .maestro.cloud.controller.controller_interface import MaestroControllerInterface
+from .maestro.cloud.controller.mocked_controller import MockedController
 from .maestro.models.models_types import MczStoveModelGeneration
 from .model_cache import ModelCache
 

@@ -82,8 +82,58 @@ Within `custom_components\maestro_mcz\maestro`:
   enums, and genuinely generic defaults.
 - `models\model_definitions.py` holds the supported and legacy feature catalogue,
   concrete API field/control bindings, and feature-specific configuration.
-- `model_value_reader.py` reads the declared field from the selected cached
+- `cloud\model_value_reader.py` reads the declared field from the selected cached
   State/Status response; it does not fetch HTTP responses.
+
+# Live communication
+
+`maestro\stove.py` contains `MaestroStove`: identity, model loading/matching,
+entity-facing behavior, and device metadata interpretation. Import it directly
+from new code; `maestro\__init__.py` only preserves existing public stove imports.
+
+`maestro\cloud\provider.py` owns per-stove cloud ping sequences, live requests,
+cached State/Status replies, connection tracking, and command dispatch.
+`cloud\controller\controller.py` owns account authentication, HTTP requests,
+and retries. Its interface and saved-report client live alongside it in
+`cloud\controller`. Import directly from those modules; the controller package's
+`__init__.py` is descriptive only, with no re-exports or initialization logic.
+Request/response formats and the cached-response reader remain directly under
+`cloud`, outside the controller package. These are not transport-neutral
+contracts and BLE must not be made to implement them.
+
+`maestro\account.py` owns Cloud account discovery, the linked-stove collection,
+and account-wide refresh failure policy. `coordinator.py` owns Home Assistant
+polling, post-command refresh scheduling, and device-registry synchronization.
+Consumption history and lifetime statistics remain separate from live readings;
+the live provider must not fetch them.
+
+Home Assistant setup, platforms, coordinators, and model storage stay at the
+integration root. `model_cache.py` only saves complete model definitions after
+confirmed live Cloud fetches; replay data must not populate this storage.
+Snapshots contain no credentials or live readings and are not currently read
+as an offline startup or runtime fallback. Do not put entity selection or model
+storage inside a transport provider.
+
+# Shared transport direction
+
+The current stove API still uses Cloud response and command formats. The folder
+layout separates responsibilities but does not yet provide transport-neutral
+operations or BLE support.
+
+- Keep one physical stove identity and one set of Home Assistant entities,
+  preserving unique IDs and existing automation-facing behavior.
+- Shared operations should describe feature meanings, not Cloud payloads.
+  Keep Cloud and BLE bindings separate; do not manufacture Cloud responses in
+  BLE or duplicate the entity-facing feature hierarchy for each transport.
+- Distinguish reading support from command support. Future availability and
+  routing must be per feature; working BLE readings must not imply supported
+  writes, and Cloud failure must not disable healthy BLE-backed features.
+- Do not automatically resend a command over another transport when its
+  outcome is uncertain.
+
+Introduce shared provider contracts and a BLE package when implementing their
+behavior, not as empty scaffolding. Establish shared operations through the
+working Cloud path before implementing the corresponding BLE operations.
 
 # Entity naming
 

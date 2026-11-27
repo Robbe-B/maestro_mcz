@@ -1,16 +1,16 @@
-"""Interface for controller."""
+"""Describe the Cloud-shaped operations used by live and saved-report clients."""
 
 from collections.abc import Callable
 from datetime import date
 from typing import Protocol
 
-from .requests.activate_program import ProgramCommand
-from .responses.consumption import ConsumptionHistory
-from .responses.counters import Counters
-from .responses.model import Model
-from .responses.state import State
-from .responses.status import Status
-from .responses.stove_info import StoveInfo
+from ..requests.activate_program import ProgramCommand
+from ..responses.consumption import ConsumptionHistory
+from ..responses.counters import Counters
+from ..responses.model import Model
+from ..responses.state import State
+from ..responses.status import Status
+from ..responses.stove_info import StoveInfo
 
 
 class MaestroControllerInterface(Protocol):

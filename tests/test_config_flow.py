@@ -12,7 +12,7 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maestro_mcz.config_flow import MCZConfigFlow
 from custom_components.maestro_mcz.const import DOMAIN
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )

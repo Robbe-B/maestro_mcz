@@ -5,9 +5,9 @@ from collections.abc import Callable, Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from types import MappingProxyType
 
-from . import MaestroStove, ModelFetchedCallback
-from .controller.controller_interface import MaestroControllerInterface
-from .controller.maestro_controller import MaestroConnectionException
+from .cloud.controller.controller import MaestroConnectionException
+from .cloud.controller.controller_interface import MaestroControllerInterface
+from .stove import MaestroStove, ModelFetchedCallback
 
 _LOGGER = logging.getLogger(__name__)
 

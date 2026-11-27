@@ -14,10 +14,10 @@ from homeassistant.util.file import WriteError
 from homeassistant.util.json import SerializationError
 
 from custom_components.maestro_mcz.maestro.account import MaestroAccount
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroConnectionException,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.model import Model
+from custom_components.maestro_mcz.maestro.cloud.responses.model import Model
 from custom_components.maestro_mcz.model_cache import ModelCache
 
 

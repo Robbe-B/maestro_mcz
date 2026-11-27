@@ -1,4 +1,4 @@
-"""Representation of a MaestroController."""
+"""Handle Cloud account requests, authentication, and bounded retries."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from email.utils import parsedate_to_datetime
 
 import aiohttp
 
-from .const import (
+from ..const import (
     ACTIVATE_PROGRAM_URL,
     APPLIANCE_URL,
     CONSUMPTION_URL,
@@ -25,15 +25,15 @@ from .const import (
     STOVE_MODEL_URL,
     TENTANT_ID,
 )
+from ..requests.activate_program import ActivateProgramRequest, ProgramCommand
+from ..response_types import require_json_object
+from ..responses.consumption import ConsumptionHistory
+from ..responses.counters import Counters
+from ..responses.model import Model
+from ..responses.state import State
+from ..responses.status import Status
+from ..responses.stove_info import StoveInfo
 from .controller_interface import MaestroControllerInterface
-from .requests.activate_program import ActivateProgramRequest, ProgramCommand
-from .response_types import require_json_object
-from .responses.consumption import ConsumptionHistory
-from .responses.counters import Counters
-from .responses.model import Model
-from .responses.state import State
-from .responses.status import Status
-from .responses.stove_info import StoveInfo
 
 _LOGGER = logging.getLogger(__name__)
 

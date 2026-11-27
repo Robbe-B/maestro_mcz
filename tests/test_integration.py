@@ -19,21 +19,21 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.maestro_mcz import async_remove_config_entry_device
 from custom_components.maestro_mcz.const import DOMAIN
-from custom_components.maestro_mcz.maestro import MaestroStove
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.consumption import (
+from custom_components.maestro_mcz.maestro.cloud.provider import CloudStoveProvider
+from custom_components.maestro_mcz.maestro.cloud.responses.consumption import (
     ConsumptionHistory,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
-from custom_components.maestro_mcz.maestro.controller.responses.model import (
+from custom_components.maestro_mcz.maestro.cloud.responses.counters import Counters
+from custom_components.maestro_mcz.maestro.cloud.responses.model import (
     Configuration,
     ModelConfiguration,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.status import Status
-from custom_components.maestro_mcz.maestro.controller.responses.stove_info import (
+from custom_components.maestro_mcz.maestro.cloud.responses.status import Status
+from custom_components.maestro_mcz.maestro.cloud.responses.stove_info import (
     StoveInfo,
 )
 
@@ -329,7 +329,7 @@ async def test_system_info_sensors_discover_once_and_follow_live_availability(
         ),
         patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
         patch(
-            "custom_components.maestro_mcz.maestro.asyncio.sleep",
+            "custom_components.maestro_mcz.maestro.cloud.provider.asyncio.sleep",
             new_callable=AsyncMock,
         ),
     ):
@@ -538,7 +538,7 @@ async def test_device_removal_checks_current_account_and_preserves_other_devices
         )
     elif membership == "offline":
         offline_stove = entry.runtime_data.coordinator.stoves["SERIAL-001"]
-        offline_stove._is_stove_connected_to_cloud = False
+        offline_stove._cloud_provider._is_stove_connected = False
     elif membership == "connection":
         controller.retrieve_linked_stove_infos.side_effect = MaestroConnectionException(
             "offline"
@@ -734,7 +734,7 @@ async def test_existing_pellet_registry_entry_keeps_identity_and_truthful_state(
             "custom_components.maestro_mcz.MaestroController", return_value=controller
         ),
         patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
-        patch.object(MaestroStove, "_ping", new_callable=AsyncMock),
+        patch.object(CloudStoveProvider, "async_ping", new_callable=AsyncMock),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done(wait_background_tasks=True)

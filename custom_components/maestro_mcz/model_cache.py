@@ -11,8 +11,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .maestro.controller.response_types import JsonObject
-from .maestro.controller.responses.model import Model
+from .maestro.cloud.response_types import JsonObject
+from .maestro.cloud.responses.model import Model
 
 _LOGGER = logging.getLogger(__name__)
 _STORAGE_VERSION = 1

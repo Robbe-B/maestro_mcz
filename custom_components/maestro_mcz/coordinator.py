@@ -18,14 +18,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import DEFAULT_POLLING_INTERVAL, DOMAIN
-from .maestro import MaestroStove
 from .maestro.account import MaestroAccount
-from .maestro.controller.controller_interface import MaestroControllerInterface
-from .maestro.controller.maestro_controller import (
+from .maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
-from .maestro.controller.responses.counters import Counters
+from .maestro.cloud.controller.controller_interface import MaestroControllerInterface
+from .maestro.cloud.responses.counters import Counters
+from .maestro.stove import MaestroStove
 
 _LOGGER = logging.getLogger(__name__)
 CONSUMPTION_UPDATE_INTERVAL = timedelta(hours=1)

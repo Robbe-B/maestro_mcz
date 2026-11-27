@@ -5,18 +5,18 @@ from __future__ import annotations
 from datetime import datetime
 from typing import cast
 
+import homeassistant.util.dt as dt_util
 from homeassistant.components.datetime import DateTimeEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-import homeassistant.util.dt as dt_util
 
 from .coordinator import MczAccountCoordinator, MczConfigEntry
-from .maestro import MaestroStove
-from .maestro.controller.requests.activate_program import ProgramCommand
-from .maestro.controller.responses.model import SensorConfiguration
-from .maestro.model_value_reader import get_response_value
+from .maestro.cloud.model_value_reader import get_response_value
+from .maestro.cloud.requests.activate_program import ProgramCommand
+from .maestro.cloud.responses.model import SensorConfiguration
 from .maestro.models import model_definitions, models_types
+from .maestro.stove import MaestroStove
 from .maestro.types.enums import SensorTypeEnum
 
 

@@ -1,7 +1,7 @@
 """Parse live State fields or restore the attribute names in saved diagnostics."""
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 from ..response_types import JsonObject, require_json_object
 

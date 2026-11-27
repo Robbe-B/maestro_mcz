@@ -18,12 +18,12 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, MOCKED_FOLDER
-from .maestro.controller.controller_interface import MaestroControllerInterface
-from .maestro.controller.maestro_controller import (
+from .maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
     MaestroController,
 )
+from .maestro.cloud.controller.controller_interface import MaestroControllerInterface
 
 _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(

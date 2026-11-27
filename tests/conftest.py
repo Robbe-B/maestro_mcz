@@ -18,17 +18,17 @@ from custom_components.maestro_mcz.coordinator import (
 )
 from custom_components.maestro_mcz.maestro import MaestroStove
 from custom_components.maestro_mcz.maestro.account import MaestroAccount
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroController,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.consumption import (
+from custom_components.maestro_mcz.maestro.cloud.responses.consumption import (
     ConsumptionHistory,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
-from custom_components.maestro_mcz.maestro.controller.responses.model import Model
-from custom_components.maestro_mcz.maestro.controller.responses.state import State
-from custom_components.maestro_mcz.maestro.controller.responses.status import Status
-from custom_components.maestro_mcz.maestro.controller.responses.stove_info import (
+from custom_components.maestro_mcz.maestro.cloud.responses.counters import Counters
+from custom_components.maestro_mcz.maestro.cloud.responses.model import Model
+from custom_components.maestro_mcz.maestro.cloud.responses.state import State
+from custom_components.maestro_mcz.maestro.cloud.responses.status import Status
+from custom_components.maestro_mcz.maestro.cloud.responses.stove_info import (
     StoveInfo,
 )
 from custom_components.maestro_mcz.maestro.types.enums import SensorTypeEnum

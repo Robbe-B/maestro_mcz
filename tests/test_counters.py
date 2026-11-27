@@ -23,21 +23,23 @@ from pytest_homeassistant.common import async_fire_time_changed
 from custom_components.maestro_mcz.const import DOMAIN
 from custom_components.maestro_mcz.coordinator import MczCountersCoordinator
 from custom_components.maestro_mcz.diagnostics import async_get_config_entry_diagnostics
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
 )
-from custom_components.maestro_mcz.maestro.controller.mocked_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller.mocked_controller import (
     MockedController,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
-from custom_components.maestro_mcz.maestro.controller.responses.model import (
+from custom_components.maestro_mcz.maestro.cloud.model_value_reader import (
+    get_counter_value,
+)
+from custom_components.maestro_mcz.maestro.cloud.responses.counters import Counters
+from custom_components.maestro_mcz.maestro.cloud.responses.model import (
     ModelConfiguration,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.stove_info import (
+from custom_components.maestro_mcz.maestro.cloud.responses.stove_info import (
     StoveInfo,
 )
-from custom_components.maestro_mcz.maestro.model_value_reader import get_counter_value
 from custom_components.maestro_mcz.maestro.models import model_definitions
 from custom_components.maestro_mcz.maestro.models.models_types import (
     CounterMczConfigItem,
@@ -220,7 +222,7 @@ async def test_real_platform_uses_m1_seconds_and_m2_default(
         ),
         patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
         patch(
-            "custom_components.maestro_mcz.maestro.MaestroStove._do_ping_m1_configuration",
+            "custom_components.maestro_mcz.maestro.cloud.provider.CloudStoveProvider.async_ping_m1_configuration",
             new_callable=AsyncMock,
         ),
     ):

@@ -13,8 +13,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.loader import async_get_integration
 
-from custom_components.maestro_mcz.maestro.controller import maestro_controller
-from custom_components.maestro_mcz.maestro.controller.const import (
+from custom_components.maestro_mcz.maestro.cloud.const import (
     ACTIVATE_PROGRAM_URL,
     APPLIANCE_URL,
     CONSUMPTION_URL,
@@ -25,18 +24,21 @@ from custom_components.maestro_mcz.maestro.controller.const import (
     STOVE_MODEL_URL,
     TENTANT_ID,
 )
-from custom_components.maestro_mcz.maestro.controller.maestro_controller import (
+from custom_components.maestro_mcz.maestro.cloud.controller import (
+    controller as maestro_controller,
+)
+from custom_components.maestro_mcz.maestro.cloud.controller.controller import (
     MaestroAuthenticationException,
     MaestroConnectionException,
     MaestroController,
 )
-from custom_components.maestro_mcz.maestro.controller.requests.activate_program import (
+from custom_components.maestro_mcz.maestro.cloud.requests.activate_program import (
     ProgramCommand,
 )
-from custom_components.maestro_mcz.maestro.controller.responses.counters import Counters
-from custom_components.maestro_mcz.maestro.controller.responses.model import Model
-from custom_components.maestro_mcz.maestro.controller.responses.state import State
-from custom_components.maestro_mcz.maestro.controller.responses.status import Status
+from custom_components.maestro_mcz.maestro.cloud.responses.counters import Counters
+from custom_components.maestro_mcz.maestro.cloud.responses.model import Model
+from custom_components.maestro_mcz.maestro.cloud.responses.state import State
+from custom_components.maestro_mcz.maestro.cloud.responses.status import Status
 
 
 def response(status=200, payload=None, error=None, headers=None):
@@ -522,7 +524,7 @@ async def test_replayed_token_rejection_starts_only_needed_ha_reauth(
     # 1. Reject a replay while another request may have replaced or invalidated its token.
     integration = await async_get_integration(hass, "maestro_mcz")
     await integration.async_get_platform("config_flow")
-    stove._controller = api
+    stove._cloud_provider._controller = api
     api._token = "expired-token"
     api._session.post.return_value = response(payload={"Token": "renewed-token"})
     rejection = MaestroAuthenticationException("Maestro authentication rejected")
