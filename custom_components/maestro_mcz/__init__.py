@@ -41,6 +41,7 @@ from .maestro.controller.maestro_controller import (
 )
 from .maestro.controller.mocked_controller import MockedController
 from .maestro.models.models_types import MczStoveModelGeneration
+from .model_cache import ModelCache
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -99,7 +100,13 @@ async def async_setup_entry(
         maestroapi = MockedController(mocked_folder)
 
     # 3. Load one independent account and its linked stoves.
-    account = MaestroAccount(maestroapi, replay=mocked_folder is not None)
+    account = MaestroAccount(
+        maestroapi,
+        replay=mocked_folder is not None,
+        on_model_fetched=(
+            ModelCache(hass).async_save_model if mocked_folder is None else None
+        ),
+    )
     try:
         await account.async_load_stoves(
             on_authentication_failed=lambda: entry.async_start_reauth(hass)
