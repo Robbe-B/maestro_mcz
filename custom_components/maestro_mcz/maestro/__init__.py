@@ -1,6 +1,5 @@
 "MaestroStove class."
 
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -10,6 +9,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from ..const import DOMAIN, M1_BOARD_TYPES, MANUFACTURER
+from .cloud_provider import CloudStoveProvider
 from .controller.controller_interface import MaestroControllerInterface
 from .controller.maestro_controller import (
     MaestroAuthenticationException,
@@ -22,8 +22,8 @@ from .controller.responses.model import (
     SensorConfiguration,
     SensorConfigurationMultipleModes,
 )
-from .controller.responses.state import State
-from .controller.responses.status import Status
+from .controller.responses.state import State as StateResponse
+from .controller.responses.status import Status as StatusResponse
 from .controller.responses.stove_info import StoveInfo
 from .model_value_reader import get_response_value, normalize_sensor_value
 from .models.model_definitions import SUPPORTED_CURRENT_STATES
@@ -136,7 +136,7 @@ class MaestroStoveDeviceMetadata:
 
     def update_from_status(
         self,
-        status: Status | None,
+        status: StatusResponse | None,
         sensor_set_type_id: str,
         model_generation: MczStoveModelGeneration,
     ) -> None:
@@ -204,12 +204,14 @@ class MaestroStoveDeviceMetadata:
 
 
 class MaestroStove:
-    """Own cached replies, interpreted readings, model matching and commands.
+    """Give entities one stove object for identity, readings, and user commands.
 
-    Delegate transport and authentication to the controller, account membership
-    to MaestroAccount, and polling to coordinators. Entity presentation must not
-    rewrite the cached response objects or their advertised control metadata.
-    Report unfamiliar operating values when read, once per value for this stove.
+    Keep model matching and reading interpretation here; CloudStoveProvider
+    handles the actual live requests. MaestroAccount owns the list of linked
+    stoves, and coordinators decide when to refresh them.
+    Displaying a value must not rewrite the original replies or model controls.
+    Report unfamiliar operating values only when read, once per value for this
+    stove's lifetime.
     """
 
     def __init__(
@@ -220,26 +222,33 @@ class MaestroStove:
         *,
         on_model_fetched: ModelFetchedCallback | None = None,
     ) -> None:
-        """Initialize the MaestroStove."""
+        """Prepare one linked stove without fetching its model or live readings.
+
+        Reuse the account's controller for both model loading and the cloud
+        provider, so creating a provider does not create a separate login.
+        """
         self._node = stove.node
         self._controller: MaestroControllerInterface = controller
         self._on_authentication_failed = on_authentication_failed
         self._on_model_fetched = on_model_fetched
         self._model: Model | None = None
-        self._state: State | None = None
-        self._status: Status | None = None
+        self._cloud_provider = CloudStoveProvider(
+            controller,
+            device_id=self.Id,
+            name=self.Name,
+            model_id=self.ModelId,
+            sensor_set_type_id=self.SensorSetTypeId,
+        )
         self._device_metadata = MaestroStoveDeviceMetadata()
-        self._is_integration_connected_to_cloud = False
-        self._is_stove_connected_to_cloud = False
         self._warned_states: set[str] = set()
 
     async def async_init(self) -> None:
-        """Async initialization to retrieve the stove model."""
+        """Load the model needed to discover controls before the first live refresh."""
         await self._getStoveModel()
 
     @property
     def is_connected(self) -> bool:
-        """Return the connection status of the stove (end to end)."""
+        """Report online only when both the cloud service and the stove are reachable."""
         return (
             self.is_integration_connected_to_cloud and self.is_stove_connected_to_cloud
         )
@@ -247,12 +256,12 @@ class MaestroStove:
     @property
     def is_stove_connected_to_cloud(self) -> bool:
         """Return the connection status of the stove to the cloud."""
-        return self._is_stove_connected_to_cloud
+        return self._cloud_provider.is_stove_connected
 
     @property
     def is_integration_connected_to_cloud(self) -> bool:
         """Return the connection status of the integration to the cloud."""
-        return self._is_integration_connected_to_cloud
+        return self._cloud_provider.is_cloud_connected
 
     @property
     def Id(self) -> str:
@@ -291,14 +300,14 @@ class MaestroStove:
         return self._node.time_zone_iana
 
     @property
-    def State(self) -> State | None:
+    def State(self) -> StateResponse | None:
         """Return the stove state."""
-        return self._state
+        return self._cloud_provider.state
 
     @property
-    def Status(self) -> Status | None:
+    def Status(self) -> StatusResponse | None:
         """Return the stove status."""
-        return self._status
+        return self._cloud_provider.status
 
     @property
     def Model(self) -> Model | None:
@@ -353,84 +362,12 @@ class MaestroStove:
 
         return MczStoveModelGeneration.M2_PLUS
 
-    async def _do_ping_configuration(self, ping: SensorConfiguration) -> None:
-        try:
-            configuration = ping.configuration
-            mappings = configuration.mappings
-            if (
-                not ping.configuration_id
-                or not configuration.sensor_id
-                or not configuration.enabled
-                or configuration.type != "int"
-                or not isinstance(mappings, dict)
-                or type(mappings.get("Ping")) is not int
-            ):
-                raise MaestroConnectionException(
-                    f"Invalid M2+ ping configuration for device '{self.Name}'"
-                )
-
-            await self._activate_program(
-                ping.configuration_id,
-                [ProgramCommand(configuration.sensor_id, mappings["Ping"])],
-            )
-        except MaestroConnectionException as err:
-            _LOGGER.warning(
-                "M2+ configuration ping failed for '%s'; continuing with cloud refresh: %s",
-                self.Name,
-                err,
-            )
-
-    async def _do_ping_m1_configuration(self, ping: SensorConfiguration) -> None:
-        configuration = ping.configuration
-        mappings = configuration.mappings
-        if (
-            not ping.configuration_id
-            or not configuration.sensor_id
-            or not configuration.enabled
-            or configuration.type != "int"
-            or not isinstance(mappings, dict)
-            or type(mappings.get("C|RecuperoParametri")) is not int
-            or mappings.get("C|RecuperoParametri") != 0
-            or type(mappings.get("C|RecuperoInfo")) is not int
-            or mappings.get("C|RecuperoInfo") != 1
-        ):
-            raise MaestroConnectionException(
-                f"Invalid M1 PING STOVE configuration for device '{self.Name}'"
-            )
-
-        for command in ("C|RecuperoParametri", "C|RecuperoInfo"):
-            await self._activate_program(
-                ping.configuration_id,
-                [ProgramCommand(configuration.sensor_id, mappings[command])],
-            )
-            await asyncio.sleep(1)
-
-    async def _ping(self) -> None:
-        m1_ping = (
-            self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                "PING STOVE", "m1_cod_for_spe_mqtt"
-            )
-        )
-        if m1_ping is not None:
-            try:
-                await self._do_ping_m1_configuration(m1_ping)
-            except MaestroConnectionException as err:
-                raise type(err)(
-                    f"Ping for '{self.Name}': {err}", retry_after=err.retry_after
-                ) from err
-            return
-
-        if False:  # For now, we don't want to ping M2+ stoves, as it can cause issues with some models. This can be re-enabled in the future if needed.
-            m2_plus_ping = self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
-                "cod_for_spe_mqtt", "cod_for_spe_mqtt"
-            )
-
-            if m2_plus_ping is not None:
-                await self._do_ping_configuration(m2_plus_ping)
-
-        await self._controller.do_ping_for_stove(self.Id, self.Name)
-
     async def _getStoveModel(self) -> None:
+        """Fetch the cloud model and notify the optional model-saving callback.
+
+        Saving belongs outside live communication. Finish the callback before
+        returning so a later failed reading does not prevent the save attempt.
+        """
         self._model = await self._controller.get_stove_model_for_stove(
             self.ModelId, self.Name
         )
@@ -439,47 +376,27 @@ class MaestroStove:
                 self.UniqueCode, self.ModelId, self.SensorSetTypeId, self._model
             )
 
-    async def _getStoveStatus(self) -> None:
-        self._status = await self._controller.get_stove_status_for_stove(
-            self.Id, self.Name
-        )
-        self._device_metadata.update_from_status(
-            self._status, self.SensorSetTypeId, self.model_generation
-        )
-
-    async def _getStoveState(self) -> None:
-        self._state = await self._controller.get_stove_state_for_stove(
-            self.Id, self.Name
-        )
-
     async def refresh(self) -> None:
-        """Refresh the stove information, status and state."""
-        try:
-            await self._ping()
-            self._is_integration_connected_to_cloud = self._controller.is_authenticated
+        """Match the stove's read command and delegate live requests to the provider.
 
-            results = await asyncio.gather(
-                self._getStoveStatus(), self._getStoveState(), return_exceptions=True
+        Model matching stays here; the provider handles request order and cloud
+        failures. Process each returned status through the callback so device
+        details survive even when the separate state request fails.
+        """
+        m1_ping = (
+            self.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                "PING STOVE", "m1_cod_for_spe_mqtt"
             )
-            # Do not let a failed reading hide an account-wide rejection or backoff.
-            for result in results:
-                if isinstance(result, MaestroAuthenticationException):
-                    raise result
-            for result in results:
-                if (
-                    isinstance(result, MaestroConnectionException)
-                    and result.retry_after is not None
-                ):
-                    raise result
-            for result in results:
-                if isinstance(result, BaseException):
-                    raise result
+        )
+        await self._cloud_provider.async_refresh(
+            m1_ping, on_status_received=self._update_device_metadata
+        )
 
-            if self.Status is not None and self.Status.is_connected is not None:
-                self._is_stove_connected_to_cloud = self.Status.is_connected
-        except MaestroAuthenticationException, MaestroConnectionException:
-            self._is_integration_connected_to_cloud = False
-            raise
+    def _update_device_metadata(self, status: StatusResponse | None) -> None:
+        """Update known serial and firmware details from a received status reply."""
+        self._device_metadata.update_from_status(
+            status, self.SensorSetTypeId, self.model_generation
+        )
 
     async def activateProgram(
         self,
@@ -488,7 +405,7 @@ class MaestroStove:
         value: object,
         callback_on_success: Callable[[], None] | None = None,
     ) -> None:
-        """Activate a program on the stove with a single command."""
+        """Send one user setting through the same path used for command batches."""
         await self.activateProgramMultipleCommands(
             configuration_id, [ProgramCommand(sensor_id, value)], callback_on_success
         )
@@ -499,9 +416,14 @@ class MaestroStove:
         commands: list[ProgramCommand],
         callback_on_success: Callable[[], None] | None = None,
     ) -> None:
-        """Activate user commands and report failures through Home Assistant."""
+        """Send user commands and turn cloud failures into clear Home Assistant errors.
+
+        Rejected credentials also request account reauthentication when an
+        account callback is available. Do not report success or send an extra
+        command when dispatch fails.
+        """
         try:
-            await self._activate_program(
+            await self._cloud_provider.async_activate_program(
                 configuration_id, commands, callback_on_success
             )
         except MaestroAuthenticationException as err:
@@ -517,22 +439,6 @@ class MaestroStove:
                 translation_key="command_cannot_connect",
                 translation_placeholders={"error": str(err)},
             ) from err
-
-    async def _activate_program(
-        self,
-        configuration_id: str | None,
-        commands: list[ProgramCommand],
-        callback_on_success: Callable[[], None] | None = None,
-    ) -> None:
-        """Keep ping failures unmodified for HA's setup and polling recovery."""
-        await self._controller.activate_program_with_commands_for_stove(
-            self.Id,
-            self.ModelId,
-            configuration_id,
-            self.SensorSetTypeId,
-            commands,
-            callback_on_success,
-        )
 
     def get_device_info(self) -> DeviceInfo:
         """Return the stove's identity and retained motherboard details."""

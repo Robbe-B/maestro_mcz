@@ -263,7 +263,7 @@ async def test_zero_history_is_available_while_stove_is_offline(
     """Allow genuine zero use and cloud history even when the live stove is unreachable."""
     # 1. The stove is offline, but yesterday's cloud history explicitly reports zero.
     history = consumption_factory()
-    stove._is_stove_connected_to_cloud = False
+    stove._cloud_provider._is_stove_connected = False
     controller.get_consumption_for_stove.return_value = history_for(
         date(2026, 11, 12), 0
     )
@@ -624,7 +624,7 @@ async def test_m1_stoves_are_never_queried_for_consumption(
                 sensor_configuration.sensor_name = power_sensor
     # Skip command delays already covered by stove tests; this clock is frozen.
     monkeypatch.setattr(
-        "custom_components.maestro_mcz.maestro.MaestroStove._do_ping_m1_configuration",
+        "custom_components.maestro_mcz.maestro.cloud_provider.CloudStoveProvider.async_ping_m1_configuration",
         AsyncMock(),
     )
     older_model.model_configurations.append(

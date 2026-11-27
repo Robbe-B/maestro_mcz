@@ -595,12 +595,12 @@ async def test_empty_model_does_not_invent_controls(
     """Avoid unsupported controls while retaining connection indicators and known firmware."""
     # 1. Remove all supported controls and available readings from the model.
     stove.Model.model_configurations = []
-    stove._state = SimpleNamespace()
-    stove._status = SimpleNamespace()
+    stove._cloud_provider._state = SimpleNamespace()
+    stove._cloud_provider._status = SimpleNamespace()
     stove.device_metadata.update_from_status(
         None, stove.SensorSetTypeId, stove.model_generation
     )
-    stove._is_stove_connected_to_cloud = False
+    stove._cloud_provider._is_stove_connected = False
     module = importlib.import_module(f"custom_components.maestro_mcz.{platform}")
     # 2. Set up the selected HA platform for this empty model.
     add_entities = Mock()
@@ -643,8 +643,8 @@ def test_regular_entities_require_coordinator_and_stove_connectivity(
         (True, True, False),
     ):
         coordinator.last_update_success = coordinator_ok
-        stove._is_integration_connected_to_cloud = cloud_ok
-        stove._is_stove_connected_to_cloud = device_ok
+        stove._cloud_provider._is_cloud_connected = cloud_ok
+        stove._cloud_provider._is_stove_connected = device_ok
         # 3. None of the ordinary controls should claim to be usable.
         for item in regular_controls:
             if platform == "fan":
@@ -677,8 +677,8 @@ def test_connectivity_diagnostics_are_independent(entities, coordinator, stove):
         (False, True, True),
     ):
         coordinator.last_update_success = account_ok
-        stove._is_integration_connected_to_cloud = cloud_ok
-        stove._is_stove_connected_to_cloud = device_ok
+        stove._cloud_provider._is_cloud_connected = cloud_ok
+        stove._cloud_provider._is_stove_connected = device_ok
         cloud._handle_coordinator_update_internal()
         device._handle_coordinator_update_internal()
         # 3. The indicators should explain which link is still reachable.
@@ -711,16 +711,16 @@ def test_declared_response_and_missing_values(
     )
     primary = "_state" if platform == "sensor" else "_status"
     secondary = "_status" if platform == "sensor" else "_state"
-    setattr(stove, primary, SimpleNamespace(**{prop: value}))
-    setattr(stove, secondary, SimpleNamespace(**{prop: "other response"}))
+    setattr(stove._cloud_provider, primary, SimpleNamespace(**{prop: value}))
+    setattr(stove._cloud_provider, secondary, SimpleNamespace(**{prop: "other response"}))
     item._handle_coordinator_update_internal()
     assert getattr(item, value_property) == value
     # 2. A missing preferred reading must not substitute an unrelated response.
-    setattr(stove, primary, SimpleNamespace())
+    setattr(stove._cloud_provider, primary, SimpleNamespace())
     item._handle_coordinator_update_internal()
     assert getattr(item, value_property) is None
     # 3. Without either reading, show no value instead of an old or guessed value.
-    setattr(stove, secondary, SimpleNamespace())
+    setattr(stove._cloud_provider, secondary, SimpleNamespace())
     item._handle_coordinator_update_internal()
     assert getattr(item, value_property) is None
 
@@ -1393,13 +1393,15 @@ async def test_pump_activation_temperature_readback(
     assert stove.model_generation is expected_generation
     assert pump_temperature.native_value == 60
     # 2. Parse the cloud readings and refresh the displayed pump threshold.
-    stove._status = Status(status_payload) if status_payload is not None else None
-    stove._state = State({"temp_min_circ_on": state_value})
+    stove._cloud_provider._status = (
+        Status(status_payload) if status_payload is not None else None
+    )
+    stove._cloud_provider._state = State({"temp_min_circ_on": state_value})
     pump_temperature._handle_coordinator_update_internal()
     # 3. Keep a genuine Status zero, but clear a missing current reading.
     assert pump_temperature.native_value == expected
     # 4. Even an old saved State reading must not restore the unsupported fallback.
-    stove._state = State({"temp_min_circ_on": state_value}, True)
+    stove._cloud_provider._state = State({"temp_min_circ_on": state_value}, True)
     pump_temperature._handle_coordinator_update_internal()
     assert pump_temperature.native_value == expected
 
@@ -2029,8 +2031,8 @@ def test_climate_missing_values_clear_state(entities, stove):
     """Clear missing heating information so old temperatures or modes are not shown as current."""
     # 1. Remove both sources of stove readings.
     item = entity(entities, "climate")
-    stove._state = SimpleNamespace()
-    stove._status = SimpleNamespace()
+    stove._cloud_provider._state = SimpleNamespace()
+    stove._cloud_provider._status = SimpleNamespace()
     # 2. Refresh the control; each missing value should be empty.
     item._handle_coordinator_update_internal()
     assert item.hvac_mode is None
@@ -2468,7 +2470,7 @@ async def test_date_time_missing_fields_and_configuration(entities, stove, contr
     """Clear an unreadable clock and avoid setting it without a valid command description."""
     # 1. Remove the stove's clock readings.
     item = entity(entities, "datetime")
-    stove._status = SimpleNamespace()
+    stove._cloud_provider._status = SimpleNamespace()
     item._handle_coordinator_update_internal()
     assert item.native_value is None
     assert item.weekday is None
@@ -2488,7 +2490,7 @@ def test_fan_string_preset_uses_current_response_and_clears_missing_value(
     # 1. Put different presets in current and information replies.
     item = entity(entities, "fan")
     item._current_fan_configuration.configuration.mappings = {"auto": 6}
-    stove._status = SimpleNamespace(set_vent_v1="auto")
+    stove._cloud_provider._status = SimpleNamespace(set_vent_v1="auto")
     stove.State.silent_enabled = False
     stove.State.set_vent_v1 = "silent"
     item._handle_coordinator_update_internal()
@@ -2497,7 +2499,7 @@ def test_fan_string_preset_uses_current_response_and_clears_missing_value(
     assert item.preset_mode == "auto"
     assert item.percentage is None
     # 2. Remove the fan reading; the previous preset must not remain on screen.
-    stove._status = SimpleNamespace()
+    stove._cloud_provider._status = SimpleNamespace()
     item._handle_coordinator_update_internal()
     assert item.is_on is False
     assert item.preset_mode is None
@@ -2510,12 +2512,12 @@ def test_selector_uses_current_response_and_clears_missing_value(entities, stove
     item = next(
         selector for selector in entities["select"] if selector._prop == "set_pot_man"
     )
-    stove._status = SimpleNamespace(set_pot_man=4)
-    stove._state = SimpleNamespace(set_pot_man=5)
+    stove._cloud_provider._status = SimpleNamespace(set_pot_man=4)
+    stove._cloud_provider._state = SimpleNamespace(set_pot_man=5)
     item._handle_coordinator_update_internal()
     assert item.current_option == "4"
     # 2. Remove that reading, then also try an unsupported value type.
-    stove._status = SimpleNamespace()
+    stove._cloud_provider._status = SimpleNamespace()
     item._handle_coordinator_update_internal()
     assert item.current_option is None
     item._selector_configuration.configuration.type = "string"

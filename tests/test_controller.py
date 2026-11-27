@@ -522,7 +522,7 @@ async def test_replayed_token_rejection_starts_only_needed_ha_reauth(
     # 1. Reject a replay while another request may have replaced or invalidated its token.
     integration = await async_get_integration(hass, "maestro_mcz")
     await integration.async_get_platform("config_flow")
-    stove._controller = api
+    stove._cloud_provider._controller = api
     api._token = "expired-token"
     api._session.post.return_value = response(payload={"Token": "renewed-token"})
     rejection = MaestroAuthenticationException("Maestro authentication rejected")

@@ -220,7 +220,7 @@ async def test_real_platform_uses_m1_seconds_and_m2_default(
         ),
         patch("custom_components.maestro_mcz._has_mocked_folder", return_value=None),
         patch(
-            "custom_components.maestro_mcz.maestro.MaestroStove._do_ping_m1_configuration",
+            "custom_components.maestro_mcz.maestro.cloud_provider.CloudStoveProvider.async_ping_m1_configuration",
             new_callable=AsyncMock,
         ),
     ):

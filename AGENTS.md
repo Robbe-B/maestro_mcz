@@ -85,6 +85,15 @@ Within `custom_components\maestro_mcz\maestro`:
 - `model_value_reader.py` reads the declared field from the selected cached
   State/Status response; it does not fetch HTTP responses.
 
+# Live communication
+
+`maestro\cloud_provider.py` owns per-stove cloud ping sequences, live requests,
+cached State/Status replies, connection tracking, and command dispatch.
+`MaestroStove` retains identity, model loading/matching, entity-facing behavior,
+and device metadata interpretation. Account discovery and statistics remain
+separate from the live provider. Do not put entity selection or model storage
+inside a transport provider.
+
 # Entity naming
 
 - Use Home Assistant translations for default entity names, not hardcoded overrides.

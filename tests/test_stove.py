@@ -16,6 +16,7 @@ from custom_components.maestro_mcz.maestro import (
     MaestroStoveDeviceMetadata,
 )
 from custom_components.maestro_mcz.maestro.account import MaestroAccount
+from custom_components.maestro_mcz.maestro.cloud_provider import CloudStoveProvider
 from custom_components.maestro_mcz.maestro.controller import maestro_controller
 from custom_components.maestro_mcz.maestro.controller.const import (
     ACTIVATE_PROGRAM_URL,
@@ -36,6 +37,104 @@ from custom_components.maestro_mcz.maestro.controller.responses.model import (
 from custom_components.maestro_mcz.maestro.controller.responses.status import Status
 from custom_components.maestro_mcz.maestro.model_value_reader import get_response_value
 from custom_components.maestro_mcz.maestro.models import model_definitions, models_types
+
+
+async def test_cloud_provider_uses_only_live_device_operations(controller):
+    """Refresh a stove without making live communication own account or model loading."""
+    # 1. Bind a provider directly, without constructing entities or loading a model.
+    provider = CloudStoveProvider(
+        controller,
+        device_id="device-1",
+        name="Living Room",
+        model_id="model-1",
+        sensor_set_type_id="sensors-1",
+    )
+    received_status = Mock()
+
+    # 2. Perform the normal newer-stove refresh through the standalone provider.
+    await provider.async_refresh(None, on_status_received=received_status)
+
+    # 3. Only live reads and ping run; the returned replies remain uninterpreted.
+    controller.do_ping_for_stove.assert_awaited_once_with("device-1", "Living Room")
+    controller.get_stove_status_for_stove.assert_awaited_once_with(
+        "device-1", "Living Room"
+    )
+    controller.get_stove_state_for_stove.assert_awaited_once_with(
+        "device-1", "Living Room"
+    )
+    controller.retrieve_linked_stove_infos.assert_not_awaited()
+    controller.get_stove_model_for_stove.assert_not_awaited()
+    controller.get_counters_for_stove.assert_not_awaited()
+    controller.get_consumption_for_stove.assert_not_awaited()
+    controller.activate_program_with_commands_for_stove.assert_not_awaited()
+    assert provider.state is controller.get_stove_state_for_stove.return_value
+    assert provider.status is controller.get_stove_status_for_stove.return_value
+    received_status.assert_called_once_with(provider.status)
+    assert provider.is_cloud_connected
+    assert provider.is_stove_connected
+
+
+@pytest.mark.parametrize("failed_endpoint", ["status", "state"])
+async def test_provider_partial_refresh_retains_successful_reading(
+    stove, controller, failed_endpoint
+):
+    """Keep successful readings and device details without making a partial update available."""
+    # 1. New replies differ from the previous cycle, but one endpoint becomes unreachable.
+    old_status = stove.Status
+    old_state = stove.State
+    new_status = deepcopy(old_status)
+    new_status.sm_sn = "NEW-BOARD"
+    new_state = deepcopy(old_state)
+    new_state.temp_amb_install = 26.0
+    controller.get_stove_status_for_stove.return_value = new_status
+    controller.get_stove_state_for_stove.return_value = new_state
+    failure = MaestroConnectionException("One reading failed")
+    failed_request = getattr(controller, f"get_stove_{failed_endpoint}_for_stove")
+    failed_request.side_effect = failure
+
+    # 2. Refresh through the shared stove and expect the original cloud failure.
+    with pytest.raises(MaestroConnectionException) as raised:
+        await stove.refresh()
+
+    # 3. Only the successful reply replaces its cache; metadata follows a received status.
+    assert raised.value is failure
+    assert not stove.is_connected
+    if failed_endpoint == "status":
+        assert stove.Status is old_status
+        assert stove.State is new_state
+        assert stove.device_metadata.serial_number == "BOARD-001"
+    else:
+        assert stove.Status is new_status
+        assert stove.State is old_state
+        assert stove.device_metadata.serial_number == "NEW-BOARD"
+
+
+@pytest.mark.parametrize("failure_type", ["authentication", "backoff"])
+async def test_provider_consumer_error_cannot_hide_account_failure(
+    stove, controller, failure_type
+):
+    """Keep account recovery actionable even when interpreting the other reply fails."""
+    # 1. One reading needs account recovery while interpreting the received status fails.
+    if failure_type == "authentication":
+        account_failure = MaestroAuthenticationException("Sign in again")
+    else:
+        account_failure = MaestroConnectionException(
+            "Wait before retrying", retry_after=120
+        )
+    controller.get_stove_state_for_stove.side_effect = account_failure
+
+    # 2. Let both operations finish, including the failing shared-stove status consumer.
+    with (
+        patch.object(
+            stove, "_update_device_metadata", side_effect=ValueError("Invalid metadata")
+        ),
+        pytest.raises(type(account_failure)) as raised,
+    ):
+        await stove.refresh()
+
+    # 3. The exact account error takes priority over interpretation failure.
+    assert raised.value is account_failure
+    assert not stove.is_integration_connected_to_cloud
 
 
 @pytest.mark.parametrize(
@@ -637,7 +736,8 @@ async def test_m1_refresh_requests_parameters_then_info(stove, controller, m1_pi
 
     controller.activate_program_with_commands_for_stove.side_effect = record_activation
     with patch(
-        "custom_components.maestro_mcz.maestro.asyncio.sleep", side_effect=record_wait
+        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        side_effect=record_wait,
     ):
         # 2. Run one normal refresh, with the waits recorded rather than performed.
         await stove.refresh()
@@ -693,7 +793,7 @@ async def test_m1_refresh_ignores_empty_ping_and_overview_groups(
 
     # 2. Refresh normally, recording the pauses rather than waiting in real time.
     with patch(
-        "custom_components.maestro_mcz.maestro.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
         new_callable=AsyncMock,
     ) as sleep:
         await stove.refresh()
@@ -721,7 +821,7 @@ async def test_m1_cloud_request_serialization_and_rejection(
     """Send the correct M1 cloud messages and stop immediately if a read is rejected."""
     # 1. Use the real HTTP-request builder with an accepted or rejected reply.
     api = MaestroController(Mock(), "test-user", "test-password")
-    stove._controller = api
+    stove._cloud_provider._controller = api
     failure = MaestroConnectionException("Read request failed")
     with (
         patch.object(
@@ -732,12 +832,17 @@ async def test_m1_cloud_request_serialization_and_rejection(
             side_effect=None if accepted else failure,
         ) as request,
         patch(
-            "custom_components.maestro_mcz.maestro.asyncio.sleep",
+            "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
             new_callable=AsyncMock,
         ),
     ):
         if accepted:
-            await stove._ping()
+            ping = (
+                stove.get_sensor_configuration_by_model_configuration_name_and_sensor_name(
+                    "PING STOVE", "m1_cod_for_spe_mqtt"
+                )
+            )
+            await stove._cloud_provider.async_ping(ping)
         else:
             with pytest.raises(MaestroConnectionException, match="Read request failed"):
                 await stove.refresh()
@@ -826,7 +931,7 @@ async def test_m1_ping_failure_stops_refresh(
     with (
         patch.object(stove, "_on_authentication_failed") as start_reauth,
         patch(
-            "custom_components.maestro_mcz.maestro.asyncio.sleep",
+            "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
             new_callable=AsyncMock,
         ) as sleep,
         pytest.raises(error, match="ping rejected"),
@@ -903,7 +1008,7 @@ async def test_m2_refresh_uses_only_dedicated_ping(
     controller.activate_program_with_commands_for_stove.side_effect = record_activation
     controller.do_ping_for_stove.side_effect = record_cloud_ping
     with patch(
-        "custom_components.maestro_mcz.maestro.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
         new_callable=AsyncMock,
     ) as sleep:
         # 2. Refresh the stove and record any attempted ping operations.
@@ -950,7 +1055,7 @@ async def test_m2_cloud_request_serialization_and_rejection(
     """Send only the dedicated ping and report rejection instead of trying a command."""
     # 1. Accept or reject the dedicated ping through the real request builder.
     api = MaestroController(Mock(), "test-user", "test-password")
-    stove._controller = api
+    stove._cloud_provider._controller = api
     failure = MaestroConnectionException("Ping request failed")
     with patch.object(
         api,
@@ -961,10 +1066,10 @@ async def test_m2_cloud_request_serialization_and_rejection(
     ) as request:
         # 2. Run the real cloud-message construction without using the network.
         if accepted:
-            await stove._ping()
+            await stove._cloud_provider.async_ping(None)
         else:
             with pytest.raises(MaestroConnectionException, match="Ping request failed"):
-                await stove._ping()
+                await stove._cloud_provider.async_ping(None)
     # 3. Exactly one ping request is sent, with no configuration activation.
     request.assert_awaited_once_with("POST", url=f"{PING_URL}/device-1")
 
@@ -979,7 +1084,7 @@ async def test_retained_m2_configuration_helper_serialization_and_rejection(
         "PING STOVE", "cod_for_spe_mqtt"
     )
     api = MaestroController(Mock(), "test-user", "test-password")
-    stove._controller = api
+    stove._cloud_provider._controller = api
     failure = MaestroConnectionException("Ping request failed")
     with patch.object(
         api,
@@ -989,7 +1094,7 @@ async def test_retained_m2_configuration_helper_serialization_and_rejection(
         side_effect=None if accepted else failure,
     ) as request:
         # 2. Exercise only the helper, not the normal HA refresh path.
-        await stove._do_ping_configuration(ping)
+        await stove._cloud_provider.async_ping_configuration(ping)
 
     # 3. The retained helper sends its declared command and warns on rejection.
     request.assert_awaited_once_with(
@@ -1031,7 +1136,7 @@ async def test_retained_m2_configuration_helper_rejects_invalid_descriptor(
     )
     controller.reset_mock()
     # 2. Exercise the helper directly; normal refresh does not use it.
-    await stove._do_ping_configuration(ping)
+    await stove._cloud_provider.async_ping_configuration(ping)
     # 3. Warn and skip the invalid command without issuing other cloud requests.
     assert "Invalid M2+ ping configuration" in caplog.text
     controller.do_ping_for_stove.assert_not_awaited()
@@ -1052,7 +1157,7 @@ async def test_retained_m2_configuration_helper_rejects_missing_group_id(
     )
     controller.reset_mock()
     # 2. Call the helper explicitly, independently of HA refresh.
-    await stove._do_ping_configuration(ping)
+    await stove._cloud_provider.async_ping_configuration(ping)
     # 3. Explain the missing address and do not send either kind of ping.
     assert "Invalid M2+ ping configuration" in caplog.text
     controller.activate_program_with_commands_for_stove.assert_not_awaited()
@@ -1129,11 +1234,11 @@ async def test_retained_m2_configuration_helper_retries_after_rejection(
         None,
     ]
     # 2. The helper explains the rejected command without hiding the failure.
-    await stove._do_ping_configuration(ping)
+    await stove._cloud_provider.async_ping_configuration(ping)
     assert "preparation failed" in caplog.text
     # 3. Later explicit helper calls retry, without fetching readings or cloud-pinging.
-    await stove._do_ping_configuration(ping)
-    await stove._do_ping_configuration(ping)
+    await stove._cloud_provider.async_ping_configuration(ping)
+    await stove._cloud_provider.async_ping_configuration(ping)
     assert controller.activate_program_with_commands_for_stove.await_count == 3
     controller.do_ping_for_stove.assert_not_awaited()
     controller.get_stove_status_for_stove.assert_not_awaited()
@@ -1155,7 +1260,7 @@ async def test_retained_m2_configuration_helper_propagates_authentication_failur
 
     # 2. Call only the retained helper and expect the original login error.
     with pytest.raises(MaestroAuthenticationException, match="authentication failed"):
-        await stove._do_ping_configuration(ping)
+        await stove._cloud_provider.async_ping_configuration(ping)
 
     # 3. Do not turn authentication failure into an optional warning or another request.
     controller.activate_program_with_commands_for_stove.assert_awaited_once()
@@ -1249,7 +1354,7 @@ async def test_m1_read_failure_recovers_on_next_cycle(
         activation_results.insert(0, None)
     controller.activate_program_with_commands_for_stove.side_effect = activation_results
     with patch(
-        "custom_components.maestro_mcz.maestro.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
         new_callable=AsyncMock,
     ):
         # 2. Observe the failure, then allow the cloud to respond normally again.
@@ -1282,7 +1387,7 @@ async def test_m1_descriptor_takes_priority_over_m2(stove, controller, m1_ping, 
     group.configurations.append(m2_ping)
     controller.reset_mock()
     with patch(
-        "custom_components.maestro_mcz.maestro.asyncio.sleep",
+        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
         new_callable=AsyncMock,
     ):
         # 2. Run one refresh without waiting in real time.
@@ -1313,7 +1418,8 @@ async def test_mixed_generation_account_keeps_ping_requests_separate(
     coordinator = MczAccountCoordinator(hass, entry, "mixed", account)
     controller.reset_mock()
     with patch(
-        "custom_components.maestro_mcz.maestro.asyncio.sleep", new_callable=AsyncMock
+        "custom_components.maestro_mcz.maestro.cloud_provider.asyncio.sleep",
+        new_callable=AsyncMock,
     ) as sleep:
         # 2. Refresh both stoves through their shared account.
         await coordinator._async_update_data()
@@ -1342,7 +1448,7 @@ async def test_stove_identity_connectivity_and_device_info(stove):
     assert device_info.sw_version == "DM2.AIR.01.02.003"
 
     # 3. Going offline changes availability, not the known serial or firmware.
-    stove._is_stove_connected_to_cloud = False
+    stove._cloud_provider._is_stove_connected = False
     assert not stove.is_connected
     assert stove.get_device_info() == device_info
 
@@ -1434,7 +1540,9 @@ async def test_m1_board_type_uses_sensor_set_mapping(
     await older_stove.async_init()
 
     # 2. Refresh metadata without waiting for unrelated ping requests.
-    with patch.object(older_stove, "_ping", new_callable=AsyncMock):
+    with patch.object(
+        older_stove._cloud_provider, "async_ping", new_callable=AsyncMock
+    ):
         await older_stove.refresh()
 
     # 3. Only recognized labels accompany the unchanged firmware; hardware stays unset.
@@ -1574,7 +1682,7 @@ async def test_stove_user_commands_preserve_success_callbacks(stove, multiple_co
     """Keep success callbacks working when direct stove commands are accepted by the cloud."""
     # 1. Use the real controller's acceptance handling without making an HTTP request.
     api = MaestroController(Mock(), "test-user", "test-password")
-    stove._controller = api
+    stove._cloud_provider._controller = api
     success_callback = Mock()
     with patch.object(
         api, "make_request", new_callable=AsyncMock, return_value={}
@@ -1629,7 +1737,7 @@ async def test_all_commands_share_transient_retries(
     # 1. The chosen command or batch encounters a temporary or sustained cloud outage.
     api = MaestroController(Mock(), "test-user", "test-password")
     api._token = "test-token"
-    stove._controller = api
+    stove._cloud_provider._controller = api
     success_callback = Mock()
     request_count = 0
 
