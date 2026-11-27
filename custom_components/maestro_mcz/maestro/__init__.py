@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -34,6 +34,8 @@ from .models.models_types import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+type ModelFetchedCallback = Callable[[str, str, str, Model], Awaitable[None]]
 
 
 def get_control_names(definition: MczConfigItem) -> tuple[str, ...]:
@@ -215,11 +217,14 @@ class MaestroStove:
         controller: MaestroControllerInterface,
         stove: StoveInfo,
         on_authentication_failed: Callable[[], None] | None = None,
+        *,
+        on_model_fetched: ModelFetchedCallback | None = None,
     ) -> None:
         """Initialize the MaestroStove."""
         self._node = stove.node
         self._controller: MaestroControllerInterface = controller
         self._on_authentication_failed = on_authentication_failed
+        self._on_model_fetched = on_model_fetched
         self._model: Model | None = None
         self._state: State | None = None
         self._status: Status | None = None
@@ -429,6 +434,10 @@ class MaestroStove:
         self._model = await self._controller.get_stove_model_for_stove(
             self.ModelId, self.Name
         )
+        if self._model is not None and self._on_model_fetched is not None:
+            await self._on_model_fetched(
+                self.UniqueCode, self.ModelId, self.SensorSetTypeId, self._model
+            )
 
     async def _getStoveStatus(self) -> None:
         self._status = await self._controller.get_stove_status_for_stove(

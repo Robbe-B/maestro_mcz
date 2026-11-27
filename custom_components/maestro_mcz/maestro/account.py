@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from types import MappingProxyType
 
-from . import MaestroStove
+from . import MaestroStove, ModelFetchedCallback
 from .controller.controller_interface import MaestroControllerInterface
 from .controller.maestro_controller import MaestroConnectionException
 
@@ -26,11 +26,13 @@ class MaestroAccount:
         stoves: Iterable[MaestroStove] = (),
         *,
         replay: bool = False,
+        on_model_fetched: ModelFetchedCallback | None = None,
     ) -> None:
         """Bind one client and an optional already-loaded collection to this account."""
         self._controller = controller
         self._stoves = {stove.UniqueCode: stove for stove in stoves}
         self._replay = replay
+        self._on_model_fetched = on_model_fetched if not replay else None
         self._failed_stoves: set[str] = set()
 
     @property
@@ -45,7 +47,12 @@ class MaestroAccount:
         stove_infos = await self._controller.retrieve_linked_stove_infos()
         stoves = {}
         for info in stove_infos:
-            stove = MaestroStove(self._controller, info, on_authentication_failed)
+            stove = MaestroStove(
+                self._controller,
+                info,
+                on_authentication_failed,
+                on_model_fetched=self._on_model_fetched,
+            )
             stoves[stove.UniqueCode] = stove
         self._stoves = stoves
 
